@@ -238,9 +238,7 @@ function ExternalWalletConnect() {
     setErr(null);
     try {
       type P = {
-        establishSecureChannel: (
-          appId: string,
-        ) => Promise<{
+        establishSecureChannel: (appId: string) => Promise<{
           confirm: () => Promise<
             import("@aztec/aztec.js/wallet").Wallet & {
               getAccounts: () => Promise<
@@ -667,7 +665,7 @@ export function BridgeWizard() {
     if (s < wizardStep) return "completed";
     if (s === wizardStep) {
       // Step 4 is "completed" when claim is done
-      if (s === 4 && claimDone) return "completed";
+      if (s === 4 && claimed) return "completed";
       return "active";
     }
     return "pending";
@@ -679,28 +677,34 @@ export function BridgeWizard() {
   const syncDone =
     messageStatus === "ready" &&
     (!ephemeralCredentials || ephMessageStatus === "ready");
-  const claimDone =
-    claimed ||
-    (bridgeDone &&
-      syncDone &&
-      recipientChoice === "self" &&
-      aztecStatus === "deployed" &&
-      feeJuiceBalance != null &&
-      BigInt(feeJuiceBalance) > 0n);
 
   // Auto-trigger claim when sync is done
   useEffect(() => {
-    if (!syncDone || claimDone || isClaiming || !credentials) return;
+    if (!syncDone || claimed || isClaiming || !credentials) return;
 
     if (recipientChoice === "self") {
       handleSelfClaim();
-    } else if (!needsDualBridge && aztecStatus === "deployed" && feeJuiceBalance != null && BigInt(feeJuiceBalance) > 0n) {
+    } else if (
+      !needsDualBridge &&
+      aztecStatus === "deployed" &&
+      feeJuiceBalance != null &&
+      BigInt(feeJuiceBalance) > 0n
+    ) {
       handleThirdPartyClaim();
     }
-  }, [syncDone, claimDone, isClaiming, credentials, recipientChoice, needsDualBridge, aztecStatus, feeJuiceBalance]);
+  }, [
+    syncDone,
+    claimed,
+    isClaiming,
+    credentials,
+    recipientChoice,
+    needsDualBridge,
+    aztecStatus,
+    feeJuiceBalance,
+  ]);
 
   // Step 4 description
-  const step4Desc = claimDone
+  const step4Desc = claimed
     ? "Complete!"
     : bridgeDone
       ? syncDone
@@ -710,7 +714,7 @@ export function BridgeWizard() {
 
   const progress =
     ((wizardStep - 1) / 4) * 100 +
-    (bridgeDone ? (syncDone ? (claimDone ? 25 : 18) : 10) : 0);
+    (bridgeDone ? (syncDone ? (claimed ? 25 : 18) : 10) : 0);
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -1040,7 +1044,7 @@ export function BridgeWizard() {
 
               {/* 4c: Claim */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                {claimDone ? (
+                {claimed ? (
                   <CheckCircleIcon
                     sx={{ color: "primary.main", fontSize: 18 }}
                   />
@@ -1056,14 +1060,14 @@ export function BridgeWizard() {
                   variant="body2"
                   fontWeight={500}
                   color={
-                    claimDone
+                    claimed
                       ? "text.primary"
                       : syncDone
                         ? "text.primary"
                         : "text.disabled"
                   }
                 >
-                  {claimDone
+                  {claimed
                     ? `Claimed — FJ: ${feeJuiceBalance}`
                     : "Claim fee juice"}
                 </Typography>
@@ -1071,7 +1075,7 @@ export function BridgeWizard() {
             </Box>
 
             {/* Claim credentials (collapsible) */}
-            {!claimDone && (
+            {!claimed && (
               <Box
                 sx={{
                   mt: 2,
@@ -1093,11 +1097,15 @@ export function BridgeWizard() {
             )}
 
             {/* Claim action */}
-            {!claimDone && syncDone && (
+            {!claimed && syncDone && (
               <Box sx={{ mt: 2 }}>
                 {isClaiming ? (
                   <Box>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 0.5 }}
+                    >
                       Claiming...
                     </Typography>
                     <LinearProgress />
