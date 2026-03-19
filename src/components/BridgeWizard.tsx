@@ -681,14 +681,13 @@ export function BridgeWizard() {
       feeJuiceBalance != null &&
       BigInt(feeJuiceBalance) > 0n);
 
-  // Auto-trigger claim for third-party when sync is done and wallet is funded
+  // Auto-trigger claim when sync is done
   useEffect(() => {
-    if (
-      syncDone && !claimDone && !isClaiming && credentials &&
-      recipientChoice === "other" && !needsDualBridge &&
-      aztecStatus === "deployed" &&
-      feeJuiceBalance != null && BigInt(feeJuiceBalance) > 0n
-    ) {
+    if (!syncDone || claimDone || isClaiming || !credentials) return;
+
+    if (recipientChoice === "self") {
+      handleSelfClaim();
+    } else if (!needsDualBridge && aztecStatus === "deployed" && feeJuiceBalance != null && BigInt(feeJuiceBalance) > 0n) {
       handleThirdPartyClaim();
     }
   }, [syncDone, claimDone, isClaiming, credentials, recipientChoice, needsDualBridge, aztecStatus, feeJuiceBalance]);

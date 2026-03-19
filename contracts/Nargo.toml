@@ -4,4 +4,4 @@ type = "bin"
 authors = [""]
 
 [dependencies]
-aztec = { git="https://github.com/AztecProtocol/aztec-nr", tag="v4.1.0-nightly.20260316", directory="aztec" }
+aztec = { git="https://github.com/AztecProtocol/aztec-nr", tag="v4.2.0-nightly.20260319", directory="aztec" }
