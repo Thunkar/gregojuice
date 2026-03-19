@@ -261,7 +261,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         executionPayload,
         opts.from,
         feeOptions,
-        this.scopesFor(opts.from),
+        this.scopesFrom(opts.from),
         true,
         true,
       );
@@ -342,7 +342,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       );
       const provenTx = await this.pxe.proveTx(
         txRequest,
-        this.scopesFor(opts.from),
+        this.scopesFrom(opts.from),
       );
       const provingDuration = Date.now() - provingStart;
       const stats = provenTx.stats;
@@ -389,6 +389,8 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
       const offchainOutput = extractOffchainOutput(
         provenTx.getOffchainEffects(),
+        provenTx.publicInputs.constants.anchorBlockHeader.globalVariables
+          .timestamp,
       );
 
       emit("sending");
