@@ -473,14 +473,21 @@ export function BridgeWizard() {
   const recipientReady =
     recipientChoice === "self" ? !!aztecAddress : manualAddress.length >= 10;
 
-  const advanceFromStep3 = () => {
-    if (recipientReady) {
+  const advanceFromStep3 = useCallback(() => {
+    if (recipientReady && wizardStep === 3) {
       setWizardStep(4);
       setExpandedStep(4);
       if (faucetLocked && mintAmountValue != null)
         setAmount(formatUnits(mintAmountValue, 18));
     }
-  };
+  }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
+
+  // Auto-advance when "Bridge to Myself" is selected
+  useEffect(() => {
+    if (recipientChoice === "self" && recipientReady && wizardStep === 3) {
+      advanceFromStep3();
+    }
+  }, [recipientChoice, recipientReady, wizardStep, advanceFromStep3]);
 
   // ── Step 4: Bridge & Claim ────────────────────────────────────────
 
@@ -888,7 +895,7 @@ export function BridgeWizard() {
           />
         )}
 
-        {recipientReady && (
+        {recipientChoice === "other" && recipientReady && (
           <Button
             fullWidth
             variant="contained"
