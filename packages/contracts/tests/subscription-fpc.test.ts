@@ -13,10 +13,7 @@ import { createExtendedL1Client } from "@aztec/ethereum/client";
 import { SubscriptionFPCContract } from "../artifacts/SubscriptionFPC.js";
 import { EcdsaAccountDeployerContract } from "../artifacts/EcdsaAccountDeployer.js";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import {
-  getContractInstanceFromInstantiationParams,
-  type ContractInstanceWithAddress,
-} from "@aztec/aztec.js/contracts";
+import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 
@@ -25,7 +22,7 @@ import type { AccountManager } from "@aztec/aztec.js/wallet";
 import { computeVarArgsHash } from "@aztec/stdlib/hash";
 import { HashedValues } from "@aztec/stdlib/tx";
 import { setupSponsoredApp, buildNoirFunctionCall } from "../src/sdk/index.js";
-import type { FunctionCall } from "@aztec/aztec.js/abi";
+import { FunctionSelector, type FunctionCall } from "@aztec/aztec.js/abi";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 const L1_RPC_URL = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
@@ -33,6 +30,10 @@ const L1_CHAIN_ID = Number(process.env.L1_CHAIN_ID ?? 31337);
 const MNEMONIC = "test test test test test test test test test test test junk";
 
 const PRODUCTION_INDEX = 1;
+const SIGNING_PRIVATE_KEY = randomBytes(32);
+const SIGNING_PUBLIC_KEY = await new Ecdsa("secp256r1").computePublicKey(
+  SIGNING_PRIVATE_KEY,
+);
 
 describe("SubscriptionFPC", () => {
   let node: AztecNode;
@@ -43,11 +44,7 @@ describe("SubscriptionFPC", () => {
   let feeJuice: FeeJuiceContract;
 
   let deployerAddress: AztecAddress;
-  let sampleCall: FunctionCall;
   let subscribedAccountManager: AccountManager;
-  let signingPrivateKey: Buffer;
-  let signingPublicKey: Buffer;
-
   beforeAll(async () => {
     // Connect to sandbox
     node = createAztecNodeClient(NODE_URL);
@@ -153,36 +150,35 @@ describe("SubscriptionFPC", () => {
       SubscriptionFPCContract.artifact,
     );
 
-    signingPrivateKey = randomBytes(32);
-    signingPublicKey = await new Ecdsa("secp256r1").computePublicKey(
-      signingPrivateKey,
-    );
-
     subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
       await Fr.random(),
-      signingPrivateKey,
+      SIGNING_PRIVATE_KEY,
     );
+  });
 
-    sampleCall = await EcdsaAccountDeployerContract.at(
+  it("calibrates and sets up a sponsored app", async () => {
+    const dummyAccount = await userWallet.createECDSARAccount(
+      await Fr.random(),
+      await Fr.random(),
+      SIGNING_PRIVATE_KEY,
+    );
+    const sampleCall = await EcdsaAccountDeployerContract.at(
       deployerAddress,
       userWallet,
     )
       .methods.deploy(
-        subscribedAccountManager.address,
+        dummyAccount.address,
         await Fr.random(),
-        Array.from(signingPublicKey.subarray(0, 32)),
-        Array.from(signingPublicKey.subarray(32, 64)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
       )
       .getFunctionCall();
-  });
-
-  it("calibrates and sets up a sponsored app", async () => {
     const { maxFee } = await setupSponsoredApp({
       adminWallet: wallet,
       adminAddress: admin,
       userWallet: userWallet,
-      userAddress: subscribedAccountManager.address,
+      userAddress: dummyAccount.address,
       node,
       fpcAddress: subscriptionFPC.address,
       sampleCall,
@@ -198,7 +194,7 @@ describe("SubscriptionFPC", () => {
     subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
       await Fr.random(),
-      signingPrivateKey,
+      SIGNING_PRIVATE_KEY,
     );
 
     const subscriptionFPCInstance = await node.getContract(fpc.address);
@@ -208,10 +204,15 @@ describe("SubscriptionFPC", () => {
       SubscriptionFPCContract.artifact,
     );
 
+    const selector = await EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    ).methods.deploy.selector();
+
     await fpc.methods
       .subscribe(
         deployerAddress,
-        sampleCall.selector,
+        selector,
         PRODUCTION_INDEX,
         subscribedAccountManager.address,
       )
@@ -229,8 +230,8 @@ describe("SubscriptionFPC", () => {
       .deploy(
         subscribedAccountManager.address,
         await Fr.random(),
-        Array.from(signingPublicKey.subarray(0, 32)),
-        Array.from(signingPublicKey.subarray(32, 64)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
       )
       .getFunctionCall();
 
