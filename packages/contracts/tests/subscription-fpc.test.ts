@@ -19,9 +19,7 @@ import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 
 import { NO_FROM } from "@aztec/aztec.js/account";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
-import { computeVarArgsHash } from "@aztec/stdlib/hash";
-import { HashedValues } from "@aztec/stdlib/tx";
-import { setupSponsoredApp, buildNoirFunctionCall } from "../src/sdk/index.js";
+import { setupSponsoredApp, sendSponsoredCall } from "../src/sdk/index.js";
 import { FunctionSelector, type FunctionCall } from "@aztec/aztec.js/abi";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
@@ -235,25 +233,11 @@ describe("SubscriptionFPC", () => {
       )
       .getFunctionCall();
 
-    const noirSponsoredCall = await buildNoirFunctionCall(sponsoredCall);
-
-    await fpc.methods
-      .sponsor(
-        noirSponsoredCall,
-        PRODUCTION_INDEX,
-        subscribedAccountManager.address,
-      )
-      .with({
-        extraHashedArgs: [
-          new HashedValues(
-            sponsoredCall.args,
-            await computeVarArgsHash(sponsoredCall.args),
-          ),
-        ],
-      })
-      .send({
-        from: NO_FROM,
-        additionalScopes: [subscribedAccountManager.address],
-      });
+    await sendSponsoredCall({
+      fpc,
+      call: sponsoredCall,
+      configIndex: PRODUCTION_INDEX,
+      userAddress: subscribedAccountManager.address,
+    });
   });
 });
