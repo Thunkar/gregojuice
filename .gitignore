@@ -30,3 +30,4 @@ packages/contracts/artifacts
 
 # Turbo
 .turbo
+codegenCache.json

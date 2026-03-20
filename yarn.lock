@@ -741,7 +741,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/constants@npm:4.2.0-nightly.20260320":
+"@aztec/constants@npm:4.2.0-nightly.20260320, @aztec/constants@npm:v4.2.0-nightly.20260320":
   version: 4.2.0-nightly.20260320
   resolution: "@aztec/constants@npm:4.2.0-nightly.20260320"
   dependencies:
@@ -1717,6 +1717,7 @@ __metadata:
   dependencies:
     "@aztec/accounts": "npm:v4.2.0-nightly.20260320"
     "@aztec/aztec.js": "npm:v4.2.0-nightly.20260320"
+    "@aztec/constants": "npm:v4.2.0-nightly.20260320"
     "@aztec/entrypoints": "npm:v4.2.0-nightly.20260320"
     "@aztec/ethereum": "npm:v4.2.0-nightly.20260320"
     "@aztec/foundation": "npm:v4.2.0-nightly.20260320"
