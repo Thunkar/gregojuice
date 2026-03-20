@@ -16,7 +16,7 @@ import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
-import { FunctionSelector, FunctionType } from "@aztec/aztec.js/abi";
+import { FunctionType } from "@aztec/aztec.js/abi";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
 import { computeVarArgsHash } from "@aztec/stdlib/hash";
@@ -243,19 +243,9 @@ describe("SubscriptionFPC", () => {
         ],
       });
 
-    const authwit = await userWallet.createAuthWit(
-      subscribedAccountManager.address,
-      {
-        caller: fpc.address,
-        call: sponsoredCall,
-      },
-    );
-
-    const gas = await sponsoredInteraction.simulate({
+    await sponsoredInteraction.send({
       from: NO_FROM,
-      fee: { estimateGas: true },
       additionalScopes: [subscribedAccountManager.address],
-      authWitnesses: [authwit],
     });
   });
 });

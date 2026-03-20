@@ -4,13 +4,12 @@ use aztec::macros::aztec;
 contract EcdsaAccountDeployer {
 
     use aztec::{
-        macros::{functions::{authorize_once, external, internal}, storage::storage},
+        macros::{functions::{external, internal}, storage::storage},
         protocol::address::AztecAddress,
     };
     use ecdsa_account::EcdsaRAccount;
 
     #[external("private")]
-    #[authorize_once("address", "nonce")]
     fn deploy(
         address: AztecAddress,
         nonce: Field,

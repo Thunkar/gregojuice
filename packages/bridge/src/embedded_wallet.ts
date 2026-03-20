@@ -181,38 +181,6 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     });
   }
 
-  protected override async completeFeeOptions(
-    from: AztecAddress,
-    feePayer?: AztecAddress,
-    gasSettings?: Partial<FieldsOf<GasSettings>>,
-  ): Promise<FeeOptions> {
-    const maxFeesPerGas =
-      gasSettings?.maxFeesPerGas ??
-      (await this.aztecNode.getCurrentMinFees()).mul(1 + this.minFeePadding);
-
-    let accountFeePaymentMethodOptions;
-    let walletFeePaymentMethod;
-
-    if (!feePayer) {
-      accountFeePaymentMethodOptions =
-        AccountFeePaymentMethodOptions.PREEXISTING_FEE_JUICE;
-    } else {
-      accountFeePaymentMethodOptions = from.equals(feePayer)
-        ? AccountFeePaymentMethodOptions.FEE_JUICE_WITH_CLAIM
-        : AccountFeePaymentMethodOptions.EXTERNAL;
-    }
-
-    const fullGasSettings = GasSettings.default({
-      ...gasSettings,
-      maxFeesPerGas,
-    });
-    return {
-      gasSettings: fullGasSettings,
-      walletFeePaymentMethod,
-      accountFeePaymentMethodOptions,
-    };
-  }
-
   override async sendTx<W extends InteractionWaitOptions = undefined>(
     executionPayload: ExecutionPayload,
     opts: SendOptions<W>,
@@ -259,11 +227,13 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       const simulationStart = Date.now();
       const simulationResult = await this.simulateViaEntrypoint(
         executionPayload,
-        opts.from,
-        feeOptions,
-        this.scopesFrom(opts.from),
-        true,
-        true,
+        {
+          from: opts.from,
+          feeOptions,
+          scopes: this.scopesFrom(opts.from),
+          skipFeeEnforcement: true,
+          skipTxValidation: true,
+        },
       );
       const offchainEffects = collectOffchainEffects(
         simulationResult.privateExecutionResult,
@@ -274,7 +244,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
             const authRequest = await CallAuthorizationRequest.fromFields(
               effect.data,
             );
-            return this.createAuthWit(opts.from, {
+            return this.createAuthWit(authRequest.onBehalfOf, {
               consumer: effect.contractAddress,
               innerHash: authRequest.innerHash,
             });
