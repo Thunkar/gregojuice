@@ -1,38 +1,18 @@
 {
   "name": "gregojuice",
-  "packageManager": "yarn@4.5.2",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "packageManager": "yarn@4.5.2",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "clean": "rm -rf ./dist .tsbuildinfo",
-    "serve": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
-    "deploy:faucet": "node --experimental-transform-types scripts/deploy-faucet.ts"
-  },
-  "dependencies": {
-    "@aztec/aztec.js": "v4.2.0-nightly.20260319",
-    "@aztec/entrypoints": "v4.2.0-nightly.20260319",
-    "@aztec/foundation": "v4.2.0-nightly.20260319",
-    "@aztec/pxe": "v4.2.0-nightly.20260319",
-    "@aztec/stdlib": "v4.2.0-nightly.20260319",
-    "@aztec/wallet-sdk": "v4.2.0-nightly.20260319",
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
-    "@mui/icons-material": "^6.3.1",
-    "@mui/material": "^6.3.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "viem": "^2.23.0"
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "clean": "turbo run clean",
+    "test": "turbo run test"
   },
   "devDependencies": {
-    "@aztec/wallets": "v4.2.0-nightly.20260319",
-    "@types/react": "^19.0.6",
-    "@types/react-dom": "^19.0.3",
-    "@vitejs/plugin-react-swc": "^3.7.2",
-    "typescript": "~5.7.3",
-    "vite": "^7.1.4",
-    "vite-plugin-node-polyfills": "^0.24.0"
+    "turbo": "^2",
+    "typescript": "~5.7.3"
   }
 }

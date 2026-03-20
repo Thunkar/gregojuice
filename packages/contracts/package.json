@@ -1,0 +1,24 @@
+{
+  "name": "@gregojuice/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "rm -rf ./artifacts ./*/target",
+    "compile": "aztec compile",
+    "codegen": "aztec codegen ./target -o artifacts",
+    "build": "yarn compile && yarn codegen",
+    "build:codegen": "yarn codegen",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@aztec/accounts": "v4.2.0-nightly.20260320",
+    "@aztec/aztec.js": "v4.2.0-nightly.20260320",
+    "@aztec/entrypoints": "v4.2.0-nightly.20260320",
+    "@aztec/ethereum": "v4.2.0-nightly.20260320",
+    "@aztec/foundation": "v4.2.0-nightly.20260320",
+    "@aztec/wallets": "v4.2.0-nightly.20260320",
+    "typescript": "~5.7.3",
+    "vitest": "^3"
+  }
+}

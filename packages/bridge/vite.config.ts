@@ -1,6 +1,11 @@
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { defineConfig, loadEnv, Plugin, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { PolyfillOptions, nodePolyfills } from "vite-plugin-node-polyfills";
+
+// Resolve the actual location of vite-plugin-node-polyfills (may be hoisted to root node_modules)
+const polyfillsDir = dirname(dirname(fileURLToPath(import.meta.resolve("vite-plugin-node-polyfills"))));
 
 // Workaround for https://github.com/davidmyersdev/vite-plugin-node-polyfills/issues/81
 const nodePolyfillsFix = (options?: PolyfillOptions | undefined): Plugin => {
@@ -13,7 +18,7 @@ const nodePolyfillsFix = (options?: PolyfillOptions | undefined): Plugin => {
           source,
         );
       if (m) {
-        return `./node_modules/vite-plugin-node-polyfills/shims/${m[1]}/dist/index.cjs`;
+        return join(polyfillsDir, `shims/${m[1]}/dist/index.cjs`);
       }
     },
   };
