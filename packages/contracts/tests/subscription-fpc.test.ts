@@ -13,19 +13,26 @@ import { createExtendedL1Client } from "@aztec/ethereum/client";
 import { SubscriptionFPCContract } from "../artifacts/SubscriptionFPC.js";
 import { EcdsaAccountDeployerContract } from "../artifacts/EcdsaAccountDeployer.js";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
+import {
+  getContractInstanceFromInstantiationParams,
+  type ContractInstanceWithAddress,
+} from "@aztec/aztec.js/contracts";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
-import { FunctionType } from "@aztec/aztec.js/abi";
+
 import { NO_FROM } from "@aztec/aztec.js/account";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
 import { computeVarArgsHash } from "@aztec/stdlib/hash";
 import { HashedValues } from "@aztec/stdlib/tx";
+import { setupSponsoredApp, buildNoirFunctionCall } from "../src/sdk/index.js";
+import type { FunctionCall } from "@aztec/aztec.js/abi";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 const L1_RPC_URL = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
 const L1_CHAIN_ID = Number(process.env.L1_CHAIN_ID ?? 31337);
 const MNEMONIC = "test test test test test test test test test test test junk";
+
+const PRODUCTION_INDEX = 1;
 
 describe("SubscriptionFPC", () => {
   let node: AztecNode;
@@ -34,7 +41,9 @@ describe("SubscriptionFPC", () => {
   let admin: AztecAddress;
   let subscriptionFPC: SubscriptionFPCContract;
   let feeJuice: FeeJuiceContract;
-  let sponsoredApp: EcdsaAccountDeployerContract;
+
+  let deployerAddress: AztecAddress;
+  let sampleCall: FunctionCall;
   let subscribedAccountManager: AccountManager;
   let signingPrivateKey: Buffer;
   let signingPublicKey: Buffer;
@@ -44,7 +53,6 @@ describe("SubscriptionFPC", () => {
     node = createAztecNodeClient(NODE_URL);
     await waitForNode(node);
     wallet = await EmbeddedWallet.create(node, { ephemeral: true });
-    userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
 
     // Create test accounts (pre-funded with fee juice in sandbox)
     const testAccounts = await getInitialTestAccountsData();
@@ -61,11 +69,12 @@ describe("SubscriptionFPC", () => {
     );
 
     // Deploy SubscriptionFPC
-    ({ contract: subscriptionFPC } = await SubscriptionFPCContract.deploy(
-      wallet,
-      admin,
-    ).send({
+    let subscriptionFPCInstance;
+    ({
+      receipt: { contract: subscriptionFPC, instance: subscriptionFPCInstance },
+    } = await SubscriptionFPCContract.deploy(wallet, admin).send({
       from: admin,
+      wait: { returnReceipt: true },
     }));
 
     // Get FeeJuice subscriptionFPC handle
@@ -122,10 +131,14 @@ describe("SubscriptionFPC", () => {
 
     expect(balance).toBeGreaterThan(0n);
 
+    userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
+
     const deployerInstance = await getContractInstanceFromInstantiationParams(
       EcdsaAccountDeployerContract.artifact,
       { salt: new Fr(0) },
     );
+
+    deployerAddress = deployerInstance.address;
 
     await wallet.registerContract(
       deployerInstance,
@@ -135,53 +148,48 @@ describe("SubscriptionFPC", () => {
       deployerInstance,
       EcdsaAccountDeployerContract.artifact,
     );
-
-    sponsoredApp = EcdsaAccountDeployerContract.at(
-      deployerInstance.address,
-      wallet,
+    await userWallet.registerContract(
+      subscriptionFPCInstance,
+      SubscriptionFPCContract.artifact,
     );
+
     signingPrivateKey = randomBytes(32);
     signingPublicKey = await new Ecdsa("secp256r1").computePublicKey(
       signingPrivateKey,
     );
-  });
 
-  it("allows the admin to set a sponsored app", async () => {
-    const currentFees = await node.getCurrentMinFees();
-
-    const accountToDeploy = await wallet.createECDSARAccount(
+    subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
       await Fr.random(),
       signingPrivateKey,
     );
 
-    const { estimatedGas } = await sponsoredApp.methods
-      .deploy(
-        accountToDeploy.address,
+    sampleCall = await EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    )
+      .methods.deploy(
+        subscribedAccountManager.address,
         await Fr.random(),
         Array.from(signingPublicKey.subarray(0, 32)),
         Array.from(signingPublicKey.subarray(32, 64)),
       )
-      .simulate({
-        from: admin,
-        fee: { estimateGas: true },
-        additionalScopes: [accountToDeploy.address],
-      });
+      .getFunctionCall();
+  });
 
-    const reasonableMaxFee = estimatedGas.gasLimits
-      .computeFee(currentFees.mul(2))
-      .toBigInt();
+  it("calibrates and sets up a sponsored app", async () => {
+    const { maxFee } = await setupSponsoredApp({
+      adminWallet: wallet,
+      adminAddress: admin,
+      userWallet: userWallet,
+      userAddress: subscribedAccountManager.address,
+      node,
+      fpcAddress: subscriptionFPC.address,
+      sampleCall,
+      feeMultiplier: 10,
+    });
 
-    await subscriptionFPC.methods
-      .sign_up(
-        sponsoredApp.address,
-        await sponsoredApp.methods.deploy.selector(),
-        0,
-        1,
-        reasonableMaxFee,
-        1,
-      )
-      .send({ from: admin });
+    expect(maxFee).toBeGreaterThan(0n);
   });
 
   it("allows a user to subscribe to a sponsored app", async () => {
@@ -202,9 +210,9 @@ describe("SubscriptionFPC", () => {
 
     await fpc.methods
       .subscribe(
-        sponsoredApp.address,
-        await sponsoredApp.methods.deploy.selector(),
-        0,
+        deployerAddress,
+        sampleCall.selector,
+        PRODUCTION_INDEX,
         subscribedAccountManager.address,
       )
       .send({ from: NO_FROM });
@@ -212,7 +220,10 @@ describe("SubscriptionFPC", () => {
 
   it("allows the usage of the subscription to pay fees", async () => {
     const fpc = subscriptionFPC.withWallet(userWallet);
-    const deployer = sponsoredApp.withWallet(userWallet);
+    const deployer = EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    );
 
     const sponsoredCall = await deployer.methods
       .deploy(
@@ -223,17 +234,14 @@ describe("SubscriptionFPC", () => {
       )
       .getFunctionCall();
 
-    const noirSponsoredCall = {
-      args_hash: await computeVarArgsHash(sponsoredCall.args),
-      function_selector: sponsoredCall.selector.toField(),
-      hide_msg_sender: sponsoredCall.hideMsgSender,
-      is_static: sponsoredCall.isStatic,
-      target_address: sponsoredCall.to,
-      is_public: sponsoredCall.type === FunctionType.PUBLIC,
-    };
+    const noirSponsoredCall = await buildNoirFunctionCall(sponsoredCall);
 
-    const sponsoredInteraction = fpc.methods
-      .sponsor(noirSponsoredCall, 0, subscribedAccountManager.address)
+    await fpc.methods
+      .sponsor(
+        noirSponsoredCall,
+        PRODUCTION_INDEX,
+        subscribedAccountManager.address,
+      )
       .with({
         extraHashedArgs: [
           new HashedValues(
@@ -241,11 +249,10 @@ describe("SubscriptionFPC", () => {
             await computeVarArgsHash(sponsoredCall.args),
           ),
         ],
+      })
+      .send({
+        from: NO_FROM,
+        additionalScopes: [subscribedAccountManager.address],
       });
-
-    await sponsoredInteraction.send({
-      from: NO_FROM,
-      additionalScopes: [subscribedAccountManager.address],
-    });
   });
 });

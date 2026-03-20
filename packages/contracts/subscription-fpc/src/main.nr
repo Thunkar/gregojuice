@@ -25,7 +25,7 @@ contract SubscriptionFPC {
         },
         utils::comparison::Comparator,
     };
-    use aztec::oracle::notes::set_sender_for_tags;
+    use aztec::oracle::{logging::debug_log_format, notes::set_sender_for_tags};
 
     #[derive(Packable, Eq)]
     struct SubscriptionConfig {
@@ -226,6 +226,6 @@ contract SubscriptionFPC {
     #[external("public")]
     fn _ensure_max_fee(max_fee: u128) {
         let actual_fee = self.internal.safe_cast_to_u128(self.context.transaction_fee());
-        assert(actual_fee <= max_fee, "Max fee paid to the paymaster does not cover actual fee");
+        assert(actual_fee <= max_fee, "Max fee exceeds subscription limit");
     }
 }
