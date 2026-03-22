@@ -25,4 +25,9 @@ dist-ssr
 !.yarn/releases
 vite.config.ts.*
 
-contracts/target
+packages/contracts/target
+packages/contracts/artifacts
+
+# Turbo
+.turbo
+codegenCache.json
