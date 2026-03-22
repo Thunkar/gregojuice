@@ -1,986 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
-import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  LinearProgress,
-  Alert,
-  ToggleButtonGroup,
-  ToggleButton,
-  CircularProgress,
-  Collapse,
-} from "@mui/material";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-
-import { formatUnits, parseUnits } from "viem";
-import { useWallet } from "../contexts/WalletContext";
-import { useNetwork } from "../contexts/NetworkContext";
-import { useAztecWallet } from "../contexts/AztecWalletContext";
-import {
-  fetchL1Addresses,
-  getFeeJuiceBalance,
-  getMintAmount,
-  bridgeFeeJuice,
-  bridgeDouble,
-  pollMessageReadiness,
-  waitForAztecTx,
-  resumePendingBridge,
-  type L1Addresses,
-  type ClaimCredentials,
-  type BridgeStep,
-  type MessageStatus,
-  type PendingBridge,
-  getAztecNode,
-} from "../services/bridgeService";
-import { txProgress, type PhaseTiming } from "../wallet";
-import { WalletManager } from "@aztec/wallet-sdk/manager";
-import { Fr } from "@aztec/foundation/curves/bn254";
-
-// ── Step icon ───────────────────────────────────────────────────────
-
-function StepIcon({ status }: { status: "completed" | "active" | "pending" }) {
-  if (status === "completed")
-    return <CheckCircleIcon sx={{ color: "primary.main", fontSize: 24 }} />;
-  if (status === "active")
-    return <CircularProgress size={20} sx={{ color: "primary.main" }} />;
-  return (
-    <RadioButtonUncheckedIcon sx={{ color: "text.disabled", fontSize: 24 }} />
-  );
-}
-
-// ── Collapsible step row ────────────────────────────────────────────
-
-function StepRow({
-  label,
-  description,
-  status,
-  expanded,
-  onToggle,
-  children,
-}: {
-  label: string;
-  description: string;
-  status: "completed" | "active" | "pending";
-  expanded: boolean;
-  onToggle: () => void;
-  children?: React.ReactNode;
-}) {
-  const hasContent = !!children;
-  return (
-    <Box
-      sx={{
-        opacity: status === "pending" ? 0.4 : 1,
-        transition: "opacity 0.3s",
-      }}
-    >
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 1.5,
-          py: 1,
-          px: 0.5,
-          cursor: hasContent && status !== "pending" ? "pointer" : "default",
-          "&:hover":
-            hasContent && status !== "pending"
-              ? { backgroundColor: "rgba(212,255,40,0.02)" }
-              : undefined,
-        }}
-        onClick={hasContent && status !== "pending" ? onToggle : undefined}
-      >
-        <StepIcon status={status} />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="body2"
-            sx={{ fontWeight: status === "active" ? 600 : 400 }}
-          >
-            {label}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {description}
-          </Typography>
-        </Box>
-        {hasContent &&
-          status !== "pending" &&
-          (expanded ? (
-            <ExpandLessIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-          ) : (
-            <ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-          ))}
-      </Box>
-      {hasContent && (
-        <Collapse in={expanded && status !== "pending"}>
-          <Box sx={{ pl: 5, pr: 5, pb: 2 }}>{children}</Box>
-        </Collapse>
-      )}
-    </Box>
-  );
-}
-
-// ── Wizard steps ────────────────────────────────────────────────────
-
-type WizardStep = 1 | 2 | 3 | 4;
-
-const BRIDGE_STEP_LABELS: Record<BridgeStep, string> = {
-  idle: "",
-  "fetching-addresses": "Fetching addresses...",
-  minting: "Minting tokens...",
-  approving: "Approving...",
-  bridging: "Depositing...",
-  "waiting-confirmation": "Waiting for L1 confirmation...",
-  "waiting-l2-sync": "Waiting for L2 sync...",
-  claimable: "Ready to claim!",
-  done: "Bridge complete!",
-  error: "Error",
-};
-
-// ── External wallet connect (for step 2 "I have a wallet") ──────────
-
-function ExternalWalletConnect() {
-  const { activeNetwork } = useNetwork();
-  const { connectExternalWallet } = useAztecWallet();
-  const [discovered, setDiscovered] = useState<
-    Array<{ id: string; name: string; provider: unknown }>
-  >([]);
-  const [isDiscovering, setIsDiscovering] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsDiscovering(true);
-    (async () => {
-      try {
-        const node = getAztecNode(activeNetwork.aztecNodeUrl);
-        const nodeInfo = await node.getNodeInfo();
-        const chainInfo = {
-          chainId: Fr.fromString(nodeInfo.l1ChainId.toString()),
-          version: Fr.fromString(nodeInfo.rollupVersion.toString()),
-        };
-        const session = WalletManager.configure({
-          extensions: { enabled: true },
-        }).getAvailableWallets({
-          chainInfo,
-          appId: "gregojuice",
-          timeout: 5000,
-        });
-        const wallets: typeof discovered = [];
-        for await (const provider of session.wallets) {
-          if (cancelled) break;
-          wallets.push({ id: provider.id, name: provider.name, provider });
-          setDiscovered([...wallets]);
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        if (!cancelled) setIsDiscovering(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeNetwork]);
-
-  const handleConnect = async (provider: unknown) => {
-    setIsConnecting(true);
-    setErr(null);
-    try {
-      type P = {
-        establishSecureChannel: (appId: string) => Promise<{
-          confirm: () => Promise<
-            import("@aztec/aztec.js/wallet").Wallet & {
-              getAccounts: () => Promise<
-                Array<{
-                  item: import("@aztec/aztec.js/addresses").AztecAddress;
-                }>
-              >;
-            }
-          >;
-        }>;
-      };
-      const p = provider as P;
-      const pending = await p.establishSecureChannel("gregojuice");
-      const wallet = await pending.confirm();
-      const accounts = await wallet.getAccounts();
-      if (accounts.length === 0) throw new Error("No accounts available");
-      await connectExternalWallet(wallet, accounts[0].item);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Connection failed");
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  if (isDiscovering) {
-    return (
-      <Box sx={{ py: 1 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-          Discovering wallets...
-        </Typography>
-        <LinearProgress />
-      </Box>
-    );
-  }
-
-  if (isConnecting) {
-    return (
-      <Box sx={{ py: 1 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-          Connecting...
-        </Typography>
-        <LinearProgress />
-      </Box>
-    );
-  }
-
-  return (
-    <Box>
-      {discovered.length === 0 && (
-        <Alert severity="info" sx={{ borderRadius: 0 }}>
-          No wallets found. Make sure your Aztec wallet extension is installed.
-        </Alert>
-      )}
-      {discovered.map((w) => (
-        <Button
-          key={w.id}
-          fullWidth
-          variant="outlined"
-          color="primary"
-          onClick={() => handleConnect(w.provider)}
-          sx={{ mb: 1, justifyContent: "flex-start", textTransform: "none" }}
-        >
-          {w.name}
-        </Button>
-      ))}
-      {err && (
-        <Alert severity="error" sx={{ mt: 1, borderRadius: 0 }}>
-          {err}
-        </Alert>
-      )}
-    </Box>
-  );
-}
-
-// ── Session persistence ──────────────────────────────────────────────
-
-const SESSION_KEY = "gregojuice_bridge_session";
-
-interface BridgeSession {
-  /** Which flow phase we're in */
-  phase: "l1-pending" | "bridged" | "claiming";
-  /** Main claim credentials (available after L1 confirms) */
-  credentials?: ClaimCredentials;
-  /** Ephemeral claim credentials (dual-bridge only, available after L1 confirms) */
-  ephemeralCredentials?: ClaimCredentials | null;
-  /** Recipient choice */
-  recipientChoice: "self" | "other";
-  /** Whether the session used an external wallet (cannot auto-restore) */
-  isExternal?: boolean;
-  /** The bridge amount (display string, e.g. "100.0") */
-  amount?: string;
-  /** The recipient address */
-  recipient?: string;
-  /** Network ID the session was started on */
-  networkId: string;
-  /** Timestamp for expiry */
-  timestamp: number;
-  /** Last known tx progress snapshot — for restoring the notification toast */
-  txProgressSnapshot?: {
-    txId: string;
-    label: string;
-    phases: PhaseTiming[];
-    startTime: number;
-    aztecTxHash: string;
-  };
-  /** L1 bridge tx info — saved right after L1 tx is sent, before receipt */
-  l1BridgeParams?: PendingBridge;
-}
-
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function saveSession(session: BridgeSession) {
-  try {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  } catch {
-    /* ignore */
-  }
-}
-
-function loadSession(networkId: string): BridgeSession | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw) as BridgeSession;
-    // Expired or different network → discard
-    if (session.networkId !== networkId) return null;
-    if (Date.now() - session.timestamp > SESSION_TTL_MS) return null;
-    return session;
-  } catch {
-    return null;
-  }
-}
-
-function clearSession() {
-  try {
-    localStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-// ── Main wizard ─────────────────────────────────────────────────────
+import { Box, Paper, LinearProgress, Alert } from "@mui/material";
+import { StepRow } from "./wizard/StepRow";
+import { Step1L1Wallet } from "./wizard/Step1L1Wallet";
+import { Step2AztecAccount } from "./wizard/Step2AztecAccount";
+import { Step3Recipient } from "./wizard/Step3Recipient";
+import { Step4BridgeClaim } from "./wizard/Step4BridgeClaim";
+import { useBridgeWizard } from "./wizard/useBridgeWizard";
 
 export function BridgeWizard() {
-  const { account, connect } = useWallet();
-  const { activeNetwork } = useNetwork();
-  const {
-    status: aztecStatus,
-    address: aztecAddress,
-    feeJuiceBalance,
-    connectAztecWallet,
-    claimSelf,
-    claimForRecipient,
-    claimBoth,
-    resetAccount,
-    refreshFeeJuiceBalance,
-    isExternal,
-    error: aztecError,
-  } = useAztecWallet();
-
-  // Wizard state — initialize from session if one exists to prevent auto-advance races
-  const initialSession = loadSession(activeNetwork.id);
-  const hasSession = !!initialSession;
-  const [wizardStep, setWizardStep] = useState<WizardStep>(
-    hasSession ? (initialSession?.isExternal ? 2 : 4) : 1,
-  );
-  const [expandedStep, setExpandedStep] = useState<WizardStep>(
-    hasSession ? (initialSession?.isExternal ? 2 : 4) : 1,
-  );
-  const [error, setError] = useState<string | null>(null);
-
-  // Step 1: L1 wallet state
-  const [l1Addresses, setL1Addresses] = useState<
-    (L1Addresses & { l1ChainId: number }) | null
-  >(null);
-  const [balance, setBalance] = useState<{
-    balance: bigint;
-    formatted: string;
-    decimals: number;
-  } | null>(null);
-  const [mintAmountValue, setMintAmountValue] = useState<bigint | null>(null);
-  const [isLoadingInfo, setIsLoadingInfo] = useState(false);
-
-  // Step 2: Aztec account choice
-  type AztecChoice = "existing" | "new" | null;
-  const [aztecChoice, setAztecChoice] = useState<AztecChoice>(null);
-
-  // Step 3: Recipient
-  type RecipientChoice = "self" | "other" | null;
-  const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(null);
-  const [manualAddress, setManualAddress] = useState("");
-
-  // Step 4: Bridge + Claim
-  const [amount, setAmount] = useState("");
-  const [bridgeStep, setBridgeStep] = useState<BridgeStep>("idle");
-  const [bridgeStepLabel, setBridgeStepLabel] = useState("");
-  const [credentials, setCredentials] = useState<ClaimCredentials | null>(null);
-  const [ephemeralCredentials, setEphemeralCredentials] =
-    useState<ClaimCredentials | null>(null);
-  const [messageStatus, setMessageStatus] = useState<MessageStatus>("pending");
-  const [ephMessageStatus, setEphMessageStatus] =
-    useState<MessageStatus>("pending");
-  const [claimed, setClaimed] = useState(false);
-  const [isClaiming, setIsClaiming] = useState(false);
-
-  // Capture tx progress snapshots during claiming so we can restore the toast on refresh.
-  useEffect(() => {
-    if (!isClaiming) return;
-    return txProgress.subscribe((event) => {
-      if (event.aztecTxHash && (event.phase === "sending" || event.phase === "mining")) {
-        const raw = localStorage.getItem(SESSION_KEY);
-        if (raw) {
-          try {
-            const session = JSON.parse(raw) as BridgeSession;
-            session.txProgressSnapshot = {
-              txId: event.txId,
-              label: event.label,
-              phases: event.phases,
-              startTime: event.startTime,
-              aztecTxHash: event.aztecTxHash,
-            };
-            session.phase = "claiming";
-            saveSession(session);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    });
-  }, [isClaiming]);
-
-  // ── Restore session on mount ──────────────────────────────────────
-  const [sessionRestored, setSessionRestored] = useState(false);
-  useEffect(() => {
-    const session = loadSession(activeNetwork.id);
-    if (!session) {
-      setSessionRestored(true);
-      return;
-    }
-
-    // Restore state from persisted session.
-    // wizardStep/expandedStep are already initialized from the session in useState.
-    setRecipientChoice(session.recipientChoice);
-    if (session.amount) setAmount(session.amount);
-    if (session.recipient) setManualAddress(session.recipient);
-
-    if (session.isExternal) {
-      setAztecChoice("existing");
-    } else {
-      setAztecChoice("new");
-    }
-
-    if (session.phase === "l1-pending" && session.l1BridgeParams) {
-      // L1 tx was sent but not confirmed — wait for receipt and extract credentials
-      setBridgeStep("waiting-confirmation");
-      setBridgeStepLabel("Resuming — waiting for L1 confirmation...");
-      resumePendingBridge(activeNetwork.l1ChainId, session.l1BridgeParams)
-        .then((result) => {
-          if ("ephemeral" in result) {
-            setEphemeralCredentials(result.ephemeral);
-            setCredentials(result.main);
-            saveSession({
-              ...session,
-              phase: "bridged",
-              credentials: result.main,
-              ephemeralCredentials: result.ephemeral,
-            });
-          } else {
-            setCredentials(result);
-            saveSession({
-              ...session,
-              phase: "bridged",
-              credentials: result,
-              ephemeralCredentials: null,
-            });
-          }
-          setBridgeStep("done");
-        })
-        .catch((err) => {
-          setError(
-            err instanceof Error ? err.message : "Failed to resume L1 bridge",
-          );
-          setBridgeStep("error");
-        });
-      setSessionRestored(true);
-      return;
-    }
-
-    // Phase is "bridged" or "claiming" — credentials are in the session
-    setCredentials(session.credentials ?? null);
-    setEphemeralCredentials(session.ephemeralCredentials ?? null);
-
-    if (session.txProgressSnapshot) {
-      // Claim tx was already sent — the resume effect (keyed on restoredClaimTxHash) handles it
-      setIsClaiming(true);
-    }
-    // If no claimTxHash, the auto-claim effect will re-trigger once L2 messages sync
-    // and the wallet is ready.
-
-    setSessionRestored(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Resume waiting for a claim tx that was already sent (restore only).
-  // Only runs when claimTxHash was set from session restore, not from normal flow.
-  const [restoredClaimTxHash] = useState(() => {
-    const s = loadSession(activeNetwork.id);
-    return s?.txProgressSnapshot?.aztecTxHash ?? null;
-  });
-  useEffect(() => {
-    if (!restoredClaimTxHash || claimed) return;
-    const session = loadSession(activeNetwork.id);
-    const snap = session?.txProgressSnapshot;
-    const txId = snap?.txId ?? restoredClaimTxHash;
-    const label = snap?.label ?? "Claim Fee Juice";
-    const phases = snap?.phases ?? [];
-    const startTime = snap?.startTime ?? Date.now();
-
-    // Defer the emit so TxNotificationCenter has time to subscribe
-    // (it renders after BridgeWizard in the tree, so its effect runs later)
-    const emitMining = () =>
-      txProgress.emit({
-        txId,
-        label,
-        phase: "mining",
-        startTime,
-        phaseStartTime: Date.now(),
-        phases,
-        aztecTxHash: restoredClaimTxHash,
-      });
-    const timer = setTimeout(emitMining, 0);
-
-    waitForAztecTx(activeNetwork.aztecNodeUrl, restoredClaimTxHash)
-      .then(() => {
-        setClaimed(true);
-        clearSession();
-        txProgress.emit({
-          txId,
-          label,
-          phase: "complete",
-          startTime,
-          phaseStartTime: Date.now(),
-          phases,
-          aztecTxHash: restoredClaimTxHash,
-        });
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Claim tx failed");
-        txProgress.emit({
-          txId,
-          label,
-          phase: "error",
-          startTime,
-          phaseStartTime: Date.now(),
-          phases,
-          error: err instanceof Error ? err.message : "Claim tx failed",
-        });
-      })
-      .finally(() => {
-        setIsClaiming(false);
-      });
-    return () => clearTimeout(timer);
-  }, [restoredClaimTxHash]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Refresh Aztec FJ balance after claim completes
-  useEffect(() => {
-    if (claimed) refreshFeeJuiceBalance();
-  }, [claimed, refreshFeeJuiceBalance]);
-
-  const hasFaucet = !!l1Addresses?.feeAssetHandler;
-  const hasBalance = balance != null && balance.balance > 0n;
-  const faucetLocked = hasFaucet && !hasBalance;
-
-  // ── Step 1: Fetch L1 info ──────────────────────────────────────────
-
-  useEffect(() => {
-    let cancelled = false;
-    setL1Addresses(null);
-    setBalance(null);
-    setMintAmountValue(null);
-    setIsLoadingInfo(true);
-    fetchL1Addresses(activeNetwork.aztecNodeUrl)
-      .then((addresses) => {
-        if (cancelled) return;
-        setL1Addresses(addresses);
-        if (addresses.feeAssetHandler)
-          getMintAmount(
-            activeNetwork.l1RpcUrl,
-            addresses.l1ChainId,
-            addresses.feeAssetHandler,
-          )
-            .then((amt) => {
-              if (!cancelled) setMintAmountValue(amt);
-            })
-            .catch(() => {});
-      })
-      .catch((err) => {
-        if (!cancelled)
-          setError(`Failed to fetch L1 addresses: ${err.message}`);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingInfo(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeNetwork]);
-
-  const refreshBalance = useCallback(async () => {
-    if (!account || !l1Addresses) {
-      setBalance(null);
-      return;
-    }
-    try {
-      setBalance(
-        await getFeeJuiceBalance(
-          activeNetwork.l1RpcUrl,
-          l1Addresses.l1ChainId,
-          l1Addresses.feeJuice,
-          account,
-        ),
-      );
-    } catch {
-      setBalance({ balance: 0n, formatted: "0", decimals: 18 });
-    }
-  }, [account, l1Addresses, activeNetwork]);
-
-  useEffect(() => {
-    refreshBalance();
-  }, [refreshBalance]);
-
-  // Auto-advance from step 1 when L1 wallet connected and info loaded
-  useEffect(() => {
-    if (account && l1Addresses && balance && wizardStep === 1) {
-      setWizardStep(2);
-      setExpandedStep(2);
-    }
-  }, [account, l1Addresses, balance, wizardStep]);
-
-  // ── Step 2: Aztec account ─────────────────────────────────────────
-
-  useEffect(() => {
-    if (aztecChoice === "new" && aztecStatus === "disconnected")
-      connectAztecWallet();
-  }, [aztecChoice, aztecStatus, connectAztecWallet]);
-
-  const aztecAccountReady =
-    aztecChoice === "existing"
-      ? aztecStatus === "funded"
-      : aztecStatus === "ready" || aztecStatus === "funded";
-
-  // Auto-advance from step 2 when account is ready
-  useEffect(() => {
-    if (wizardStep === 2 && aztecAccountReady) {
-      setWizardStep(3);
-      setExpandedStep(3);
-    }
-  }, [wizardStep, aztecAccountReady]);
-
-  // ── Step 3: Recipient ─────────────────────────────────────────────
-
-  // Internal (ephemeral) wallets always bridge to someone else
-  useEffect(() => {
-    if (!isExternal && recipientChoice !== "other") {
-      setRecipientChoice("other");
-    }
-  }, [isExternal, recipientChoice]);
-
-  const effectiveRecipient =
-    recipientChoice === "self"
-      ? (aztecAddress?.toString() ?? "")
-      : manualAddress;
-
-  const recipientReady =
-    recipientChoice === "self" ? !!aztecAddress : manualAddress.length >= 10;
-
-  const advanceFromStep3 = useCallback(() => {
-    if (recipientReady && wizardStep === 3) {
-      setWizardStep(4);
-      setExpandedStep(4);
-      if (faucetLocked && mintAmountValue != null)
-        setAmount(formatUnits(mintAmountValue, 18));
-    }
-  }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
-
-  // Auto-advance when "Bridge to Myself" is selected
-  useEffect(() => {
-    if (recipientChoice === "self" && recipientReady && wizardStep === 3) {
-      advanceFromStep3();
-    }
-  }, [recipientChoice, recipientReady, wizardStep, advanceFromStep3]);
-
-  // ── Step 4: Bridge & Claim ────────────────────────────────────────
-
-  // Is this a dual-bridge scenario? (new account + bridge to someone else)
-  const needsDualBridge =
-    aztecChoice === "new" &&
-    recipientChoice === "other" &&
-    aztecStatus !== "funded";
-
-  // Poll L2 message readiness for main credentials
-  useEffect(() => {
-    if (!credentials) return;
-    const { cancel } = pollMessageReadiness(
-      activeNetwork.aztecNodeUrl,
-      credentials.messageHash,
-      setMessageStatus,
-    );
-    return cancel;
-  }, [credentials, activeNetwork.aztecNodeUrl]);
-
-  // Poll L2 message readiness for ephemeral credentials
-  useEffect(() => {
-    if (!ephemeralCredentials) return;
-    const { cancel } = pollMessageReadiness(
-      activeNetwork.aztecNodeUrl,
-      ephemeralCredentials.messageHash,
-      setEphMessageStatus,
-    );
-    return cancel;
-  }, [ephemeralCredentials, activeNetwork.aztecNodeUrl]);
-
-  const onBridgeStep = useCallback((step: BridgeStep, label?: string) => {
-    setBridgeStep(step);
-    if (label) setBridgeStepLabel(label);
-  }, []);
-
-  const handleBridge = async () => {
-    if (!account || !l1Addresses) return;
-    setError(null);
-    try {
-      if (!amount) {
-        setError("Please enter an amount");
-        return;
-      }
-      const bridgeAmount = parseUnits(amount, balance?.decimals ?? 18);
-      if (bridgeAmount <= 0n) {
-        setError("Amount must be greater than 0");
-        return;
-      }
-      if (!effectiveRecipient || effectiveRecipient.length < 10) {
-        setError("Invalid recipient");
-        return;
-      }
-
-      if (needsDualBridge && aztecAddress) {
-        // Dual bridge: small for ephemeral account gas + main for target
-        // When minting: each mint gives a fixed amount, so ephemeral gets one full mint
-        // When using balance: ephemeral gets a small gas amount, rest goes to target
-        const ephAmount =
-          faucetLocked && mintAmountValue
-            ? mintAmountValue
-            : parseUnits("100", 18);
-        const totalNeeded = bridgeAmount + (faucetLocked ? 0n : ephAmount);
-        if (!faucetLocked && balance && totalNeeded > balance.balance) {
-          setError(
-            `Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)} (${formatUnits(bridgeAmount, balance.decimals)} for recipient + ${formatUnits(ephAmount, balance.decimals)} for claimer gas)`,
-          );
-          return;
-        }
-        const result = await bridgeDouble({
-          l1RpcUrl: activeNetwork.l1RpcUrl,
-          chainId: l1Addresses.l1ChainId,
-          addresses: l1Addresses,
-          ephemeralRecipient: aztecAddress.toString(),
-          ephemeralAmount: ephAmount,
-          mainRecipient: effectiveRecipient,
-          mainAmount: bridgeAmount,
-          mint: faucetLocked,
-          onStep: onBridgeStep,
-          onPending: (pending) =>
-            saveSession({
-              phase: "l1-pending",
-              recipientChoice: recipientChoice ?? "other",
-              isExternal,
-              amount,
-              recipient: effectiveRecipient,
-              networkId: activeNetwork.id,
-              timestamp: Date.now(),
-              l1BridgeParams: pending,
-            }),
-        });
-        setEphemeralCredentials(result.ephemeral);
-        setCredentials(result.main);
-        saveSession({
-          phase: "bridged",
-          credentials: result.main,
-          ephemeralCredentials: result.ephemeral,
-
-          recipientChoice: recipientChoice ?? "other",
-          isExternal,
-          networkId: activeNetwork.id,
-          timestamp: Date.now(),
-        });
-      } else {
-        // Single bridge
-        if (!faucetLocked && balance && bridgeAmount > balance.balance) {
-          setError("Insufficient balance");
-          return;
-        }
-        const result = await bridgeFeeJuice({
-          l1RpcUrl: activeNetwork.l1RpcUrl,
-          chainId: l1Addresses.l1ChainId,
-          addresses: l1Addresses,
-          aztecRecipient: effectiveRecipient,
-          amount: bridgeAmount,
-          mint: faucetLocked,
-          onStep: onBridgeStep,
-          onPending: (pending) =>
-            saveSession({
-              phase: "l1-pending",
-              recipientChoice: recipientChoice ?? "self",
-              isExternal,
-              amount,
-              recipient: effectiveRecipient,
-              networkId: activeNetwork.id,
-              timestamp: Date.now(),
-              l1BridgeParams: pending,
-            }),
-        });
-        setCredentials(result);
-        saveSession({
-          phase: "bridged",
-          credentials: result,
-          ephemeralCredentials: null,
-
-          recipientChoice: recipientChoice ?? "self",
-          isExternal,
-          networkId: activeNetwork.id,
-          timestamp: Date.now(),
-        });
-      }
-      await refreshBalance();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Bridge failed");
-      setBridgeStep("error");
-    }
-  };
-
-  // For dual bridge: claim both the ephemeral account AND the recipient in a single L2 tx
-  const handleDualClaim = async () => {
-    if (!ephemeralCredentials || !credentials) return;
-    setIsClaiming(true);
-    setError(null);
-    saveSession({
-      phase: "claiming",
-      credentials,
-      ephemeralCredentials,
-      recipientChoice: recipientChoice ?? "other",
-      networkId: activeNetwork.id,
-      timestamp: Date.now(),
-    });
-    try {
-      await claimBoth(ephemeralCredentials, credentials, credentials.recipient);
-      setClaimed(true);
-      clearSession();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Claim failed");
-    } finally {
-      setIsClaiming(false);
-    }
-  };
-
-  // For self-claim
-  const handleSelfClaim = async () => {
-    if (!credentials) return;
-    setIsClaiming(true);
-    setError(null);
-    saveSession({
-      phase: "claiming",
-      credentials,
-      ephemeralCredentials: null,
-      recipientChoice: recipientChoice ?? "self",
-      networkId: activeNetwork.id,
-      timestamp: Date.now(),
-    });
-    try {
-      await claimSelf(credentials);
-      setClaimed(true);
-      clearSession();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Claim failed");
-    } finally {
-      setIsClaiming(false);
-    }
-  };
-
-  const handleReset = () => {
-    clearSession();
-    setWizardStep(1);
-    setExpandedStep(1);
-    setCredentials(null);
-    setEphemeralCredentials(null);
-    setClaimed(false);
-    setIsClaiming(false);
-    setBridgeStep("idle");
-    setBridgeStepLabel("");
-    setMessageStatus("pending");
-    setEphMessageStatus("pending");
-    setAztecChoice(null);
-    setRecipientChoice(null);
-    setManualAddress("");
-    setAmount("");
-    setError(null);
-  };
-
-  // ── Step status helpers ───────────────────────────────────────────
-
-  const toggle = (s: WizardStep) =>
-    setExpandedStep((prev) => (prev === s ? (0 as unknown as WizardStep) : s));
-
-  const stepStatus = (s: WizardStep): "completed" | "active" | "pending" => {
-    if (s < wizardStep) return "completed";
-    if (s === wizardStep) {
-      // Step 4 is "completed" when claim is done
-      if (s === 4 && claimed) return "completed";
-      return "active";
-    }
-    return "pending";
-  };
-
-  const isBridging =
-    bridgeStep !== "idle" && bridgeStep !== "done" && bridgeStep !== "error";
-  const bridgeDone = !!credentials;
-  const syncDone =
-    messageStatus === "ready" &&
-    (!ephemeralCredentials || ephMessageStatus === "ready");
-
-  // Auto-trigger claim when sync is done
-  useEffect(() => {
-    if (!syncDone || claimed || isClaiming || !credentials) return;
-
-    if (recipientChoice === "self") {
-      handleSelfClaim();
-    } else if (ephemeralCredentials) {
-      // Dual bridge — claim both in one tx
-      handleDualClaim();
-    } else if (
-      aztecStatus === "funded" &&
-      feeJuiceBalance != null &&
-      BigInt(feeJuiceBalance) > 0n
-    ) {
-      // Funded external wallet claiming for someone else
-      (async () => {
-        setIsClaiming(true);
-        setError(null);
-        saveSession({
-          phase: "claiming",
-          credentials,
-          ephemeralCredentials: null,
-
-          recipientChoice: "other",
-          isExternal,
-          networkId: activeNetwork.id,
-          timestamp: Date.now(),
-        });
-        try {
-          await claimForRecipient(credentials, credentials.recipient);
-          setClaimed(true);
-          clearSession();
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : "Claim failed");
-        } finally {
-          setIsClaiming(false);
-        }
-      })();
-    }
-  }, [
-    syncDone,
-    claimed,
-    isClaiming,
-    credentials,
-    recipientChoice,
-    ephemeralCredentials,
-    aztecStatus,
-    feeJuiceBalance,
-  ]);
-
-  // Step 4 description
-  const step4Desc = claimed
-    ? "Complete!"
-    : bridgeDone
-      ? syncDone
-        ? "Ready to claim"
-        : "Waiting for L2 sync..."
-      : "Bridge and claim fee juice";
-
-  const progress =
-    ((wizardStep - 1) / 4) * 100 +
-    (bridgeDone ? (syncDone ? (claimed ? 25 : 18) : 10) : 0);
+  const w = useBridgeWizard();
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -988,7 +15,7 @@ export function BridgeWizard() {
       <Box sx={{ mb: 2 }}>
         <LinearProgress
           variant="determinate"
-          value={Math.min(progress, 100)}
+          value={Math.min(w.progress, 100)}
           sx={{
             height: 4,
             borderRadius: 2,
@@ -1001,391 +28,118 @@ export function BridgeWizard() {
         />
       </Box>
 
-      {/* ══ Step 1: Connect L1 Wallet ══ */}
+      {/* Step 1: Connect L1 Wallet */}
       <StepRow
         label="Connect L1 Wallet"
         description={
-          account
-            ? `${(account as string).slice(0, 6)}...${(account as string).slice(-4)}${balance ? ` — FJ: ${balance.formatted}` : ""}`
+          w.account
+            ? `${(w.account as string).slice(0, 6)}...${(w.account as string).slice(-4)}${w.balance ? ` — FJ: ${w.balance.formatted}` : ""}`
             : "Connect your Ethereum wallet"
         }
-        status={stepStatus(1)}
-        expanded={expandedStep === 1}
-        onToggle={() => toggle(1)}
+        status={w.stepStatus(1)}
+        expanded={w.expandedStep === 1}
+        onToggle={() => w.toggle(1)}
       >
-        {!account ? (
-          <Box>
-            {isLoadingInfo && <LinearProgress sx={{ mb: 1 }} />}
-            <Button
-              fullWidth
-              variant="contained"
-              color="primary"
-              onClick={connect}
-            >
-              Connect Wallet
-            </Button>
-          </Box>
-        ) : (
-          <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-              Fee Juice Balance:{" "}
-              <span style={{ color: "#D4FF28", fontWeight: 600 }}>
-                {balance?.formatted ?? "..."}
-              </span>
-            </Typography>
-            {hasFaucet && (
-              <Typography variant="caption" color="text.secondary">
-                Testnet faucet available
-              </Typography>
-            )}
-          </Box>
-        )}
+        <Step1L1Wallet
+          account={w.account}
+          isLoadingInfo={w.isLoadingInfo}
+          balance={w.balance}
+          hasFaucet={w.hasFaucet}
+          connect={w.connect}
+        />
       </StepRow>
 
-      {/* ══ Step 2: Aztec Account ══ */}
+      {/* Step 2: Aztec Account */}
       <StepRow
         label="Aztec Account"
         description={
-          aztecAccountReady
-            ? `${aztecAddress?.toString().slice(0, 10)}...${aztecStatus === "funded" ? " (funded)" : ""}${feeJuiceBalance && BigInt(feeJuiceBalance) > 0n ? ` — FJ: ${feeJuiceBalance}` : ""}`
+          w.aztecAccountReady
+            ? `${w.aztecAddress?.toString().slice(0, 10)}...${w.aztecStatus === "funded" ? " (funded)" : ""}${w.feeJuiceBalance && BigInt(w.feeJuiceBalance) > 0n ? ` — FJ: ${w.feeJuiceBalance}` : ""}`
             : "Do you have an Aztec wallet?"
         }
-        status={stepStatus(2)}
-        expanded={expandedStep === 2}
-        onToggle={() => toggle(2)}
+        status={w.stepStatus(2)}
+        expanded={w.expandedStep === 2}
+        onToggle={() => w.toggle(2)}
       >
-        {!aztecAccountReady ? (
-          <Box>
-            <ToggleButtonGroup
-              value={aztecChoice}
-              exclusive
-              onChange={(_, v) => {
-                if (v) setAztecChoice(v);
-              }}
-              fullWidth
-              size="small"
-              sx={{ mb: 2 }}
-            >
-              <ToggleButton value="existing">I Have a Wallet</ToggleButton>
-              <ToggleButton value="new">Use an Embedded Wallet</ToggleButton>
-            </ToggleButtonGroup>
-
-            {aztecChoice === "existing" && <ExternalWalletConnect />}
-
-            {aztecChoice === "new" && (
-              <Box>
-                {(aztecStatus === "creating" || aztecStatus === "loading") && (
-                  <Box sx={{ py: 1 }}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Creating account...
-                    </Typography>
-                    <LinearProgress />
-                  </Box>
-                )}
-                {aztecStatus === "error" && (
-                  <Alert severity="error" sx={{ borderRadius: 0 }}>
-                    {aztecError || "Failed to create account"}
-                  </Alert>
-                )}
-              </Box>
-            )}
-          </Box>
-        ) : (
-          <Box>
-            <Typography variant="body2" color="text.secondary">
-              Account ready
-            </Typography>
-            <Button
-              size="small"
-              onClick={resetAccount}
-              sx={{ mt: 1, fontSize: "0.7rem", color: "text.secondary" }}
-            >
-              Change Account
-            </Button>
-          </Box>
-        )}
+        <Step2AztecAccount
+          aztecAccountReady={w.aztecAccountReady}
+          aztecChoice={w.aztecChoice}
+          setAztecChoice={w.setAztecChoice}
+          aztecStatus={w.aztecStatus}
+          aztecError={w.aztecError}
+          resetAccount={w.resetAccount}
+        />
       </StepRow>
 
-      {/* ══ Step 3: Recipient ══ */}
+      {/* Step 3: Recipient */}
       <StepRow
         label="Recipient"
         description={
-          recipientReady
-            ? recipientChoice === "self"
+          w.recipientReady
+            ? w.recipientChoice === "self"
               ? "Bridge to myself"
-              : `${effectiveRecipient.slice(0, 10)}...`
+              : `${w.effectiveRecipient.slice(0, 10)}...`
             : "Who receives the fee juice?"
         }
-        status={stepStatus(3)}
-        expanded={expandedStep === 3}
-        onToggle={() => toggle(3)}
+        status={w.stepStatus(3)}
+        expanded={w.expandedStep === 3}
+        onToggle={() => w.toggle(3)}
       >
-        {isExternal ? (
-          <>
-            <ToggleButtonGroup
-              value={recipientChoice}
-              exclusive
-              onChange={(_, v) => {
-                if (v) setRecipientChoice(v);
-              }}
-              fullWidth
-              size="small"
-              sx={{ mb: 2 }}
-            >
-              <ToggleButton value="self">Bridge to Myself</ToggleButton>
-              <ToggleButton value="other">Bridge to Someone Else</ToggleButton>
-            </ToggleButtonGroup>
-
-            {recipientChoice === "other" && (
-              <TextField
-                fullWidth
-                label="Aztec Recipient Address"
-                placeholder="0x..."
-                value={manualAddress}
-                onChange={(e) => setManualAddress(e.target.value)}
-                sx={{ mb: 2 }}
-                helperText="The Aztec L2 address that will receive the fee juice"
-              />
-            )}
-
-            {recipientChoice === "other" && recipientReady && (
-              <Button
-                fullWidth
-                variant="contained"
-                color="primary"
-                onClick={advanceFromStep3}
-              >
-                Continue
-              </Button>
-            )}
-          </>
-        ) : (
-          <>
-            <TextField
-              fullWidth
-              label="Aztec Recipient Address"
-              placeholder="0x..."
-              value={manualAddress}
-              onChange={(e) => setManualAddress(e.target.value)}
-              sx={{ mb: 2 }}
-              helperText="The Aztec L2 address that will receive the fee juice"
-            />
-
-            {recipientReady && (
-              <Button
-                fullWidth
-                variant="contained"
-                color="primary"
-                onClick={advanceFromStep3}
-              >
-                Continue
-              </Button>
-            )}
-          </>
-        )}
+        <Step3Recipient
+          isExternal={w.isExternal}
+          recipientChoice={w.recipientChoice}
+          setRecipientChoice={w.setRecipientChoice}
+          manualAddress={w.manualAddress}
+          setManualAddress={w.setManualAddress}
+          recipientReady={w.recipientReady}
+          advanceFromStep3={w.advanceFromStep3}
+        />
       </StepRow>
 
-      {/* ══ Step 4: Bridge & Claim ══ */}
+      {/* Step 4: Bridge & Claim */}
       <StepRow
         label="Bridge & Claim"
-        description={step4Desc}
-        status={stepStatus(4)}
-        expanded={expandedStep === 4}
-        onToggle={() => toggle(4)}
+        description={w.step4Desc}
+        status={w.stepStatus(4)}
+        expanded={w.expandedStep === 4}
+        onToggle={() => w.toggle(4)}
       >
-        {/* ── Phase 1: Amount + Bridge ── */}
-        {!bridgeDone && (
-          <Box>
-            <Box sx={{ mb: 2 }}>
-              {!faucetLocked && (
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    mb: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    fontWeight={500}
-                  >
-                    Balance: {balance?.formatted ?? "..."}
-                  </Typography>
-                  {hasBalance && (
-                    <Button
-                      size="small"
-                      onClick={() => setAmount(balance!.formatted)}
-                      sx={{
-                        minWidth: "auto",
-                        px: 1,
-                        py: 0.25,
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        color: "primary.main",
-                        backgroundColor: "rgba(212,255,40,0.1)",
-                        border: "1px solid",
-                        borderColor: "primary.main",
-                        "&:hover": { backgroundColor: "rgba(212,255,40,0.2)" },
-                      }}
-                    >
-                      MAX
-                    </Button>
-                  )}
-                </Box>
-              )}
-              <TextField
-                fullWidth
-                label="Amount"
-                placeholder="0.0"
-                value={amount}
-                onChange={(e) => {
-                  if (!faucetLocked) setAmount(e.target.value);
-                }}
-                disabled={isBridging || faucetLocked}
-                type="number"
-                helperText={faucetLocked ? "Fixed faucet amount" : undefined}
-              />
-            </Box>
-            {isBridging ? (
-              <Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 0.5 }}
-                >
-                  {bridgeStepLabel || BRIDGE_STEP_LABELS[bridgeStep]}
-                </Typography>
-                <LinearProgress />
-              </Box>
-            ) : (
-              <Button
-                fullWidth
-                variant="contained"
-                color="primary"
-                onClick={handleBridge}
-                disabled={!amount}
-              >
-                {faucetLocked ? "Mint & Bridge" : "Bridge"}
-              </Button>
-            )}
-          </Box>
-        )}
-
-        {/* ── Phase 2+: Post-bridge sub-steps ── */}
-        {bridgeDone && (
-          <Box>
-            {/* Sub-step list */}
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {/* 4a: L1 Deposit */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <CheckCircleIcon sx={{ color: "primary.main", fontSize: 18 }} />
-                <Typography variant="body2" fontWeight={500}>
-                  L1 deposit confirmed
-                </Typography>
-              </Box>
-
-              {/* 4b: L2 Sync */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                {syncDone ? (
-                  <CheckCircleIcon
-                    sx={{ color: "primary.main", fontSize: 18 }}
-                  />
-                ) : (
-                  <RadioButtonUncheckedIcon
-                    sx={{ color: "text.disabled", fontSize: 18 }}
-                  />
-                )}
-                <Box sx={{ flex: 1 }}>
-                  <Typography
-                    variant="body2"
-                    fontWeight={500}
-                    color={syncDone ? "text.primary" : "text.secondary"}
-                  >
-                    L2 message sync
-                  </Typography>
-                  {!syncDone && messageStatus === "pending" && (
-                    <LinearProgress sx={{ mt: 0.5 }} />
-                  )}
-                  {messageStatus === "error" && (
-                    <Typography variant="caption" color="warning.main">
-                      Could not verify — check manually
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
-
-              {/* 4c: Claim */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                {claimed ? (
-                  <CheckCircleIcon
-                    sx={{ color: "primary.main", fontSize: 18 }}
-                  />
-                ) : (
-                  <RadioButtonUncheckedIcon
-                    sx={{
-                      color: syncDone ? "text.primary" : "text.disabled",
-                      fontSize: 18,
-                    }}
-                  />
-                )}
-                <Typography
-                  variant="body2"
-                  fontWeight={500}
-                  color={
-                    claimed
-                      ? "text.primary"
-                      : syncDone
-                        ? "text.primary"
-                        : "text.disabled"
-                  }
-                >
-                  {claimed
-                    ? `Claimed — FJ: ${feeJuiceBalance}`
-                    : "Claim fee juice"}
-                </Typography>
-              </Box>
-            </Box>
-
-            {/* Claim progress */}
-            {!claimed && syncDone && isClaiming && (
-              <Box sx={{ mt: 2 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mb: 0.5 }}
-                >
-                  Claiming...
-                </Typography>
-                <LinearProgress />
-              </Box>
-            )}
-          </Box>
-        )}
+        <Step4BridgeClaim
+          amount={w.amount}
+          setAmount={w.setAmount}
+          balance={w.balance}
+          faucetLocked={w.faucetLocked}
+          hasBalance={w.hasBalance}
+          bridgeStep={w.bridgeStep}
+          bridgeStepLabel={w.bridgeStepLabel}
+          isBridging={w.isBridging}
+          bridgeDone={w.bridgeDone}
+          handleBridge={w.handleBridge}
+          syncDone={w.syncDone}
+          messageStatus={w.messageStatus}
+          claimed={w.claimed}
+          isClaiming={w.isClaiming}
+          feeJuiceBalance={w.feeJuiceBalance}
+        />
 
         {/* Error */}
-        {(error || aztecError) && (
+        {(w.error || w.aztecError) && (
           <Alert
             severity="error"
             sx={{ mt: 1, borderRadius: 0 }}
-            onClose={() => setError(null)}
+            onClose={() => w.setError(null)}
           >
-            {error || aztecError}
+            {w.error || w.aztecError}
           </Alert>
         )}
       </StepRow>
 
       {/* Reset */}
-      {(bridgeDone || wizardStep > 1) && (
+      {(w.bridgeDone || w.wizardStep > 1) && (
         <Box
           component="button"
-          onClick={handleReset}
-          disabled={bridgeDone && !claimed}
+          onClick={w.handleReset}
+          disabled={w.bridgeDone && !w.claimed}
           sx={{
             mt: 2,
             width: "100%",
@@ -1393,13 +147,13 @@ export function BridgeWizard() {
             border: "1px solid rgba(212,255,40,0.2)",
             backgroundColor: "transparent",
             color: "text.secondary",
-            cursor: bridgeDone && !claimed ? "not-allowed" : "pointer",
-            opacity: bridgeDone && !claimed ? 0.4 : 1,
+            cursor: w.bridgeDone && !w.claimed ? "not-allowed" : "pointer",
+            opacity: w.bridgeDone && !w.claimed ? 0.4 : 1,
             fontFamily: "inherit",
             fontSize: "0.8rem",
             fontWeight: 600,
             "&:hover":
-              bridgeDone && !claimed
+              w.bridgeDone && !w.claimed
                 ? {}
                 : { backgroundColor: "rgba(212,255,40,0.05)" },
           }}
