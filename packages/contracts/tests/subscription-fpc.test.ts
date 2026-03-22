@@ -10,17 +10,15 @@ import { createLogger } from "@aztec/aztec.js/log";
 import { Fr } from "@aztec/aztec.js/fields";
 import { createEthereumChain } from "@aztec/ethereum/chain";
 import { createExtendedL1Client } from "@aztec/ethereum/client";
-import { SubscriptionFPCContract } from "../artifacts/SubscriptionFPC.js";
+
 import { EcdsaAccountDeployerContract } from "../artifacts/EcdsaAccountDeployer.js";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
-
 import { NO_FROM } from "@aztec/aztec.js/account";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
-import { setupSponsoredApp, sendSponsoredCall } from "../src/sdk/index.js";
-import { FunctionSelector, type FunctionCall } from "@aztec/aztec.js/abi";
+import { SubscriptionFPC } from "../src/sdk/index.js";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 const L1_RPC_URL = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
@@ -38,7 +36,7 @@ describe("SubscriptionFPC", () => {
   let wallet: EmbeddedWallet;
   let userWallet: EmbeddedWallet;
   let admin: AztecAddress;
-  let subscriptionFPC: SubscriptionFPCContract;
+  let subscriptionFPC: SubscriptionFPC;
   let feeJuice: FeeJuiceContract;
 
   let deployerAddress: AztecAddress;
@@ -64,13 +62,13 @@ describe("SubscriptionFPC", () => {
     );
 
     // Deploy SubscriptionFPC
-    let subscriptionFPCInstance;
-    ({
-      receipt: { contract: subscriptionFPC, instance: subscriptionFPCInstance },
-    } = await SubscriptionFPCContract.deploy(wallet, admin).send({
+    const {
+      receipt: { contract: rawFpc, instance: subscriptionFPCInstance },
+    } = await SubscriptionFPC.deploy(wallet, admin).send({
       from: admin,
       wait: { returnReceipt: true },
-    }));
+    });
+    subscriptionFPC = new SubscriptionFPC(rawFpc);
 
     // Get FeeJuice subscriptionFPC handle
     feeJuice = FeeJuiceContract.at(wallet);
@@ -145,7 +143,7 @@ describe("SubscriptionFPC", () => {
     );
     await userWallet.registerContract(
       subscriptionFPCInstance,
-      SubscriptionFPCContract.artifact,
+      SubscriptionFPC.artifact,
     );
 
     subscribedAccountManager = await userWallet.createECDSARAccount(
@@ -172,13 +170,12 @@ describe("SubscriptionFPC", () => {
         Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
       )
       .getFunctionCall();
-    const { maxFee } = await setupSponsoredApp({
+    const { maxFee } = await subscriptionFPC.helpers.setup({
       adminWallet: wallet,
       adminAddress: admin,
       userWallet: userWallet,
       userAddress: dummyAccount.address,
       node,
-      fpcAddress: subscriptionFPC.address,
       sampleCall,
       feeMultiplier: 10,
     });
@@ -199,7 +196,7 @@ describe("SubscriptionFPC", () => {
 
     await userWallet.registerContract(
       subscriptionFPCInstance,
-      SubscriptionFPCContract.artifact,
+      SubscriptionFPC.artifact,
     );
 
     const selector = await EcdsaAccountDeployerContract.at(
@@ -233,8 +230,7 @@ describe("SubscriptionFPC", () => {
       )
       .getFunctionCall();
 
-    await sendSponsoredCall({
-      fpc,
+    await fpc.helpers.sponsor({
       call: sponsoredCall,
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,

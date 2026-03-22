@@ -16,8 +16,8 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { formatUnits, parseUnits, type Hex } from "viem";
+
+import { formatUnits, parseUnits } from "viem";
 import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
 import { useAztecWallet } from "../contexts/AztecWalletContext";
@@ -34,9 +34,6 @@ import {
   type MessageStatus,
   getAztecNode,
 } from "../services/bridgeService";
-import { AccountExport } from "./AccountExport";
-import { ClaimPanel } from "./ClaimPanel";
-import { IconButton, Tooltip } from "@mui/material";
 import { WalletManager } from "@aztec/wallet-sdk/manager";
 import { Fr } from "@aztec/foundation/curves/bn254";
 
@@ -117,54 +114,6 @@ function StepRow({
           <Box sx={{ pl: 5, pr: 5, pb: 2 }}>{children}</Box>
         </Collapse>
       )}
-    </Box>
-  );
-}
-
-// ── Copy field ──────────────────────────────────────────────────────
-
-function CopyField({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Box sx={{ mb: 1 }}>
-      <Typography variant="caption" color="text.secondary" fontWeight={500}>
-        {label}
-      </Typography>
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          gap: 0.5,
-          backgroundColor: "rgba(0,0,0,0.3)",
-          p: 0.75,
-          border: "1px solid rgba(212,255,40,0.08)",
-        }}
-      >
-        <Typography
-          variant="body2"
-          sx={{
-            fontFamily: "monospace",
-            wordBreak: "break-all",
-            flex: 1,
-            fontSize: "0.7rem",
-          }}
-        >
-          {value}
-        </Typography>
-        <Tooltip title={copied ? "Copied!" : "Copy"}>
-          <IconButton
-            size="small"
-            onClick={async () => {
-              await navigator.clipboard.writeText(value);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-            sx={{ color: "primary.main", p: 0.25 }}
-          >
-            <ContentCopyIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Tooltip>
-      </Box>
     </Box>
   );
 }
@@ -322,13 +271,13 @@ export function BridgeWizard() {
     status: aztecStatus,
     address: aztecAddress,
     feeJuiceBalance,
-    credentials: accountCreds,
     connectAztecWallet,
-    connectExternalWallet,
-    deployWithClaim,
+    claimSelf,
     claimForRecipient,
+    claimBoth,
     resetAccount,
     refreshFeeJuiceBalance,
+    isExternal,
     error: aztecError,
   } = useAztecWallet();
 
@@ -450,8 +399,8 @@ export function BridgeWizard() {
 
   const aztecAccountReady =
     aztecChoice === "existing"
-      ? aztecStatus === "deployed"
-      : aztecStatus === "ready" || aztecStatus === "deployed";
+      ? aztecStatus === "funded"
+      : aztecStatus === "ready" || aztecStatus === "funded";
 
   // Auto-advance from step 2 when account is ready
   useEffect(() => {
@@ -462,6 +411,13 @@ export function BridgeWizard() {
   }, [wizardStep, aztecAccountReady]);
 
   // ── Step 3: Recipient ─────────────────────────────────────────────
+
+  // Internal (ephemeral) wallets always bridge to someone else
+  useEffect(() => {
+    if (!isExternal && recipientChoice !== "other") {
+      setRecipientChoice("other");
+    }
+  }, [isExternal, recipientChoice]);
 
   const effectiveRecipient =
     recipientChoice === "self"
@@ -493,7 +449,7 @@ export function BridgeWizard() {
   const needsDualBridge =
     aztecChoice === "new" &&
     recipientChoice === "other" &&
-    aztecStatus !== "deployed";
+    aztecStatus !== "funded";
 
   // Poll L2 message readiness for main credentials
   useEffect(() => {
@@ -592,14 +548,13 @@ export function BridgeWizard() {
     }
   };
 
-  // For dual bridge: deploy ephemeral account with its claim, then claim for target
+  // For dual bridge: claim both the ephemeral account AND the recipient in a single L2 tx
   const handleDualClaim = async () => {
     if (!ephemeralCredentials || !credentials) return;
     setIsClaiming(true);
     setError(null);
     try {
-      await deployWithClaim(ephemeralCredentials);
-      await claimForRecipient(credentials, credentials.recipient);
+      await claimBoth(ephemeralCredentials, credentials, credentials.recipient);
       setClaimed(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Claim failed");
@@ -614,22 +569,7 @@ export function BridgeWizard() {
     setIsClaiming(true);
     setError(null);
     try {
-      await deployWithClaim(credentials);
-      setClaimed(true);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Claim failed");
-    } finally {
-      setIsClaiming(false);
-    }
-  };
-
-  // For third-party claim with an already-funded wallet
-  const handleThirdPartyClaim = async () => {
-    if (!credentials) return;
-    setIsClaiming(true);
-    setError(null);
-    try {
-      await claimForRecipient(credentials, credentials.recipient);
+      await claimSelf(credentials);
       setClaimed(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Claim failed");
@@ -684,13 +624,26 @@ export function BridgeWizard() {
 
     if (recipientChoice === "self") {
       handleSelfClaim();
+    } else if (needsDualBridge && ephemeralCredentials) {
+      handleDualClaim();
     } else if (
-      !needsDualBridge &&
-      aztecStatus === "deployed" &&
+      aztecStatus === "funded" &&
       feeJuiceBalance != null &&
       BigInt(feeJuiceBalance) > 0n
     ) {
-      handleThirdPartyClaim();
+      // Funded external wallet claiming for someone else
+      (async () => {
+        setIsClaiming(true);
+        setError(null);
+        try {
+          await claimForRecipient(credentials, credentials.recipient);
+          setClaimed(true);
+        } catch (err: unknown) {
+          setError(err instanceof Error ? err.message : "Claim failed");
+        } finally {
+          setIsClaiming(false);
+        }
+      })();
     }
   }, [
     syncDone,
@@ -699,6 +652,7 @@ export function BridgeWizard() {
     credentials,
     recipientChoice,
     needsDualBridge,
+    ephemeralCredentials,
     aztecStatus,
     feeJuiceBalance,
   ]);
@@ -781,7 +735,7 @@ export function BridgeWizard() {
         label="Aztec Account"
         description={
           aztecAccountReady
-            ? `${aztecAddress?.toString().slice(0, 10)}...${aztecStatus === "deployed" ? " (deployed)" : ""}${feeJuiceBalance && BigInt(feeJuiceBalance) > 0n ? ` — FJ: ${feeJuiceBalance}` : ""}`
+            ? `${aztecAddress?.toString().slice(0, 10)}...${aztecStatus === "funded" ? " (funded)" : ""}${feeJuiceBalance && BigInt(feeJuiceBalance) > 0n ? ` — FJ: ${feeJuiceBalance}` : ""}`
             : "Do you have an Aztec wallet?"
         }
         status={stepStatus(2)}
@@ -830,24 +784,9 @@ export function BridgeWizard() {
           </Box>
         ) : (
           <Box>
-            <Typography
-              variant="body2"
-              sx={{
-                fontFamily: "monospace",
-                fontSize: "0.7rem",
-                wordBreak: "break-all",
-                mb: 1,
-              }}
-            >
-              {aztecAddress?.toString()}
+            <Typography variant="body2" color="text.secondary">
+              Account ready
             </Typography>
-            {feeJuiceBalance != null && (
-              <Typography variant="body2" color="text.secondary">
-                Fee Juice:{" "}
-                <span style={{ color: "#D4FF28" }}>{feeJuiceBalance}</span>
-              </Typography>
-            )}
-            <AccountExport />
             <Button
               size="small"
               onClick={resetAccount}
@@ -873,41 +812,68 @@ export function BridgeWizard() {
         expanded={expandedStep === 3}
         onToggle={() => toggle(3)}
       >
-        <ToggleButtonGroup
-          value={recipientChoice}
-          exclusive
-          onChange={(_, v) => {
-            if (v) setRecipientChoice(v);
-          }}
-          fullWidth
-          size="small"
-          sx={{ mb: 2 }}
-        >
-          <ToggleButton value="self">Bridge to Myself</ToggleButton>
-          <ToggleButton value="other">Bridge to Someone Else</ToggleButton>
-        </ToggleButtonGroup>
+        {isExternal ? (
+          <>
+            <ToggleButtonGroup
+              value={recipientChoice}
+              exclusive
+              onChange={(_, v) => {
+                if (v) setRecipientChoice(v);
+              }}
+              fullWidth
+              size="small"
+              sx={{ mb: 2 }}
+            >
+              <ToggleButton value="self">Bridge to Myself</ToggleButton>
+              <ToggleButton value="other">Bridge to Someone Else</ToggleButton>
+            </ToggleButtonGroup>
 
-        {recipientChoice === "other" && (
-          <TextField
-            fullWidth
-            label="Aztec Recipient Address"
-            placeholder="0x..."
-            value={manualAddress}
-            onChange={(e) => setManualAddress(e.target.value)}
-            sx={{ mb: 2 }}
-            helperText="The Aztec L2 address that will receive the fee juice"
-          />
-        )}
+            {recipientChoice === "other" && (
+              <TextField
+                fullWidth
+                label="Aztec Recipient Address"
+                placeholder="0x..."
+                value={manualAddress}
+                onChange={(e) => setManualAddress(e.target.value)}
+                sx={{ mb: 2 }}
+                helperText="The Aztec L2 address that will receive the fee juice"
+              />
+            )}
 
-        {recipientChoice === "other" && recipientReady && (
-          <Button
-            fullWidth
-            variant="contained"
-            color="primary"
-            onClick={advanceFromStep3}
-          >
-            Continue
-          </Button>
+            {recipientChoice === "other" && recipientReady && (
+              <Button
+                fullWidth
+                variant="contained"
+                color="primary"
+                onClick={advanceFromStep3}
+              >
+                Continue
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <TextField
+              fullWidth
+              label="Aztec Recipient Address"
+              placeholder="0x..."
+              value={manualAddress}
+              onChange={(e) => setManualAddress(e.target.value)}
+              sx={{ mb: 2 }}
+              helperText="The Aztec L2 address that will receive the fee juice"
+            />
+
+            {recipientReady && (
+              <Button
+                fullWidth
+                variant="contained"
+                color="primary"
+                onClick={advanceFromStep3}
+              >
+                Continue
+              </Button>
+            )}
+          </>
         )}
       </StepRow>
 
@@ -1074,72 +1040,17 @@ export function BridgeWizard() {
               </Box>
             </Box>
 
-            {/* Claim credentials (collapsible) */}
-            {!claimed && (
-              <Box
-                sx={{
-                  mt: 2,
-                  p: 1.5,
-                  backgroundColor: "rgba(0,0,0,0.2)",
-                  border: "1px solid rgba(212,255,40,0.08)",
-                }}
-              >
-                <CopyField
-                  label="Claim Secret"
-                  value={credentials!.claimSecret}
-                />
-                <CopyField
-                  label="Message Leaf Index"
-                  value={credentials!.messageLeafIndex}
-                />
-                <CopyField label="Amount" value={credentials!.claimAmount} />
-              </Box>
-            )}
-
-            {/* Claim action */}
-            {!claimed && syncDone && (
+            {/* Claim progress */}
+            {!claimed && syncDone && isClaiming && (
               <Box sx={{ mt: 2 }}>
-                {isClaiming ? (
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      Claiming...
-                    </Typography>
-                    <LinearProgress />
-                  </Box>
-                ) : recipientChoice === "self" ? (
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    onClick={handleSelfClaim}
-                  >
-                    {aztecStatus === "deployed"
-                      ? "Claim Fee Juice"
-                      : "Deploy & Claim"}
-                  </Button>
-                ) : needsDualBridge && ephemeralCredentials ? (
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    onClick={handleDualClaim}
-                  >
-                    Deploy Account & Claim for Recipient
-                  </Button>
-                ) : (
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    color="primary"
-                    onClick={handleThirdPartyClaim}
-                  >
-                    Claim for Recipient
-                  </Button>
-                )}
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 0.5 }}
+                >
+                  Claiming...
+                </Typography>
+                <LinearProgress />
               </Box>
             )}
           </Box>
@@ -1162,6 +1073,7 @@ export function BridgeWizard() {
         <Box
           component="button"
           onClick={handleReset}
+          disabled={bridgeDone && !claimed}
           sx={{
             mt: 2,
             width: "100%",
@@ -1169,11 +1081,12 @@ export function BridgeWizard() {
             border: "1px solid rgba(212,255,40,0.2)",
             backgroundColor: "transparent",
             color: "text.secondary",
-            cursor: "pointer",
+            cursor: bridgeDone && !claimed ? "not-allowed" : "pointer",
+            opacity: bridgeDone && !claimed ? 0.4 : 1,
             fontFamily: "inherit",
             fontSize: "0.8rem",
             fontWeight: 600,
-            "&:hover": { backgroundColor: "rgba(212,255,40,0.05)" },
+            "&:hover": bridgeDone && !claimed ? {} : { backgroundColor: "rgba(212,255,40,0.05)" },
           }}
         >
           Start Over

@@ -1,36 +1,53 @@
-import { AztecAddress } from "@aztec/stdlib/aztec-address";
+/**
+ * Extended EmbeddedWallet with initializerless Schnorr account support.
+ *
+ * The initializerless account is a proper account type that flows through the
+ * standard createAccountInternal → AccountManager → getAccountFromAddress pipeline.
+ *
+ * Storage layout for initializerless accounts in WalletDB:
+ *   type:       'schnorr-initializerless' (cast to AccountType — WalletDB stores as a raw string)
+ *   secretKey:  the account secret key (Fr)
+ *   salt:       the actualSalt (Fr) — the derived salt is recomputed on the fly
+ *   signingKey: the signing private key (Fq buffer, derivable from secretKey but stored for consistency)
+ */
+
 import {
   collectOffchainEffects,
   type ExecutionPayload,
 } from "@aztec/stdlib/tx";
-import { AccountFeePaymentMethodOptions } from "@aztec/entrypoints/account";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
   NO_WAIT,
   type SendReturn,
   extractOffchainOutput,
+  ContractFunctionInteraction,
+  getGasLimits,
 } from "@aztec/aztec.js/contracts";
 import { waitForTx } from "@aztec/aztec.js/node";
 import type { SendOptions } from "@aztec/aztec.js/wallet";
-import { FeeJuicePaymentMethodWithClaim } from "@aztec/aztec.js/fee";
 import { CallAuthorizationRequest } from "@aztec/aztec.js/authorization";
-import { type FeeOptions } from "@aztec/wallet-sdk/base-wallet";
+import { AccountManager } from "@aztec/aztec.js/wallet";
 import {
   txProgress,
   type PhaseTiming,
   type TxProgressEvent,
 } from "./tx-progress";
-import type { FieldsOf } from "@aztec/foundation/types";
-import { GasSettings } from "@aztec/stdlib/gas";
 import {
   EmbeddedWallet as EmbeddedWalletBase,
   type EmbeddedWalletOptions,
+  type AccountType,
 } from "@aztec/wallets/embedded";
-import { AccountManager } from "@aztec/aztec.js/wallet";
 import { Fr } from "@aztec/foundation/curves/bn254";
-import type { ClaimCredentials } from "./services/bridgeService";
-import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
+import {
+  createSchnorrInitializerlessAccount,
+  computeContractSalt,
+  serializeSigningKey,
+} from "./initializerless-account";
+import { GasSettings } from "@aztec/stdlib/gas";
+
+/** The initializerless type string — cast to AccountType for WalletDB storage. */
+export const INITIALIZERLESS_TYPE = "schnorr-initializerless" as AccountType;
 
 export class EmbeddedWallet extends EmbeddedWalletBase {
   static override create<T extends EmbeddedWalletBase = EmbeddedWallet>(
@@ -41,65 +58,110 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
   }
 
   /**
-   * Returns the AccountManager for the first stored account, creating a new Schnorr
-   * account (with random credentials) if none exist yet. Does NOT deploy.
+   * Override to add the 'schnorr-initializerless' account type.
+   *
+   * For this type:
+   *   - `salt` is the actualSalt (not derived) — we compute the derived salt on the fly
+   *   - `signingKey` is the Fq signing private key buffer (standard, derivable from secret)
+   *   - The AccountContract returns undefined from getInitializationFunctionAndArgs()
+   *     so AccountManager computes the instance with initializationHash = Fr.ZERO
+   *   - After registration, we store the immutables capsule in PXE
    */
-  async getOrCreateAccount(): Promise<AccountManager> {
-    const existing = await this.getAccounts();
-    if (existing.length > 0) {
-      const { secretKey, salt, signingKey, type } =
-        await this.walletDB.retrieveAccount(existing[0].item);
-      return this.createAccountInternal(type, secretKey, salt, signingKey);
+  protected override async createAccountInternal(
+    type: AccountType,
+    secret: Fr,
+    salt: Fr,
+    signingKey: Buffer,
+  ): Promise<AccountManager> {
+    if (type !== INITIALIZERLESS_TYPE) {
+      return super.createAccountInternal(type, secret, salt, signingKey);
     }
-    return this.createSchnorrAccount(
-      Fr.random(),
-      Fr.random(),
-      undefined,
+
+    // `salt` here is the actualSalt. Derive the contract salt from it + signing public key.
+    const actualSalt = salt;
+    const { account: accountContract, signingPublicKey } =
+      await createSchnorrInitializerlessAccount(secret);
+    const derivedSalt = await computeContractSalt(actualSalt, signingPublicKey);
+
+    // AccountManager.create() uses the derived salt for address computation.
+    // getInitializationFunctionAndArgs() returns undefined → initializationHash = Fr.ZERO.
+    const accountManager = await AccountManager.create(
+      this,
+      secret,
+      accountContract,
+      derivedSalt,
+    );
+
+    const instance = accountManager.getInstance();
+    const existingInstance = await this.pxe.getContractInstance(
+      instance.address,
+    );
+    if (!existingInstance) {
+      const artifact = await accountContract.getContractArtifact();
+      await this.registerContract(
+        instance,
+        artifact,
+        accountManager.getSecretKey(),
+      );
+    }
+
+    // Always store/refresh the immutables capsule so the contract can verify the signing key.
+    // This is idempotent — store_immutables validates against the salt before persisting.
+    const artifact = await accountContract.getContractArtifact();
+    const capsuleData = [actualSalt, ...serializeSigningKey(signingPublicKey)];
+    const storeAbi = artifact.functions.find(
+      (f) => f.name === "store_immutables",
+    );
+    if (storeAbi) {
+      const storeCall = new ContractFunctionInteraction(
+        this,
+        instance.address,
+        storeAbi,
+        [capsuleData],
+      );
+      await storeCall.simulate({ from: instance.address });
+    }
+
+    return accountManager;
+  }
+
+  /**
+   * Creates and stores a new initializerless Schnorr account.
+   * Returns the AccountManager — the account is immediately usable (no deployment needed).
+   */
+  async createInitializerlessAccount(
+    secretKey?: Fr,
+    actualSalt?: Fr,
+  ): Promise<AccountManager> {
+    const sk = secretKey ?? Fr.random();
+    const as = actualSalt ?? Fr.random();
+
+    // Derive signing key for WalletDB storage (standard Fq buffer)
+    const { signingPrivateKey } = await createSchnorrInitializerlessAccount(sk);
+
+    // Store actualSalt in the `salt` field. The derived salt is computed in createAccountInternal.
+    return this.createAndStoreAccount(
       "main",
+      INITIALIZERLESS_TYPE,
+      sk,
+      as, // actualSalt — NOT the derived salt
+      signingPrivateKey.toBuffer(),
     );
   }
 
-  async isAccountDeployed(): Promise<boolean> {
-    const [account] = await this.getAccounts();
-    if (!account) return false;
-    const metadata = await this.getContractMetadata(account.item);
-    return metadata.isContractInitialized;
-  }
-
   /**
-   * Exports the account credentials so the user can import them elsewhere.
+   * Loads an existing stored account. If none exists, returns null.
+   * Works for both initializerless and standard account types.
    */
-  async exportAccountCredentials(): Promise<{
-    secretKey: string;
-    salt: string;
-    signingKey: string;
-    address: string;
-  }> {
-    const [account] = await this.getAccounts();
-    if (!account) throw new Error("No account exists");
-    const retrieved = await this.walletDB.retrieveAccount(account.item);
-    const { secretKey, salt } = retrieved;
-    // signingKey is stored as Buffer after retrieval — convert to hex
-    const sk = (retrieved as Record<string, unknown>).signingKey;
-    const signingKeyHex = Buffer.isBuffer(sk)
-      ? `0x${sk.toString("hex")}`
-      : String(sk);
-    return {
-      secretKey: secretKey.toString(),
-      salt: salt.toString(),
-      signingKey: signingKeyHex,
-      address: account.item.toString(),
-    };
-  }
+  async loadStoredAccount(): Promise<AccountManager | null> {
+    const accounts = await this.getAccounts();
+    if (accounts.length === 0) return null;
 
-  /**
-   * Deletes the stored account so a fresh one can be created.
-   */
-  async deleteStoredAccount(): Promise<void> {
-    const [account] = await this.getAccounts();
-    if (account) {
-      await this.walletDB.deleteAccount(account.item);
-    }
+    const address = accounts[0].item;
+    const { secretKey, salt, signingKey, type } =
+      await this.walletDB.retrieveAccount(address);
+
+    return this.createAccountInternal(type, secretKey, salt, signingKey);
   }
 
   /**
@@ -111,74 +173,13 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
   }
 
   /**
-   * Claims fee juice on an already-deployed account (for self).
-   * Uses FeeJuicePaymentMethodWithClaim to claim and pay for the tx in one go.
+   * Deletes the stored account so a fresh one can be created.
    */
-  async claimFeeJuice(claim: ClaimCredentials) {
+  async deleteStoredAccount(): Promise<void> {
     const [account] = await this.getAccounts();
-    if (!account) throw new Error("No account exists");
-
-    const fj = FeeJuiceContract.at(this);
-    const paymentMethod = new FeeJuicePaymentMethodWithClaim(account.item, {
-      claimAmount: BigInt(claim.claimAmount),
-      claimSecret: Fr.fromHexString(claim.claimSecret),
-      messageLeafIndex: BigInt(claim.messageLeafIndex),
-    });
-
-    return fj.methods.check_balance(0n).send({
-      from: account.item,
-      fee: { paymentMethod },
-    });
-  }
-
-  /**
-   * Claims fee juice for an arbitrary target address.
-   * The caller (this account) pays for the claim tx gas.
-   * The claimed fee juice goes to `targetAddress`, not to the caller.
-   */
-  async claimFeeJuiceForRecipient(
-    claim: ClaimCredentials,
-    targetAddress: string,
-  ) {
-    const [account] = await this.getAccounts();
-    if (!account) throw new Error("No account exists");
-
-    const fj = FeeJuiceContract.at(this);
-    const target = AztecAddress.fromString(targetAddress);
-
-    return fj.methods
-      .claim(
-        target,
-        BigInt(claim.claimAmount),
-        Fr.fromHexString(claim.claimSecret),
-        Fr.fromHexString(
-          `0x${BigInt(claim.messageLeafIndex).toString(16).padStart(64, "0")}`,
-        ),
-      )
-      .send({ from: account.item });
-  }
-
-  /**
-   * Deploys the account using FeeJuicePaymentMethodWithClaim —
-   * claims bridged fee juice and uses it to pay for the deployment in one tx.
-   */
-  async deployAccountWithClaim(claim: ClaimCredentials) {
-    const accountManager = await this.getOrCreateAccount();
-    const deployMethod = await accountManager.getDeployMethod();
-
-    const paymentMethod = new FeeJuicePaymentMethodWithClaim(
-      accountManager.address,
-      {
-        claimAmount: BigInt(claim.claimAmount),
-        claimSecret: Fr.fromHexString(claim.claimSecret),
-        messageLeafIndex: BigInt(claim.messageLeafIndex),
-      },
-    );
-
-    return await deployMethod.send({
-      from: AztecAddress.ZERO,
-      fee: { paymentMethod },
-    });
+    if (account) {
+      await this.walletDB.deleteAccount(account.item);
+    }
   }
 
   override async sendTx<W extends InteractionWaitOptions = undefined>(
@@ -217,7 +218,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     };
 
     try {
-      const feeOptions = await this.completeFeeOptions(
+      const feeOptions = await this.completeFeeOptionsForEstimation(
         opts.from,
         executionPayload.feePayer,
         opts.fee?.gasSettings,
@@ -305,10 +306,26 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
       emit("proving");
       const provingStart = Date.now();
+      const estimated = getGasLimits(
+        simulationResult,
+        this.estimatedGasPadding,
+      );
+      this.log.verbose(
+        `Estimated gas limits for tx: DA=${estimated.gasLimits.daGas} L2=${estimated.gasLimits.l2Gas} teardownDA=${estimated.teardownGasLimits.daGas} teardownL2=${estimated.teardownGasLimits.l2Gas}`,
+      );
+      const gasSettings = GasSettings.from({
+        ...opts.fee?.gasSettings,
+        maxFeesPerGas: feeOptions.gasSettings.maxFeesPerGas,
+        maxPriorityFeesPerGas: feeOptions.gasSettings.maxPriorityFeesPerGas,
+        gasLimits: opts.fee?.gasSettings?.gasLimits ?? estimated.gasLimits,
+        teardownGasLimits:
+          opts.fee?.gasSettings?.teardownGasLimits ??
+          estimated.teardownGasLimits,
+      });
       const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(
         executionPayload,
         opts.from,
-        feeOptions,
+        { ...feeOptions, gasSettings },
       );
       const provenTx = await this.pxe.proveTx(
         txRequest,

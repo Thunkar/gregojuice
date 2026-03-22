@@ -1,41 +1,33 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { AztecAddress } from '@aztec/aztec.js/addresses';
 import type { Wallet } from '@aztec/aztec.js/wallet';
-import { EmbeddedWallet } from '../embedded_wallet';
+import { EmbeddedWallet } from '../wallet';
 import { useNetwork } from './NetworkContext';
-import { getAztecNode, type ClaimCredentials } from '../services/bridgeService';
-import { claimFeeJuiceWithExternalWallet } from '../services/claimService';
+import { getAztecNode, type ClaimCredentials, claimFeeJuice, claimBothInSingleTx } from '../services/bridgeService';
 
 type AztecWalletStatus =
   | 'disconnected'
   | 'loading'
   | 'creating'
   | 'connecting'    // connecting external wallet
-  | 'ready'         // account exists (not deployed), waiting for claim
-  | 'deploying'     // deploying/claiming
-  | 'deployed'      // account deployed and funded
+  | 'ready'         // account registered with PXE, usable immediately
+  | 'claiming'      // claiming fee juice
+  | 'funded'        // account has fee juice
   | 'error';
-
-interface AccountCredentials {
-  secretKey: string;
-  salt: string;
-  signingKey: string;
-  address: string;
-}
 
 interface AztecWalletContextType {
   status: AztecWalletStatus;
   wallet: EmbeddedWallet | null;
   externalWallet: Wallet | null;
   address: AztecAddress | null;
-  credentials: AccountCredentials | null;
   feeJuiceBalance: string | null;
   error: string | null;
   isExternal: boolean;
   connectAztecWallet: () => Promise<void>;
   connectExternalWallet: (wallet: Wallet, walletAddress: AztecAddress) => Promise<void>;
-  deployWithClaim: (claim: ClaimCredentials) => Promise<void>;
+  claimSelf: (claim: ClaimCredentials) => Promise<void>;
   claimForRecipient: (claim: ClaimCredentials, targetAddress: string) => Promise<void>;
+  claimBoth: (callerClaim: ClaimCredentials, recipientClaim: ClaimCredentials, targetAddress: string) => Promise<void>;
   resetAccount: () => Promise<void>;
   disconnect: () => void;
   refreshFeeJuiceBalance: () => Promise<void>;
@@ -55,7 +47,6 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [externalWallet, setExternalWallet] = useState<Wallet | null>(null);
   const [address, setAddress] = useState<AztecAddress | null>(null);
-  const [credentials, setCredentials] = useState<AccountCredentials | null>(null);
   const [feeJuiceBalance, setFeeJuiceBalance] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,19 +57,6 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     const node = getAztecNode(activeNetwork.aztecNodeUrl);
     return EmbeddedWallet.create(node, { pxeConfig: { proverEnabled: true } });
   }, [activeNetwork]);
-
-  const loadAccountState = useCallback(async (w: EmbeddedWallet) => {
-    const accountManager = await w.getOrCreateAccount();
-    const creds = await w.exportAccountCredentials();
-    setWallet(w);
-    setAddress(accountManager.address);
-    setCredentials(creds);
-    if (await w.isAccountDeployed()) {
-      setStatus('deployed');
-    } else {
-      setStatus('ready');
-    }
-  }, []);
 
   const refreshFeeJuiceBalance = useCallback(async () => {
     if (!activeWallet || !address) return;
@@ -93,72 +71,95 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
   }, [activeWallet, address]);
 
   useEffect(() => {
-    if (activeWallet && address && (status === 'deployed' || status === 'ready')) {
+    if (activeWallet && address && (status === 'funded' || status === 'ready')) {
       refreshFeeJuiceBalance();
     }
   }, [activeWallet, address, status, refreshFeeJuiceBalance]);
 
-  // Create embedded wallet
+  // Create or load embedded wallet with initializerless account
   const connectAztecWallet = useCallback(async () => {
     setStatus('creating');
     setError(null);
     try {
       const w = await initEmbeddedWallet();
-      await loadAccountState(w);
+
+      // Try loading existing stored account, or create a new one
+      let accountManager = await w.loadStoredAccount();
+      if (!accountManager) {
+        accountManager = await w.createInitializerlessAccount();
+      }
+
+      setWallet(w);
+      setAddress(accountManager.address);
+      setStatus('ready');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create Aztec wallet');
       setStatus('error');
     }
-  }, [initEmbeddedWallet, loadAccountState]);
+  }, [initEmbeddedWallet]);
 
   // Connect external wallet (from wallet SDK discovery)
   const connectExternalWallet = useCallback(async (w: Wallet, walletAddress: AztecAddress) => {
     setExternalWallet(w);
     setAddress(walletAddress);
-    setCredentials(null); // no exportable credentials for external wallets
-    setStatus('deployed'); // external wallets are always deployed
+
+    setStatus('funded'); // external wallets are assumed funded
     setError(null);
   }, []);
 
-  // Deploy embedded account with claim (self-claim)
-  const deployWithClaim = useCallback(async (claim: ClaimCredentials) => {
-    if (!wallet) throw new Error('Wallet not connected');
-    const wasDeployed = await wallet.isAccountDeployed();
-    setStatus('deploying');
+  // Claim fee juice for this account (self-claim)
+  const claimSelf = useCallback(async (claim: ClaimCredentials) => {
+    if (!activeWallet || !address) throw new Error('Wallet not connected');
+    setStatus('claiming');
     setError(null);
     try {
-      if (wasDeployed) {
-        await wallet.claimFeeJuice(claim);
-      } else {
-        await wallet.deployAccountWithClaim(claim);
-      }
-      setStatus('deployed');
+      await claimFeeJuice(activeWallet, address, claim);
+      setStatus('funded');
       refreshFeeJuiceBalance();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Claim failed');
       setStatus('error');
     }
-  }, [wallet, refreshFeeJuiceBalance]);
+  }, [activeWallet, address, refreshFeeJuiceBalance]);
 
-  // Claim for a third-party target address
+  // Claim for a third-party target address (caller already has fee juice)
   const claimForRecipient = useCallback(async (claim: ClaimCredentials, targetAddress: string) => {
-    if (!address) throw new Error('No wallet connected');
-    setStatus('deploying');
+    if (!activeWallet || !address) throw new Error('No wallet connected');
+    setStatus('claiming');
     setError(null);
     try {
-      if (externalWallet) {
-        await claimFeeJuiceWithExternalWallet(externalWallet, claim, targetAddress, address.toString());
-      } else if (wallet) {
-        await wallet.claimFeeJuiceForRecipient(claim, targetAddress);
-      } else {
-        throw new Error('No wallet connected');
-      }
-      setStatus('deployed');
+      const { FeeJuiceContract } = await import('@aztec/aztec.js/protocol');
+      const { AztecAddress: AztecAddr } = await import('@aztec/stdlib/aztec-address');
+      const { Fr: FrField } = await import('@aztec/foundation/curves/bn254');
+      const fj = FeeJuiceContract.at(activeWallet);
+      const target = AztecAddr.fromString(targetAddress);
+      await fj.methods.claim(
+        target,
+        BigInt(claim.claimAmount),
+        FrField.fromHexString(claim.claimSecret),
+        FrField.fromHexString(`0x${BigInt(claim.messageLeafIndex).toString(16).padStart(64, "0")}`),
+      ).send({ from: address });
+      setStatus('funded');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Claim failed');
       setStatus('error');
     }
-  }, [wallet, externalWallet, address]);
+  }, [activeWallet, address]);
+
+  // Claim both the caller's fee juice AND the recipient's in a single L2 tx
+  const claimBoth = useCallback(async (callerClaim: ClaimCredentials, recipientClaim: ClaimCredentials, targetAddress: string) => {
+    if (!activeWallet || !address) throw new Error('No wallet connected');
+    setStatus('claiming');
+    setError(null);
+    try {
+      await claimBothInSingleTx(activeWallet, address, callerClaim, targetAddress, recipientClaim);
+      setStatus('funded');
+      refreshFeeJuiceBalance();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Claim failed');
+      setStatus('error');
+    }
+  }, [activeWallet, address, refreshFeeJuiceBalance]);
 
   const resetAccount = useCallback(async () => {
     if (wallet) {
@@ -167,7 +168,7 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setExternalWallet(null);
     setAddress(null);
-    setCredentials(null);
+
     setFeeJuiceBalance(null);
     setStatus('disconnected');
     setError(null);
@@ -177,7 +178,7 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setExternalWallet(null);
     setAddress(null);
-    setCredentials(null);
+
     setFeeJuiceBalance(null);
     setStatus('disconnected');
     setError(null);
@@ -186,8 +187,8 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
   return (
     <AztecWalletContext.Provider
       value={{
-        status, wallet, externalWallet, address, credentials, feeJuiceBalance, error, isExternal,
-        connectAztecWallet, connectExternalWallet, deployWithClaim, claimForRecipient,
+        status, wallet, externalWallet, address, feeJuiceBalance, error, isExternal,
+        connectAztecWallet, connectExternalWallet, claimSelf, claimForRecipient, claimBoth,
         resetAccount, disconnect, refreshFeeJuiceBalance,
       }}
     >

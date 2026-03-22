@@ -1,6 +1,7 @@
 [package]
-name = "subscription_fpc"
-type = "contract"
+name = "immutables"
+type = "lib"
+compiler_version = ">=1.0.0"
 authors = [""]
 
 [dependencies]

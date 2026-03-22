@@ -10,5 +10,5 @@
     "allowImportingTsExtensions": true,
     "allowArbitraryExtensions": true
   },
-  "include": ["src/**/*.ts*", "scripts/**/*.ts"]
+  "include": ["src/**/*.ts*", "scripts/**/*.ts", "../contracts/artifacts/**/*.ts"]
 }
