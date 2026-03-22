@@ -37,7 +37,7 @@ import {
   type PendingBridge,
   getAztecNode,
 } from "../services/bridgeService";
-import { txProgress } from "../wallet";
+import { txProgress, type PhaseTiming } from "../wallet";
 import { WalletManager } from "@aztec/wallet-sdk/manager";
 import { Fr } from "@aztec/foundation/curves/bn254";
 
@@ -281,12 +281,22 @@ interface BridgeSession {
   recipientChoice: "self" | "other";
   /** Whether the session used an external wallet (cannot auto-restore) */
   isExternal?: boolean;
+  /** The bridge amount (display string, e.g. "100.0") */
+  amount?: string;
+  /** The recipient address */
+  recipient?: string;
   /** Network ID the session was started on */
   networkId: string;
   /** Timestamp for expiry */
   timestamp: number;
-  /** L2 claim tx hash if already sent (for waiting on refresh) */
-  claimTxHash?: string;
+  /** Last known tx progress snapshot — for restoring the notification toast */
+  txProgressSnapshot?: {
+    txId: string;
+    label: string;
+    phases: PhaseTiming[];
+    startTime: number;
+    aztecTxHash: string;
+  };
   /** L1 bridge tx info — saved right after L1 tx is sent, before receipt */
   l1BridgeParams?: PendingBridge;
 }
@@ -386,21 +396,23 @@ export function BridgeWizard() {
     useState<MessageStatus>("pending");
   const [claimed, setClaimed] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
-  const [claimTxHash, setClaimTxHash] = useState<string | null>(null);
 
-  // Capture the Aztec tx hash from progress events during claiming
-  // and update the persisted session so we can resume on refresh.
+  // Capture tx progress snapshots during claiming so we can restore the toast on refresh.
   useEffect(() => {
     if (!isClaiming) return;
     return txProgress.subscribe((event) => {
-      if (event.aztecTxHash && event.phase === "sending") {
-        setClaimTxHash(event.aztecTxHash);
-        // Update the session with the tx hash
+      if (event.aztecTxHash && (event.phase === "sending" || event.phase === "mining")) {
         const raw = localStorage.getItem(SESSION_KEY);
         if (raw) {
           try {
             const session = JSON.parse(raw) as BridgeSession;
-            session.claimTxHash = event.aztecTxHash;
+            session.txProgressSnapshot = {
+              txId: event.txId,
+              label: event.label,
+              phases: event.phases,
+              startTime: event.startTime,
+              aztecTxHash: event.aztecTxHash,
+            };
             session.phase = "claiming";
             saveSession(session);
           } catch {
@@ -423,6 +435,8 @@ export function BridgeWizard() {
     // Restore state from persisted session.
     // wizardStep/expandedStep are already initialized from the session in useState.
     setRecipientChoice(session.recipientChoice);
+    if (session.amount) setAmount(session.amount);
+    if (session.recipient) setManualAddress(session.recipient);
 
     if (session.isExternal) {
       setAztecChoice("existing");
@@ -470,55 +484,81 @@ export function BridgeWizard() {
     setCredentials(session.credentials ?? null);
     setEphemeralCredentials(session.ephemeralCredentials ?? null);
 
-    if (session.claimTxHash) {
-      // Claim tx was already sent — emit a progress event and wait for mining
-      const restoreTxId = `restore-${session.claimTxHash.slice(0, 8)}`;
+    if (session.txProgressSnapshot) {
+      // Claim tx was already sent — the resume effect (keyed on restoredClaimTxHash) handles it
       setIsClaiming(true);
-      setClaimTxHash(session.claimTxHash);
-      txProgress.emit({
-        txId: restoreTxId,
-        label: "Claim Fee Juice",
-        phase: "mining",
-        startTime: Date.now(),
-        phaseStartTime: Date.now(),
-        phases: [],
-        aztecTxHash: session.claimTxHash,
-      });
-      waitForAztecTx(activeNetwork.aztecNodeUrl, session.claimTxHash)
-        .then(() => {
-          setClaimed(true);
-          clearSession();
-          txProgress.emit({
-            txId: restoreTxId,
-            label: "Claim Fee Juice",
-            phase: "complete",
-            startTime: Date.now(),
-            phaseStartTime: Date.now(),
-            phases: [],
-            aztecTxHash: session.claimTxHash,
-          });
-        })
-        .catch((err) => {
-          setError(err instanceof Error ? err.message : "Claim tx failed");
-          txProgress.emit({
-            txId: restoreTxId,
-            label: "Claim Fee Juice",
-            phase: "error",
-            startTime: Date.now(),
-            phaseStartTime: Date.now(),
-            phases: [],
-            error: err instanceof Error ? err.message : "Claim tx failed",
-          });
-        })
-        .finally(() => {
-          setIsClaiming(false);
-        });
     }
     // If no claimTxHash, the auto-claim effect will re-trigger once L2 messages sync
     // and the wallet is ready.
 
     setSessionRestored(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resume waiting for a claim tx that was already sent (restore only).
+  // Only runs when claimTxHash was set from session restore, not from normal flow.
+  const [restoredClaimTxHash] = useState(() => {
+    const s = loadSession(activeNetwork.id);
+    return s?.txProgressSnapshot?.aztecTxHash ?? null;
+  });
+  useEffect(() => {
+    if (!restoredClaimTxHash || claimed) return;
+    const session = loadSession(activeNetwork.id);
+    const snap = session?.txProgressSnapshot;
+    const txId = snap?.txId ?? restoredClaimTxHash;
+    const label = snap?.label ?? "Claim Fee Juice";
+    const phases = snap?.phases ?? [];
+    const startTime = snap?.startTime ?? Date.now();
+
+    // Defer the emit so TxNotificationCenter has time to subscribe
+    // (it renders after BridgeWizard in the tree, so its effect runs later)
+    const emitMining = () =>
+      txProgress.emit({
+        txId,
+        label,
+        phase: "mining",
+        startTime,
+        phaseStartTime: Date.now(),
+        phases,
+        aztecTxHash: restoredClaimTxHash,
+      });
+    const timer = setTimeout(emitMining, 0);
+
+    waitForAztecTx(activeNetwork.aztecNodeUrl, restoredClaimTxHash)
+      .then(() => {
+        setClaimed(true);
+        clearSession();
+        txProgress.emit({
+          txId,
+          label,
+          phase: "complete",
+          startTime,
+          phaseStartTime: Date.now(),
+          phases,
+          aztecTxHash: restoredClaimTxHash,
+        });
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Claim tx failed");
+        txProgress.emit({
+          txId,
+          label,
+          phase: "error",
+          startTime,
+          phaseStartTime: Date.now(),
+          phases,
+          error: err instanceof Error ? err.message : "Claim tx failed",
+        });
+      })
+      .finally(() => {
+        setIsClaiming(false);
+      });
+    return () => clearTimeout(timer);
+  }, [restoredClaimTxHash]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh Aztec FJ balance after claim completes
+  useEffect(() => {
+    if (claimed) refreshFeeJuiceBalance();
+  }, [claimed, refreshFeeJuiceBalance]);
 
   const hasFaucet = !!l1Addresses?.feeAssetHandler;
   const hasBalance = balance != null && balance.balance > 0n;
@@ -726,6 +766,8 @@ export function BridgeWizard() {
               phase: "l1-pending",
               recipientChoice: recipientChoice ?? "other",
               isExternal,
+              amount,
+              recipient: effectiveRecipient,
               networkId: activeNetwork.id,
               timestamp: Date.now(),
               l1BridgeParams: pending,
@@ -762,6 +804,8 @@ export function BridgeWizard() {
               phase: "l1-pending",
               recipientChoice: recipientChoice ?? "self",
               isExternal,
+              amount,
+              recipient: effectiveRecipient,
               networkId: activeNetwork.id,
               timestamp: Date.now(),
               l1BridgeParams: pending,
