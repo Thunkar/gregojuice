@@ -9,7 +9,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "clean": "turbo run clean",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "compile:contracts": "cd packages/contracts && aztec compile . && aztec codegen ./target/schnorr_initializerless_account_contract-SchnorrInitializerlessAccount.json -o ./artifacts"
   },
   "devDependencies": {
     "turbo": "^2",
