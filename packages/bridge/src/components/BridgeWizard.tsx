@@ -28,12 +28,16 @@ import {
   bridgeFeeJuice,
   bridgeDouble,
   pollMessageReadiness,
+  waitForAztecTx,
+  resumePendingBridge,
   type L1Addresses,
   type ClaimCredentials,
   type BridgeStep,
   type MessageStatus,
+  type PendingBridge,
   getAztecNode,
 } from "../services/bridgeService";
+import { txProgress } from "../wallet";
 import { WalletManager } from "@aztec/wallet-sdk/manager";
 import { Fr } from "@aztec/foundation/curves/bn254";
 
@@ -262,6 +266,63 @@ function ExternalWalletConnect() {
   );
 }
 
+// ── Session persistence ──────────────────────────────────────────────
+
+const SESSION_KEY = "gregojuice_bridge_session";
+
+interface BridgeSession {
+  /** Which flow phase we're in */
+  phase: "l1-pending" | "bridged" | "claiming";
+  /** Main claim credentials (available after L1 confirms) */
+  credentials?: ClaimCredentials;
+  /** Ephemeral claim credentials (dual-bridge only, available after L1 confirms) */
+  ephemeralCredentials?: ClaimCredentials | null;
+  /** Recipient choice */
+  recipientChoice: "self" | "other";
+  /** Whether the session used an external wallet (cannot auto-restore) */
+  isExternal?: boolean;
+  /** Network ID the session was started on */
+  networkId: string;
+  /** Timestamp for expiry */
+  timestamp: number;
+  /** L2 claim tx hash if already sent (for waiting on refresh) */
+  claimTxHash?: string;
+  /** L1 bridge tx info — saved right after L1 tx is sent, before receipt */
+  l1BridgeParams?: PendingBridge;
+}
+
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function saveSession(session: BridgeSession) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadSession(networkId: string): BridgeSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as BridgeSession;
+    // Expired or different network → discard
+    if (session.networkId !== networkId) return null;
+    if (Date.now() - session.timestamp > SESSION_TTL_MS) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 // ── Main wizard ─────────────────────────────────────────────────────
 
 export function BridgeWizard() {
@@ -281,9 +342,15 @@ export function BridgeWizard() {
     error: aztecError,
   } = useAztecWallet();
 
-  // Wizard state
-  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
-  const [expandedStep, setExpandedStep] = useState<WizardStep>(1);
+  // Wizard state — initialize from session if one exists to prevent auto-advance races
+  const initialSession = loadSession(activeNetwork.id);
+  const hasSession = !!initialSession;
+  const [wizardStep, setWizardStep] = useState<WizardStep>(
+    hasSession ? (initialSession?.isExternal ? 2 : 4) : 1,
+  );
+  const [expandedStep, setExpandedStep] = useState<WizardStep>(
+    hasSession ? (initialSession?.isExternal ? 2 : 4) : 1,
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Step 1: L1 wallet state
@@ -319,6 +386,139 @@ export function BridgeWizard() {
     useState<MessageStatus>("pending");
   const [claimed, setClaimed] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+  const [claimTxHash, setClaimTxHash] = useState<string | null>(null);
+
+  // Capture the Aztec tx hash from progress events during claiming
+  // and update the persisted session so we can resume on refresh.
+  useEffect(() => {
+    if (!isClaiming) return;
+    return txProgress.subscribe((event) => {
+      if (event.aztecTxHash && event.phase === "sending") {
+        setClaimTxHash(event.aztecTxHash);
+        // Update the session with the tx hash
+        const raw = localStorage.getItem(SESSION_KEY);
+        if (raw) {
+          try {
+            const session = JSON.parse(raw) as BridgeSession;
+            session.claimTxHash = event.aztecTxHash;
+            session.phase = "claiming";
+            saveSession(session);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    });
+  }, [isClaiming]);
+
+  // ── Restore session on mount ──────────────────────────────────────
+  const [sessionRestored, setSessionRestored] = useState(false);
+  useEffect(() => {
+    const session = loadSession(activeNetwork.id);
+    if (!session) {
+      setSessionRestored(true);
+      return;
+    }
+
+    // Restore state from persisted session.
+    // wizardStep/expandedStep are already initialized from the session in useState.
+    setRecipientChoice(session.recipientChoice);
+
+    if (session.isExternal) {
+      setAztecChoice("existing");
+    } else {
+      setAztecChoice("new");
+    }
+
+    if (session.phase === "l1-pending" && session.l1BridgeParams) {
+      // L1 tx was sent but not confirmed — wait for receipt and extract credentials
+      setBridgeStep("waiting-confirmation");
+      setBridgeStepLabel("Resuming — waiting for L1 confirmation...");
+      resumePendingBridge(activeNetwork.l1ChainId, session.l1BridgeParams)
+        .then((result) => {
+          if ("ephemeral" in result) {
+            setEphemeralCredentials(result.ephemeral);
+            setCredentials(result.main);
+            saveSession({
+              ...session,
+              phase: "bridged",
+              credentials: result.main,
+              ephemeralCredentials: result.ephemeral,
+            });
+          } else {
+            setCredentials(result);
+            saveSession({
+              ...session,
+              phase: "bridged",
+              credentials: result,
+              ephemeralCredentials: null,
+            });
+          }
+          setBridgeStep("done");
+        })
+        .catch((err) => {
+          setError(
+            err instanceof Error ? err.message : "Failed to resume L1 bridge",
+          );
+          setBridgeStep("error");
+        });
+      setSessionRestored(true);
+      return;
+    }
+
+    // Phase is "bridged" or "claiming" — credentials are in the session
+    setCredentials(session.credentials ?? null);
+    setEphemeralCredentials(session.ephemeralCredentials ?? null);
+
+    if (session.claimTxHash) {
+      // Claim tx was already sent — emit a progress event and wait for mining
+      const restoreTxId = `restore-${session.claimTxHash.slice(0, 8)}`;
+      setIsClaiming(true);
+      setClaimTxHash(session.claimTxHash);
+      txProgress.emit({
+        txId: restoreTxId,
+        label: "Claim Fee Juice",
+        phase: "mining",
+        startTime: Date.now(),
+        phaseStartTime: Date.now(),
+        phases: [],
+        aztecTxHash: session.claimTxHash,
+      });
+      waitForAztecTx(activeNetwork.aztecNodeUrl, session.claimTxHash)
+        .then(() => {
+          setClaimed(true);
+          clearSession();
+          txProgress.emit({
+            txId: restoreTxId,
+            label: "Claim Fee Juice",
+            phase: "complete",
+            startTime: Date.now(),
+            phaseStartTime: Date.now(),
+            phases: [],
+            aztecTxHash: session.claimTxHash,
+          });
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Claim tx failed");
+          txProgress.emit({
+            txId: restoreTxId,
+            label: "Claim Fee Juice",
+            phase: "error",
+            startTime: Date.now(),
+            phaseStartTime: Date.now(),
+            phases: [],
+            error: err instanceof Error ? err.message : "Claim tx failed",
+          });
+        })
+        .finally(() => {
+          setIsClaiming(false);
+        });
+    }
+    // If no claimTxHash, the auto-claim effect will re-trigger once L2 messages sync
+    // and the wallet is ready.
+
+    setSessionRestored(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasFaucet = !!l1Addresses?.feeAssetHandler;
   const hasBalance = balance != null && balance.balance > 0n;
@@ -521,9 +721,28 @@ export function BridgeWizard() {
           mainAmount: bridgeAmount,
           mint: faucetLocked,
           onStep: onBridgeStep,
+          onPending: (pending) =>
+            saveSession({
+              phase: "l1-pending",
+              recipientChoice: recipientChoice ?? "other",
+              isExternal,
+              networkId: activeNetwork.id,
+              timestamp: Date.now(),
+              l1BridgeParams: pending,
+            }),
         });
         setEphemeralCredentials(result.ephemeral);
         setCredentials(result.main);
+        saveSession({
+          phase: "bridged",
+          credentials: result.main,
+          ephemeralCredentials: result.ephemeral,
+
+          recipientChoice: recipientChoice ?? "other",
+          isExternal,
+          networkId: activeNetwork.id,
+          timestamp: Date.now(),
+        });
       } else {
         // Single bridge
         if (!faucetLocked && balance && bridgeAmount > balance.balance) {
@@ -538,8 +757,27 @@ export function BridgeWizard() {
           amount: bridgeAmount,
           mint: faucetLocked,
           onStep: onBridgeStep,
+          onPending: (pending) =>
+            saveSession({
+              phase: "l1-pending",
+              recipientChoice: recipientChoice ?? "self",
+              isExternal,
+              networkId: activeNetwork.id,
+              timestamp: Date.now(),
+              l1BridgeParams: pending,
+            }),
         });
         setCredentials(result);
+        saveSession({
+          phase: "bridged",
+          credentials: result,
+          ephemeralCredentials: null,
+
+          recipientChoice: recipientChoice ?? "self",
+          isExternal,
+          networkId: activeNetwork.id,
+          timestamp: Date.now(),
+        });
       }
       await refreshBalance();
     } catch (err: unknown) {
@@ -553,9 +791,18 @@ export function BridgeWizard() {
     if (!ephemeralCredentials || !credentials) return;
     setIsClaiming(true);
     setError(null);
+    saveSession({
+      phase: "claiming",
+      credentials,
+      ephemeralCredentials,
+      recipientChoice: recipientChoice ?? "other",
+      networkId: activeNetwork.id,
+      timestamp: Date.now(),
+    });
     try {
       await claimBoth(ephemeralCredentials, credentials, credentials.recipient);
       setClaimed(true);
+      clearSession();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Claim failed");
     } finally {
@@ -568,9 +815,18 @@ export function BridgeWizard() {
     if (!credentials) return;
     setIsClaiming(true);
     setError(null);
+    saveSession({
+      phase: "claiming",
+      credentials,
+      ephemeralCredentials: null,
+      recipientChoice: recipientChoice ?? "self",
+      networkId: activeNetwork.id,
+      timestamp: Date.now(),
+    });
     try {
       await claimSelf(credentials);
       setClaimed(true);
+      clearSession();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Claim failed");
     } finally {
@@ -579,6 +835,7 @@ export function BridgeWizard() {
   };
 
   const handleReset = () => {
+    clearSession();
     setWizardStep(1);
     setExpandedStep(1);
     setCredentials(null);
@@ -624,7 +881,8 @@ export function BridgeWizard() {
 
     if (recipientChoice === "self") {
       handleSelfClaim();
-    } else if (needsDualBridge && ephemeralCredentials) {
+    } else if (ephemeralCredentials) {
+      // Dual bridge — claim both in one tx
       handleDualClaim();
     } else if (
       aztecStatus === "funded" &&
@@ -635,9 +893,20 @@ export function BridgeWizard() {
       (async () => {
         setIsClaiming(true);
         setError(null);
+        saveSession({
+          phase: "claiming",
+          credentials,
+          ephemeralCredentials: null,
+
+          recipientChoice: "other",
+          isExternal,
+          networkId: activeNetwork.id,
+          timestamp: Date.now(),
+        });
         try {
           await claimForRecipient(credentials, credentials.recipient);
           setClaimed(true);
+          clearSession();
         } catch (err: unknown) {
           setError(err instanceof Error ? err.message : "Claim failed");
         } finally {
@@ -651,7 +920,6 @@ export function BridgeWizard() {
     isClaiming,
     credentials,
     recipientChoice,
-    needsDualBridge,
     ephemeralCredentials,
     aztecStatus,
     feeJuiceBalance,
@@ -755,7 +1023,7 @@ export function BridgeWizard() {
               sx={{ mb: 2 }}
             >
               <ToggleButton value="existing">I Have a Wallet</ToggleButton>
-              <ToggleButton value="new">I Need One</ToggleButton>
+              <ToggleButton value="new">Use an Embedded Wallet</ToggleButton>
             </ToggleButtonGroup>
 
             {aztecChoice === "existing" && <ExternalWalletConnect />}
@@ -1086,7 +1354,10 @@ export function BridgeWizard() {
             fontFamily: "inherit",
             fontSize: "0.8rem",
             fontWeight: 600,
-            "&:hover": bridgeDone && !claimed ? {} : { backgroundColor: "rgba(212,255,40,0.05)" },
+            "&:hover":
+              bridgeDone && !claimed
+                ? {}
+                : { backgroundColor: "rgba(212,255,40,0.05)" },
           }}
         >
           Start Over

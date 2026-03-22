@@ -380,10 +380,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
           .timestamp,
       );
 
-      emit("sending");
-      const sendingStart = Date.now();
       const tx = await provenTx.toTx();
       const txHash = tx.getTxHash();
+      emit("sending", { aztecTxHash: txHash.toString() });
+      const sendingStart = Date.now();
       if (await this.aztecNode.getTxEffect(txHash)) {
         throw new Error(
           `A settled tx with equal hash ${txHash.toString()} exists.`,

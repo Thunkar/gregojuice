@@ -23,6 +23,8 @@ export interface TxProgressEvent {
   phaseStartTime: number;
   phases: PhaseTiming[];
   error?: string;
+  /** The Aztec L2 tx hash — available from the "sending" phase onward */
+  aztecTxHash?: string;
 }
 
 type TxProgressListener = (event: TxProgressEvent) => void;

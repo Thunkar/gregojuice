@@ -10,12 +10,13 @@ import {
   parseAbi,
 } from "viem";
 import { sepolia, mainnet, foundry } from "viem/chains";
-import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
+import { createAztecNodeClient, type AztecNode, waitForTx } from "@aztec/aztec.js/node";
 import { computeSecretHash } from "@aztec/aztec.js/crypto";
 import { isL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
+import { TxHash } from "@aztec/stdlib/tx";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { FeeJuicePaymentMethodWithClaim } from "@aztec/aztec.js/fee";
 
@@ -93,6 +94,17 @@ export type BridgeStep =
   | "claimable"
   | "done"
   | "error";
+
+/**
+ * Info about an L1 bridge tx that's been sent but not yet confirmed.
+ * Save this to recover if the user refreshes mid-flight.
+ */
+export interface PendingBridge {
+  l1TxHash: string;
+  secrets: Array<{ secret: string; secretHash: string }>;
+  recipients: string[];
+  amounts: string[];
+}
 
 // ── Aztec Node Client ────────────────────────────────────────────────
 
@@ -333,8 +345,10 @@ export async function bridgeFeeJuice(params: {
   amount: bigint;
   mint: boolean;
   onStep: (step: BridgeStep) => void;
+  /** Called after the L1 tx is sent but before receipt — persist this for recovery. */
+  onPending?: (pending: PendingBridge) => void;
 }): Promise<ClaimCredentials> {
-  const { chainId, addresses, aztecRecipient, amount, mint, onStep } = params;
+  const { chainId, addresses, aztecRecipient, amount, mint, onStep, onPending } = params;
   const chain = getChain(chainId);
 
   if (!window.ethereum) throw new Error("No EVM wallet found");
@@ -363,6 +377,12 @@ export async function bridgeFeeJuice(params: {
       chain,
     });
     onStep("waiting-confirmation");
+    onPending?.({
+      l1TxHash: hash,
+      secrets: [{ secret: `0x${secret.toString(16).padStart(64, "0")}`, secretHash: secretHashHex }],
+      recipients: [aztecRecipient],
+      amounts: [amount.toString()],
+    });
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     const event = extractDepositEvent(receipt);
     onStep("done");
@@ -405,6 +425,12 @@ export async function bridgeFeeJuice(params: {
     chain,
   });
   onStep("waiting-confirmation");
+  onPending?.({
+    l1TxHash: hash,
+    secrets: [{ secret: `0x${secret.toString(16).padStart(64, "0")}`, secretHash: secretHashHex }],
+    recipients: [aztecRecipient],
+    amounts: [amount.toString()],
+  });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   const event = extractDepositEvent(receipt);
   onStep("done");
@@ -436,8 +462,9 @@ export async function bridgeDouble(params: {
   mainAmount: bigint;
   mint: boolean;
   onStep: (step: BridgeStep, label?: string) => void;
+  onPending?: (pending: PendingBridge) => void;
 }): Promise<{ ephemeral: ClaimCredentials; main: ClaimCredentials }> {
-  const { chainId, addresses, ephemeralRecipient, ephemeralAmount, mainRecipient, mainAmount, mint, onStep } = params;
+  const { chainId, addresses, ephemeralRecipient, ephemeralAmount, mainRecipient, mainAmount, mint, onStep, onPending } = params;
   const chain = getChain(chainId);
 
   if (!window.ethereum) throw new Error("No EVM wallet found");
@@ -478,6 +505,15 @@ export async function bridgeDouble(params: {
       chain,
     });
     onStep("waiting-confirmation", "Waiting for L1 confirmation...");
+    onPending?.({
+      l1TxHash: hash,
+      secrets: [
+        { secret: `0x${ephSecret.secret.toString(16).padStart(64, "0")}`, secretHash: ephSecretHashHex },
+        { secret: `0x${mainSecret.secret.toString(16).padStart(64, "0")}`, secretHash: mainSecretHashHex },
+      ],
+      recipients: [ephemeralRecipient, mainRecipient],
+      amounts: [ephemeralAmount.toString(), mainAmount.toString()],
+    });
     receipt = await publicClient.waitForTransactionReceipt({ hash });
   } else {
     // Non-faucet path: approve bridge contract, then single double-bridge tx
@@ -514,6 +550,15 @@ export async function bridgeDouble(params: {
       chain,
     });
     onStep("waiting-confirmation", "Waiting for L1 confirmation...");
+    onPending?.({
+      l1TxHash: hash,
+      secrets: [
+        { secret: `0x${ephSecret.secret.toString(16).padStart(64, "0")}`, secretHash: ephSecretHashHex },
+        { secret: `0x${mainSecret.secret.toString(16).padStart(64, "0")}`, secretHash: mainSecretHashHex },
+      ],
+      recipients: [ephemeralRecipient, mainRecipient],
+      amounts: [ephemeralAmount.toString(), mainAmount.toString()],
+    });
     receipt = await publicClient.waitForTransactionReceipt({ hash });
   }
 
@@ -544,6 +589,62 @@ export async function bridgeDouble(params: {
       messageLeafIndex: mainEvent.index.toString(),
       claimAmount: mainAmount.toString(),
       recipient: mainRecipient,
+    },
+  };
+}
+
+// ── Resume pending L1 bridge ─────────────────────────────────────────
+
+/**
+ * Resumes a pending L1 bridge by waiting for the tx receipt and extracting credentials.
+ * Used when the user refreshes while waiting for L1 confirmation.
+ */
+export async function resumePendingBridge(
+  chainId: number,
+  pending: PendingBridge,
+): Promise<ClaimCredentials | { ephemeral: ClaimCredentials; main: ClaimCredentials }> {
+  const chain = getChain(chainId);
+  if (!window.ethereum) throw new Error("No EVM wallet found");
+  const publicClient = createPublicClient({ chain, transport: custom(window.ethereum) });
+
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash: pending.l1TxHash as Hex,
+  });
+
+  if (pending.secrets.length === 1) {
+    // Single bridge
+    const event = extractDepositEvent(receipt);
+    return {
+      claimSecret: pending.secrets[0].secret,
+      claimSecretHash: pending.secrets[0].secretHash,
+      messageHash: event.key,
+      messageLeafIndex: event.index.toString(),
+      claimAmount: pending.amounts[0],
+      recipient: pending.recipients[0],
+    };
+  }
+
+  // Double bridge
+  const events = extractAllDepositEvents(receipt);
+  if (events.length < 2) {
+    throw new Error(`Expected 2 deposit events, got ${events.length}`);
+  }
+  return {
+    ephemeral: {
+      claimSecret: pending.secrets[0].secret,
+      claimSecretHash: pending.secrets[0].secretHash,
+      messageHash: events[0].key,
+      messageLeafIndex: events[0].index.toString(),
+      claimAmount: pending.amounts[0],
+      recipient: pending.recipients[0],
+    },
+    main: {
+      claimSecret: pending.secrets[1].secret,
+      claimSecretHash: pending.secrets[1].secretHash,
+      messageHash: events[1].key,
+      messageLeafIndex: events[1].index.toString(),
+      claimAmount: pending.amounts[1],
+      recipient: pending.recipients[1],
     },
   };
 }
@@ -608,9 +709,9 @@ export async function claimFeeJuice(
     messageLeafIndex: BigInt(claim.messageLeafIndex),
   });
 
-  const executionPayload = await paymentMethod.getExecutionPayload();
-
-  return wallet.sendTx(executionPayload, { from: callerAddress });
+  return fj.methods
+    .check_balance(0n)
+    .send({ from: callerAddress, fee: { paymentMethod } });
 }
 
 /**
@@ -618,6 +719,7 @@ export async function claimFeeJuice(
  *
  * The caller's claim is used as fee payment (via FeeJuicePaymentMethodWithClaim),
  * and the main call claims for the recipient. This turns two L2 txs into one.
+ *
  */
 export async function claimBothInSingleTx(
   wallet: Wallet,
@@ -629,14 +731,12 @@ export async function claimBothInSingleTx(
   const fj = FeeJuiceContract.at(wallet);
   const target = AztecAddress.fromString(targetAddress);
 
-  // The caller's claim pays for gas
   const paymentMethod = new FeeJuicePaymentMethodWithClaim(callerAddress, {
     claimAmount: BigInt(callerClaim.claimAmount),
     claimSecret: Fr.fromHexString(callerClaim.claimSecret),
     messageLeafIndex: BigInt(callerClaim.messageLeafIndex),
   });
 
-  // The main call claims for the recipient
   return fj.methods
     .claim(
       target,
@@ -647,4 +747,17 @@ export async function claimBothInSingleTx(
       ),
     )
     .send({ from: callerAddress, fee: { paymentMethod } });
+}
+
+/**
+ * Waits for an already-sent Aztec L2 tx to be mined.
+ * Used to resume waiting after a page refresh.
+ */
+export async function waitForAztecTx(
+  aztecNodeUrl: string,
+  txHashStr: string,
+) {
+  const node = getAztecNode(aztecNodeUrl);
+  const txHash = TxHash.fromString(txHashStr);
+  return waitForTx(node, txHash);
 }
