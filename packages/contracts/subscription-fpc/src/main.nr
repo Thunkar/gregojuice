@@ -25,7 +25,7 @@ contract SubscriptionFPC {
         },
         utils::comparison::Comparator,
     };
-    use aztec::oracle::{logging::debug_log_format, notes::set_sender_for_tags};
+    use aztec::oracle::notes::set_sender_for_tags;
 
     #[derive(Packable, Eq)]
     struct SubscriptionConfig {
@@ -84,59 +84,9 @@ contract SubscriptionFPC {
         )
     }
 
-    #[external("private")]
-    #[allow_phase_change]
-    fn subscribe(
-        app: AztecAddress,
-        selector: FunctionSelector,
-        current_index: u32,
-        user: AztecAddress,
-    ) {
-        // Assert we're at the top of the stack
-        assert(
-            self.context.maybe_msg_sender() == Option::none(),
-            "msg_sender must be none for sponsored calls",
-        );
-
-        let config_id = poseidon2_hash([
-            app.to_field(),
-            selector.to_field(),
-            current_index.to_field(),
-        ]);
-
-        // Assert the user does not already have an active subscription
-        // We only give users one shot at subscribing, so they don't grief the FPC
-        self.storage.subscription_claims.at(config_id).at(user).claim();
-
-        // Safety: YOLO
-        unsafe {
-            set_sender_for_tags(user);
-        }
-
-        let config = self.storage.config.at(config_id).read();
-
-        // We use partial notes because we have to ensure we haven't surpassed the
-        // subscription limit per app and that's stored in public.
-        let partial_note = SubscriptionNote::partial(
-            user,
-            self.context,
-            user,
-            self.address,
-            config.max_uses,
-            config.max_fee,
-            config_id,
-        );
-
-        // Pay for the subscription fee, this will be included in the deal between the dapp and the FPC operator
-        self.context.set_as_fee_payer();
-        self.context.end_setup();
-
-        self.enqueue_self._attempt_complete_subscription(config_id, partial_note);
-    }
-
     #[external("public")]
     #[only_self]
-    fn _attempt_complete_subscription(config_id: Field, partial_note: PartialSubscriptionNote) {
+    fn _complete_subscription(config_id: Field, partial_note: PartialSubscriptionNote) {
         let config = self.storage.config.at(config_id).read();
         let current_users = self.storage.subscription_users.at(config_id).read();
         assert(
@@ -167,7 +117,9 @@ contract SubscriptionFPC {
             current_index.to_field(),
         ]);
 
-        // Safety: YOLO
+        // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
+        // Since this value is only used for unconstrained tagging and not for any constrained logic,
+        // it is safe to set from a constrained context.
         unsafe {
             set_sender_for_tags(user);
         }
@@ -196,12 +148,15 @@ contract SubscriptionFPC {
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
 
-        self.set_as_teardown(SubscriptionFPC::at(self.address)._ensure_max_fee(subscription.max_fee));
-
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
         self.context.end_setup();
 
+        self.internal._call_sponsored_fn(call, subscription.max_fee);
+    }
+
+    #[internal("private")]
+    fn _call_sponsored_fn(call: FunctionCall, max_fee: u128) {
         if call.is_public {
             self.context.call_public_function_with_calldata_hash(
                 call.target_address,
@@ -221,6 +176,8 @@ contract SubscriptionFPC {
                 call.is_static,
             );
         }
+
+        self.set_as_teardown(SubscriptionFPC::at(self.address)._ensure_max_fee(max_fee));
     }
 
     #[external("public")]
@@ -228,4 +185,59 @@ contract SubscriptionFPC {
         let actual_fee = self.internal.safe_cast_to_u128(self.context.transaction_fee());
         assert(actual_fee <= max_fee, "Max fee exceeds subscription limit");
     }
+
+    #[external("private")]
+    #[allow_phase_change]
+    fn subscribe(call: FunctionCall, current_index: u32, user: AztecAddress) {
+        // Assert we're at the top of the stack
+        assert(
+            self.context.maybe_msg_sender() == Option::none(),
+            "msg_sender must be none for sponsored calls",
+        );
+
+        let config_id = poseidon2_hash([
+            call.target_address.to_field(),
+            call.function_selector.to_field(),
+            current_index.to_field(),
+        ]);
+
+        // Assert the user does not already have an active subscription
+        // We only give users one shot at subscribing
+        self.storage.subscription_claims.at(config_id).at(user).claim();
+
+        // At this point, we've done the minimal amount of stuff we want to be included on setup
+        // We're bearing the cost of inserting the claim, which could drain the FPC in the event
+        // the subscription is full but someone creates infinite accounts. This should be prevented
+        // by enforcing some sort of check on the subscribing account
+        self.context.set_as_fee_payer();
+        self.context.end_setup();
+
+        // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
+        // Since this value is only used for unconstrained tagging and not for any constrained logic,
+        // it is safe to set from a constrained context.
+        unsafe {
+            set_sender_for_tags(user);
+        }
+
+        let config = self.storage.config.at(config_id).read();
+
+        // We use partial notes because we have to ensure we haven't surpassed the
+        // subscription limit per app and that's stored in public.
+        let partial_note = SubscriptionNote::partial(
+            user,
+            self.context,
+            user,
+            self.address,
+            config.max_uses - 1,
+            config.max_fee,
+            config_id,
+        );
+
+        // This function will complete the partial note if the subscription is within limits
+        self.enqueue_self._complete_subscription(config_id, partial_note);
+
+        // We allow calling the sponsored function in the same tx as the subscription
+        self.internal._call_sponsored_fn(call, config.max_fee);
+    }
+
 }

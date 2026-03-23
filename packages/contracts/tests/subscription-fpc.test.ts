@@ -18,7 +18,7 @@ import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
-import { SubscriptionFPC } from "../src/sdk/index.js";
+import { SubscriptionFPC } from "../src/subscription-fpc.js";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 const L1_RPC_URL = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
@@ -170,7 +170,8 @@ describe("SubscriptionFPC", () => {
         Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
       )
       .getFunctionCall();
-    const { maxFee } = await subscriptionFPC.helpers.setup({
+
+    const { maxFee } = await subscriptionFPC.helpers.calibrate({
       adminWallet: wallet,
       adminAddress: admin,
       userWallet: userWallet,
@@ -181,10 +182,25 @@ describe("SubscriptionFPC", () => {
     });
 
     expect(maxFee).toBeGreaterThan(0n);
+
+    await subscriptionFPC.methods
+      .sign_up(
+        sampleCall.to,
+        sampleCall.selector,
+        PRODUCTION_INDEX /* current_index */,
+        1 /* max_uses */,
+        maxFee,
+        1 /* max_users */,
+      )
+      .send({ from: admin });
   });
 
-  it("allows a user to subscribe to a sponsored app", async () => {
+  it("allows a user to subscribe to an app and get a sponsored call in the same tx", async () => {
     const fpc = await subscriptionFPC.withWallet(userWallet);
+    const deployer = EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    );
 
     subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
@@ -199,19 +215,20 @@ describe("SubscriptionFPC", () => {
       SubscriptionFPC.artifact,
     );
 
-    const selector = await EcdsaAccountDeployerContract.at(
-      deployerAddress,
-      userWallet,
-    ).methods.deploy.selector();
-
-    await fpc.methods
-      .subscribe(
-        deployerAddress,
-        selector,
-        PRODUCTION_INDEX,
+    const sponsoredCall = await deployer.methods
+      .deploy(
         subscribedAccountManager.address,
+        await Fr.random(),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
       )
-      .send({ from: NO_FROM });
+      .getFunctionCall();
+
+    await fpc.helpers.subscribe({
+      call: sponsoredCall,
+      configIndex: PRODUCTION_INDEX,
+      userAddress: subscribedAccountManager.address,
+    });
   });
 
   it("allows the usage of the subscription to pay fees", async () => {
