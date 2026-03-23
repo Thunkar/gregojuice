@@ -1,6 +1,14 @@
 import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
 import type { AztecNode } from "@aztec/aztec.js/node";
-import { EmbeddedWallet } from "@aztec/wallets/embedded";
+import {
+  EmbeddedWallet,
+  type EmbeddedWalletOptions,
+} from "@aztec/wallets/embedded";
+import type { InteractionWaitOptions, SendReturn } from "@aztec/aztec.js/contracts";
+import type { AztecNode } from "@aztec/aztec.js/node";
+import type { SendOptions } from "@aztec/aztec.js/wallet";
+import type { ExecutionPayload } from "@aztec/stdlib/tx";
+import { BaseWallet } from "@aztec/wallet-sdk/base-wallet";
 import { getInitialTestAccountsData } from "@aztec/accounts/testing";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
@@ -95,4 +103,32 @@ export async function fundWithFeeJuice(
     .simulate({ from: ctx.admin });
 
   expect(balance).toBeGreaterThan(0n);
+}
+
+/**
+ * EmbeddedWallet subclass that skips pre-simulation before sending.
+ * EmbeddedWallet.sendTx simulates first to estimate gas, which causes
+ * expected-to-revert txs to fail before they ever reach the node.
+ * This wallet calls BaseWallet.sendTx directly, bypassing that simulation.
+ */
+/**
+ * EmbeddedWallet subclass that skips pre-simulation before sending.
+ * EmbeddedWallet.sendTx simulates first to estimate gas, which causes
+ * expected-to-revert txs to fail before they ever reach the node.
+ * This wallet calls BaseWallet.sendTx directly, bypassing that simulation.
+ */
+export class GrieferWallet extends EmbeddedWallet {
+  static override create<T extends EmbeddedWallet = GrieferWallet>(
+    nodeOrUrl: string | AztecNode,
+    options?: EmbeddedWalletOptions,
+  ): Promise<T> {
+    return super.create<T>(nodeOrUrl, options);
+  }
+
+  public override sendTx<W extends InteractionWaitOptions = undefined>(
+    executionPayload: ExecutionPayload,
+    opts: SendOptions<W>,
+  ): Promise<SendReturn<W>> {
+    return BaseWallet.prototype.sendTx.call(this, executionPayload, opts);
+  }
 }
