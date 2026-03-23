@@ -76,14 +76,16 @@ contract SubscriptionFPC {
             selector.to_field(),
             current_index.to_field(),
         ]);
-        assert(max_users <= MAX_NOTE_HASHES_PER_TX, "Cannot sign up more than 64 users at a time");
+        assert(
+            max_users <= MAX_NOTE_HASHES_PER_CALL,
+            "Cannot sign up more than 16 users at a time",
+        );
         // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
         // Since this value is only used for unconstrained tagging and not for any constrained logic,
         // it is safe to set from a constrained context.
         unsafe {
             set_sender_for_tags(self.address);
         }
-        let mut remaining = max_users;
         for i in 0..MAX_NOTE_HASHES_PER_CALL {
             if i < max_users {
                 self
@@ -92,46 +94,7 @@ contract SubscriptionFPC {
                     .at(self.address)
                     .insert(SlotNote { config_id, max_uses, max_fee })
                     .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
-                remaining -= 1;
             }
-        }
-        if remaining > 0 {
-            self.call_self._recurse_create_slot_notes(
-                remaining,
-                config_id,
-                max_uses,
-                max_fee,
-            )
-        }
-    }
-
-    #[external("private")]
-    #[only_self]
-    fn _recurse_create_slot_notes(
-        users_left: u32,
-        config_id: Field,
-        max_uses: u32,
-        max_fee: u128,
-    ) {
-        let mut remaining = users_left;
-        for i in 0..MAX_NOTE_HASHES_PER_CALL {
-            if i < users_left {
-                self
-                    .storage
-                    .slots
-                    .at(self.address)
-                    .insert(SlotNote { config_id, max_uses, max_fee })
-                    .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
-                remaining -= 1;
-            }
-        }
-        if remaining > 0 {
-            self.call_self._recurse_create_slot_notes(
-                remaining,
-                config_id,
-                max_uses,
-                max_fee,
-            )
         }
     }
 

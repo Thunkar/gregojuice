@@ -83,16 +83,18 @@ export async function calibrateSponsoredApp(params: {
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
   const userFpc = SubscriptionFPCContract.at(fpcAddress, userWallet);
 
-  // --- Step 1: Calibration sign_up (index 0, MAX fee) ---
+  // --- Step 1: Calibration sign_up (unique index per calibration, MAX fee) ---
+  // Use a high index unlikely to collide with production indices
+  const calibrationIndex = 1000000 + Math.floor(Math.random() * 1000000);
   await adminFpc.methods
-    .sign_up(appAddress, selector, 0, 1, MAX_U128, 1)
+    .sign_up(appAddress, selector, calibrationIndex, 1, MAX_U128, 1)
     .send({ from: adminAddress });
 
   // --- Step 2: Simulate subscription to measure gas ---
   const noirCall = await buildNoirFunctionCall(sampleCall);
 
   const { estimatedGas } = await userFpc.methods
-    .subscribe(noirCall, 0, userAddress)
+    .subscribe(noirCall, calibrationIndex, userAddress)
     .with({
       authWitnesses,
       extraHashedArgs: [
