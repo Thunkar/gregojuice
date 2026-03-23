@@ -17,6 +17,8 @@ import {
 import { computeVarArgsHash } from "@aztec/stdlib/hash";
 import { HashedValues } from "@aztec/stdlib/tx";
 import { NO_FROM } from "@aztec/aztec.js/account";
+import { Fr } from "@aztec/aztec.js/fields";
+import { deriveKeys } from "@aztec/aztec.js/keys";
 
 const MAX_U128 = 2n ** 128n - 1n;
 
@@ -90,7 +92,7 @@ export async function calibrateSponsoredApp(params: {
   const noirCall = await buildNoirFunctionCall(sampleCall);
 
   const { estimatedGas } = await userFpc.methods
-    .subscribe(noirCall, 0, userAddress)
+    .subscribe(noirCall, 0, 0, userAddress)
     .with({
       authWitnesses,
       extraHashedArgs: [
@@ -103,7 +105,7 @@ export async function calibrateSponsoredApp(params: {
     .simulate({
       from: NO_FROM,
       fee: { estimateGas: true, estimatedGasPadding: 0 },
-      additionalScopes: [userAddress],
+      additionalScopes: [userAddress, fpcAddress],
     });
 
   // --- Step 3: Compute tight max_fee ---
@@ -130,6 +132,8 @@ export async function subscribeAndCall(params: {
   fpc: SubscriptionFPCContract;
   /** The FunctionCall to sponsor (from .getFunctionCall()) */
   call: FunctionCall;
+  /** The slot ID to consume (0..max_users-1) */
+  slotId: number;
   /** The config index for the sponsored app */
   configIndex: number;
   /** The subscribing user's address */
@@ -137,12 +141,19 @@ export async function subscribeAndCall(params: {
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress, authWitnesses = [] } = params;
+  const {
+    fpc,
+    call,
+    slotId,
+    configIndex,
+    userAddress,
+    authWitnesses = [],
+  } = params;
 
   const noirCall = await buildNoirFunctionCall(call);
 
   return fpc.methods
-    .subscribe(noirCall, configIndex, userAddress)
+    .subscribe(noirCall, slotId, configIndex, userAddress)
     .with({
       authWitnesses,
       extraHashedArgs: [
@@ -151,7 +162,7 @@ export async function subscribeAndCall(params: {
     })
     .send({
       from: NO_FROM,
-      additionalScopes: [userAddress],
+      additionalScopes: [userAddress, fpc.address],
     });
 }
 
@@ -187,7 +198,7 @@ export async function sendSponsoredCall(params: {
     })
     .send({
       from: NO_FROM,
-      additionalScopes: [userAddress],
+      additionalScopes: [userAddress, fpc.address],
     });
 }
 
@@ -220,6 +231,21 @@ export class SubscriptionFPC {
 
   static deploy(wallet: Wallet, admin: AztecAddressLike) {
     return SubscriptionFPCContract.deploy(wallet, admin);
+  }
+
+  /**
+   * Deploys the FPC with public keys so it can own private notes (slot notes).
+   * Returns the deployment handle and the secret key needed to register the contract.
+   */
+  static async deployWithKeys(wallet: Wallet, admin: AztecAddressLike) {
+    const secretKey = Fr.random();
+    const { publicKeys } = await deriveKeys(secretKey);
+    const deployment = SubscriptionFPCContract.deployWithPublicKeys(
+      publicKeys,
+      wallet,
+      admin,
+    );
+    return { deployment, secretKey };
   }
 
   static get artifact(): ContractArtifact {
@@ -260,6 +286,7 @@ export class SubscriptionFPC {
        */
       subscribe: (params: {
         call: FunctionCall;
+        slotId: number;
         configIndex: number;
         userAddress: AztecAddress;
         authWitnesses?: AuthWitness[];

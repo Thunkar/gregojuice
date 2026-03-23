@@ -1,14 +1,12 @@
 use aztec::macros::aztec;
-mod subscription_note;
 
 #[aztec]
 contract SubscriptionFPC {
 
-    use super::subscription_note::{PartialSubscriptionNote, SubscriptionNote};
     use aztec::{
         authwit::entrypoint::FunctionCall,
         macros::{
-            functions::{allow_phase_change, external, initializer, internal, only_self},
+            functions::{allow_phase_change, external, initializer, internal},
             notes::note,
             storage::storage,
         },
@@ -17,29 +15,36 @@ contract SubscriptionFPC {
         protocol::{
             abis::function_selector::FunctionSelector,
             address::AztecAddress,
+            constants::MAX_NOTE_HASHES_PER_CALL,
             hash::poseidon2_hash,
             traits::{Packable, ToField},
         },
-        state_vars::{
-            Map, Owned, PrivateSet, PublicImmutable, PublicMutable, SingleUseClaim, StateVariable,
-        },
+        state_vars::{Owned, PrivateSet, PublicImmutable},
         utils::comparison::Comparator,
     };
     use aztec::oracle::notes::set_sender_for_tags;
 
     #[derive(Packable, Eq)]
-    struct SubscriptionConfig {
-        max_uses: u32,
-        max_users: u32,
+    #[note]
+    struct SubscriptionNote {
+        uses: u32,
         max_fee: u128,
+        config_id: Field,
+    }
+
+    #[derive(Packable, Eq)]
+    #[note]
+    struct SlotNote {
+        slot: u32,
+        config_id: Field,
+        max_fee: u128,
+        max_uses: u32,
     }
     #[storage]
     struct Storage<Context> {
         admin: PublicImmutable<AztecAddress, Context>,
-        config: Map<Field, PublicImmutable<SubscriptionConfig, Context>, Context>,
         subscriptions: Owned<PrivateSet<SubscriptionNote, Context>, Context>,
-        subscription_claims: Map<Field, Owned<SingleUseClaim<Context>, Context>, Context>,
-        subscription_users: Map<Field, PublicMutable<u32, Context>, Context>,
+        slots: Owned<PrivateSet<SlotNote, Context>, Context>,
     }
 
     #[internal("public")]
@@ -72,34 +77,26 @@ contract SubscriptionFPC {
             selector.to_field(),
             current_index.to_field(),
         ]);
-
-        self.enqueue_self._initialize_config(config_id, max_fee, max_uses, max_users);
-    }
-
-    #[external("public")]
-    #[only_self]
-    fn _initialize_config(config_id: Field, max_fee: u128, max_uses: u32, max_users: u32) {
-        self.storage.config.at(config_id).initialize(
-            SubscriptionConfig { max_fee, max_uses, max_users },
-        )
-    }
-
-    #[external("public")]
-    #[only_self]
-    fn _complete_subscription(config_id: Field, partial_note: PartialSubscriptionNote) {
-        let config = self.storage.config.at(config_id).read();
-        let current_users = self.storage.subscription_users.at(config_id).read();
         assert(
-            current_users < config.max_users,
-            "The subscription is complete and no more users can join",
+            max_users <= MAX_NOTE_HASHES_PER_CALL,
+            "Cannot sign up more than 16 users at a time",
         );
-        self.storage.subscription_users.at(config_id).write(current_users + 1);
-        partial_note.complete(
-            self.context,
-            self.address,
-            self.storage.subscriptions.get_storage_slot(),
-            true,
-        )
+        // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
+        // Since this value is only used for unconstrained tagging and not for any constrained logic,
+        // it is safe to set from a constrained context.
+        unsafe {
+            set_sender_for_tags(self.address);
+        }
+        for i in 0..MAX_NOTE_HASHES_PER_CALL {
+            if i < max_users {
+                self
+                    .storage
+                    .slots
+                    .at(self.address)
+                    .insert(SlotNote { slot: i, config_id, max_uses, max_fee })
+                    .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
+            }
+        }
     }
 
     #[external("private")]
@@ -142,7 +139,6 @@ contract SubscriptionFPC {
                         uses: subscription.uses - 1,
                         max_fee: subscription.max_fee,
                         config_id,
-                        is_valid: true,
                     },
                 )
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
@@ -188,7 +184,7 @@ contract SubscriptionFPC {
 
     #[external("private")]
     #[allow_phase_change]
-    fn subscribe(call: FunctionCall, current_index: u32, user: AztecAddress) {
+    fn subscribe(call: FunctionCall, slot_id: u32, current_index: u32, user: AztecAddress) {
         // Assert we're at the top of the stack
         assert(
             self.context.maybe_msg_sender() == Option::none(),
@@ -201,14 +197,15 @@ contract SubscriptionFPC {
             current_index.to_field(),
         ]);
 
-        // Assert the user does not already have an active subscription
-        // We only give users one shot at subscribing
-        self.storage.subscription_claims.at(config_id).at(user).claim();
+        let options = NoteGetterOptions::new().set_limit(1).select(
+            SlotNote::properties().slot,
+            Comparator.EQ,
+            slot_id,
+        );
+        let slots = self.storage.slots.at(self.address).pop_notes(options);
+        let slot = slots.get(0);
 
-        // At this point, we've done the minimal amount of stuff we want to be included on setup
-        // We're bearing the cost of inserting the claim, which could drain the FPC in the event
-        // the subscription is full but someone creates infinite accounts. This should be prevented
-        // by enforcing some sort of check on the subscribing account
+        // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
         self.context.end_setup();
 
@@ -219,25 +216,15 @@ contract SubscriptionFPC {
             set_sender_for_tags(user);
         }
 
-        let config = self.storage.config.at(config_id).read();
-
-        // We use partial notes because we have to ensure we haven't surpassed the
-        // subscription limit per app and that's stored in public.
-        let partial_note = SubscriptionNote::partial(
-            user,
-            self.context,
-            user,
-            self.address,
-            config.max_uses - 1,
-            config.max_fee,
-            config_id,
-        );
-
-        // This function will complete the partial note if the subscription is within limits
-        self.enqueue_self._complete_subscription(config_id, partial_note);
+        self
+            .storage
+            .subscriptions
+            .at(user)
+            .insert(SubscriptionNote { uses: slot.max_uses - 1, max_fee: slot.max_fee, config_id })
+            .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
 
         // We allow calling the sponsored function in the same tx as the subscription
-        self.internal._call_sponsored_fn(call, config.max_fee);
+        self.internal._call_sponsored_fn(call, slot.max_fee);
     }
 
 }

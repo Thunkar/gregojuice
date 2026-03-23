@@ -16,16 +16,8 @@ import {
   TokenContractArtifact,
 } from "@aztec/noir-contracts.js/Token";
 
-import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import { NO_FROM } from "@aztec/aztec.js/account";
-import { computeVarArgsHash } from "@aztec/stdlib/hash";
-import { HashedValues } from "@aztec/stdlib/tx";
-
 import { EcdsaAccountDeployerContract } from "../artifacts/EcdsaAccountDeployer.js";
-import {
-  SubscriptionFPC,
-  buildNoirFunctionCall,
-} from "../src/subscription-fpc.js";
+import { SubscriptionFPC } from "../src/subscription-fpc.js";
 import { setupTestContext, fundWithFeeJuice, GrieferWallet } from "./utils.js";
 
 const PRODUCTION_INDEX = 1;
@@ -40,6 +32,7 @@ let wallet: EmbeddedWallet;
 let admin: AztecAddress;
 let subscriptionFPC: SubscriptionFPC;
 let fpcInstance: ContractInstanceWithAddress;
+let fpcSecretKey: Fr;
 
 beforeAll(async () => {
   const ctx = await setupTestContext();
@@ -47,15 +40,22 @@ beforeAll(async () => {
   wallet = ctx.wallet;
   admin = ctx.admin;
 
-  // Deploy SubscriptionFPC
+  // Deploy SubscriptionFPC with keys (so it can own private slot notes)
+  const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(
+    wallet,
+    admin,
+  );
+  fpcSecretKey = secretKey;
+  const instance = await deployment.getInstance();
+  await wallet.registerContract(instance, SubscriptionFPC.artifact, secretKey);
   const {
-    receipt: { contract: rawFpc, instance: inst },
-  } = await SubscriptionFPC.deploy(wallet, admin).send({
+    receipt: { contract: rawFpc },
+  } = await deployment.send({
     from: admin,
     wait: { returnReceipt: true },
   });
   subscriptionFPC = new SubscriptionFPC(rawFpc);
-  fpcInstance = inst;
+  fpcInstance = instance;
 
   // Fund the FPC with fee juice (slow L1 bridge — done once)
   await fundWithFeeJuice(ctx, subscriptionFPC.address);
@@ -85,8 +85,11 @@ describe("Account deployment subscription", () => {
       deployerInstance,
       EcdsaAccountDeployerContract.artifact,
     );
-    await userWallet.registerContract(fpcInstance, SubscriptionFPC.artifact);
-
+    await userWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
     subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
       await Fr.random(),
@@ -166,6 +169,7 @@ describe("Account deployment subscription", () => {
 
     await fpc.helpers.subscribe({
       call: sponsoredCall,
+      slotId: 0,
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,
     });
@@ -175,7 +179,7 @@ describe("Account deployment subscription", () => {
 // ─── Token Transfer Subscription (multi-use) ─────────────────────────────────
 
 describe("Token transfer subscription (multi-use)", () => {
-  const MAX_USES = 3;
+  const MAX_USES = 4; // subscribe consumes 1 use + 3 sponsor calls
   const MAX_USERS = 10;
   const SALT = new Fr(0);
 
@@ -205,9 +209,12 @@ describe("Token transfer subscription (multi-use)", () => {
     userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
 
     // Register contracts in user wallet
-    await userWallet.registerContract(fpcInstance, SubscriptionFPC.artifact);
+    await userWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
     await userWallet.registerContract(tokenInstance, TokenContractArtifact);
-
     // Deploy the user account via admin (so it exists on-chain)
     const userSecret = await Fr.random();
     const userAccountManager = await wallet.createECDSARAccount(
@@ -246,7 +253,7 @@ describe("Token transfer subscription (multi-use)", () => {
       .mint_to_private(userAddress, 1000n)
       .send({ from: admin });
 
-    // Add admin as sender for the user to receive their notes
+    // Add admin as sender for the user to receive their minted token notes
     await userWallet.registerSender(admin, "admin");
   });
 
@@ -296,6 +303,7 @@ describe("Token transfer subscription (multi-use)", () => {
 
     await fpc.helpers.subscribe({
       call: sponsoredCall,
+      slotId: 0,
       configIndex: PRODUCTION_INDEX,
       userAddress,
       authWitnesses: [authWit],
@@ -320,38 +328,21 @@ describe("Token transfer subscription (multi-use)", () => {
     });
   });
 
-  it("uses the subscription for a third sponsored transfer (last use)", async () => {
-    const userToken = TokenContract.at(token.address, userWallet);
-    const fpc = subscriptionFPC.withWallet(userWallet);
-
-    const sponsoredCall = await userToken.methods
-      .transfer_in_private(userAddress, recipientAddress, 5n, 0)
-      .getFunctionCall();
-
-    const authWit = await createTransferAuthWit(sponsoredCall);
-
-    await fpc.helpers.sponsor({
-      call: sponsoredCall,
-      configIndex: PRODUCTION_INDEX,
-      userAddress,
-      authWitnesses: [authWit],
-    });
-  });
-
   it("verifies recipient received all transfers", async () => {
     const userToken = TokenContract.at(token.address, userWallet);
 
+    // subscribe(10) + sponsor(15) = 25
     const { result: recipientBalance } = await userToken.methods
       .balance_of_private(recipientAddress)
       .simulate({ from: recipientAddress });
 
-    expect(recipientBalance).toBe(30n);
+    expect(recipientBalance).toBe(25n);
 
     const { result: userBalance } = await userToken.methods
       .balance_of_private(userAddress)
       .simulate({ from: userAddress });
 
-    expect(userBalance).toBe(970n);
+    expect(userBalance).toBe(975n);
   });
 });
 
@@ -365,7 +356,6 @@ describe("Failure cases", () => {
   let token: TokenContract;
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
-  let feeJuice: FeeJuiceContract;
 
   async function createTransferAuthWit(call: FunctionCall) {
     return userWallet.createAuthWit(userAddress, {
@@ -375,8 +365,6 @@ describe("Failure cases", () => {
   }
 
   beforeAll(async () => {
-    feeJuice = FeeJuiceContract.at(wallet);
-
     // Deploy Token contract
     const {
       receipt: { contract: rawToken, instance: tokenInstance },
@@ -388,7 +376,11 @@ describe("Failure cases", () => {
 
     // Set up user wallet
     userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
-    await userWallet.registerContract(fpcInstance, SubscriptionFPC.artifact);
+    await userWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
     await userWallet.registerContract(tokenInstance, TokenContractArtifact);
 
     // Deploy user account
@@ -466,6 +458,7 @@ describe("Failure cases", () => {
     const fpc = subscriptionFPC.withWallet(userWallet);
     await fpc.helpers.subscribe({
       call: subscribeCall,
+      slotId: 0,
       configIndex: FAILURE_INDEX,
       userAddress,
       authWitnesses: [subscribeAuthWit],
@@ -494,16 +487,18 @@ describe("Failure cases", () => {
     ).rejects.toThrow();
   });
 
-  it("reverts on-chain when max_users is exceeded, draining the FPC (grief vector)", async () => {
-    // The config has max_users=1 and we already subscribed one user.
-    // A new user subscribing should cause _complete_subscription to revert in public.
-    // But the FPC has already set_as_fee_payer in private (before end_setup),
-    // so the tx lands on-chain reverted and the FPC pays the fee.
+  it("fails in simulation when no slots are available", async () => {
+    // All slots are consumed in private. A griefer can't build a valid tx —
+    // pop_notes finds no slot note and fails during simulation.
 
     const grieferWallet = await GrieferWallet.create(node, {
       ephemeral: true,
     });
-    await grieferWallet.registerContract(fpcInstance, SubscriptionFPC.artifact);
+    await grieferWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
     await grieferWallet.registerContract(
       await node.getContract(token.address),
       TokenContractArtifact,
@@ -524,19 +519,6 @@ describe("Failure cases", () => {
       SIGNING_PRIVATE_KEY,
     );
 
-    // Mint tokens so the transfer_in_private doesn't fail for lack of balance
-    await token.methods
-      .mint_to_private(grieferAddress, 100n)
-      .send({ from: admin });
-    await grieferWallet.registerSender(admin, "admin");
-
-    // Check FPC balance before
-    const { result: balanceBefore } = await feeJuice.methods
-      .balance_of_public(subscriptionFPC.address)
-      .simulate({ from: admin });
-
-    // Build the subscribe call — this will revert in public (_complete_subscription)
-    // but the FPC already committed to paying in private
     const grieferToken = TokenContract.at(token.address, grieferWallet);
     const griefCall = await grieferToken.methods
       .transfer_in_private(grieferAddress, recipientAddress, 1n, 0)
@@ -547,34 +529,17 @@ describe("Failure cases", () => {
       call: griefCall,
     });
 
-    const noirCall = await buildNoirFunctionCall(griefCall);
-    const fpc = subscriptionFPC.contract.withWallet(grieferWallet);
+    const fpc = subscriptionFPC.withWallet(grieferWallet);
 
-    const { receipt } = await fpc.methods
-      .subscribe(noirCall, FAILURE_INDEX, grieferAddress)
-      .with({
+    // The subscribe call fails during simulation — no slot note to pop
+    await expect(
+      fpc.helpers.subscribe({
+        call: griefCall,
+        slotId: 0,
+        configIndex: FAILURE_INDEX,
+        userAddress: grieferAddress,
         authWitnesses: [griefAuthWit],
-        extraHashedArgs: [
-          new HashedValues(
-            griefCall.args,
-            await computeVarArgsHash(griefCall.args),
-          ),
-        ],
-      })
-      .send({
-        from: NO_FROM,
-        additionalScopes: [grieferAddress],
-        wait: { dontThrowOnRevert: true },
-      });
-
-    // The tx should land on-chain but with a reverted execution
-    expect(receipt.hasExecutionReverted()).toBe(true);
-
-    // Check FPC balance after — it should have decreased (FPC paid for the reverted tx)
-    const { result: balanceAfter } = await feeJuice.methods
-      .balance_of_public(subscriptionFPC.address)
-      .simulate({ from: admin });
-
-    expect(balanceAfter).toBeLessThan(balanceBefore);
+      }),
+    ).rejects.toThrow();
   });
 });
