@@ -1,29 +1,24 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
-import { getInitialTestAccountsData } from "@aztec/accounts/testing";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
-import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
-import { waitForL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
-import { createLogger } from "@aztec/aztec.js/log";
 import { Fr } from "@aztec/aztec.js/fields";
-import { createEthereumChain } from "@aztec/ethereum/chain";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
-
-import { EcdsaAccountDeployerContract } from "../artifacts/EcdsaAccountDeployer.js";
-import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/contracts";
+import {
+  getContractInstanceFromInstantiationParams,
+  type ContractInstanceWithAddress,
+} from "@aztec/aztec.js/contracts";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
-import { NO_FROM } from "@aztec/aztec.js/account";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
-import { SubscriptionFPC } from "../src/sdk/index.js";
+import type { FunctionCall } from "@aztec/aztec.js/abi";
+import {
+  TokenContract,
+  TokenContractArtifact,
+} from "@aztec/noir-contracts.js/Token";
 
-const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
-const L1_RPC_URL = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
-const L1_CHAIN_ID = Number(process.env.L1_CHAIN_ID ?? 31337);
-const MNEMONIC = "test test test test test test test test test test test junk";
+import { EcdsaAccountDeployerContract } from "../artifacts/EcdsaAccountDeployer.js";
+import { SubscriptionFPC } from "../src/subscription-fpc.js";
+import { setupTestContext, fundWithFeeJuice, GrieferWallet } from "./utils.js";
 
 const PRODUCTION_INDEX = 1;
 const SIGNING_PRIVATE_KEY = randomBytes(32);
@@ -31,106 +26,55 @@ const SIGNING_PUBLIC_KEY = await new Ecdsa("secp256r1").computePublicKey(
   SIGNING_PRIVATE_KEY,
 );
 
-describe("SubscriptionFPC", () => {
-  let node: AztecNode;
-  let wallet: EmbeddedWallet;
-  let userWallet: EmbeddedWallet;
-  let admin: AztecAddress;
-  let subscriptionFPC: SubscriptionFPC;
-  let feeJuice: FeeJuiceContract;
+// Shared state across both describe blocks
+let node: AztecNode;
+let wallet: EmbeddedWallet;
+let admin: AztecAddress;
+let subscriptionFPC: SubscriptionFPC;
+let fpcInstance: ContractInstanceWithAddress;
+let fpcSecretKey: Fr;
 
+beforeAll(async () => {
+  const ctx = await setupTestContext();
+  node = ctx.node;
+  wallet = ctx.wallet;
+  admin = ctx.admin;
+
+  // Deploy SubscriptionFPC with keys (so it can own private slot notes)
+  const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(
+    wallet,
+    admin,
+  );
+  fpcSecretKey = secretKey;
+  const instance = await deployment.getInstance();
+  await wallet.registerContract(instance, SubscriptionFPC.artifact, secretKey);
+  const {
+    receipt: { contract: rawFpc },
+  } = await deployment.send({
+    from: admin,
+    wait: { returnReceipt: true },
+  });
+  subscriptionFPC = new SubscriptionFPC(rawFpc);
+  fpcInstance = instance;
+
+  // Fund the FPC with fee juice (slow L1 bridge — done once)
+  await fundWithFeeJuice(ctx, subscriptionFPC.address);
+});
+
+// ─── Account Deployment Subscription ──────────────────────────────────────────
+
+describe("Account deployment subscription", () => {
+  let userWallet: EmbeddedWallet;
   let deployerAddress: AztecAddress;
   let subscribedAccountManager: AccountManager;
+
   beforeAll(async () => {
-    // Connect to sandbox
-    node = createAztecNodeClient(NODE_URL);
-    await waitForNode(node);
-    wallet = await EmbeddedWallet.create(node, { ephemeral: true });
-
-    // Create test accounts (pre-funded with fee juice in sandbox)
-    const testAccounts = await getInitialTestAccountsData();
-    [admin] = await Promise.all(
-      testAccounts.slice(0, 1).map(async (account) => {
-        return (
-          await wallet.createSchnorrAccount(
-            account.secret,
-            account.salt,
-            account.signingKey,
-          )
-        ).address;
-      }),
-    );
-
-    // Deploy SubscriptionFPC
-    const {
-      receipt: { contract: rawFpc, instance: subscriptionFPCInstance },
-    } = await SubscriptionFPC.deploy(wallet, admin).send({
-      from: admin,
-      wait: { returnReceipt: true },
-    });
-    subscriptionFPC = new SubscriptionFPC(rawFpc);
-
-    // Get FeeJuice subscriptionFPC handle
-    feeJuice = FeeJuiceContract.at(wallet);
-
-    // Set up L1 client to bridge tokens
-    const chain = createEthereumChain([L1_RPC_URL], L1_CHAIN_ID);
-    const l1Client = createExtendedL1Client(
-      chain.rpcUrls,
-      MNEMONIC,
-      chain.chainInfo,
-    );
-
-    // Create portal manager from node info
-    const portal = await L1FeeJuicePortalManager.new(
-      node,
-      l1Client,
-      createLogger("test:bridge"),
-    );
-
-    // Mint on L1 + bridge to FPC address on L2
-    const claim = await portal.bridgeTokensPublic(
-      subscriptionFPC.address,
-      undefined, // use default mint amount
-      true, // mint tokens first (sandbox/testnet)
-    );
-
-    // Send dummy txs to advance L2 blocks so the L1→L2 message becomes available.
-    // The sandbox only produces blocks when there are pending transactions.
-    const advanceBlock = () =>
-      feeJuice.methods.check_balance(0).send({ from: admin });
-    await advanceBlock();
-    await advanceBlock();
-
-    // Wait for L1→L2 message to be available on L2
-    await waitForL1ToL2MessageReady(node, Fr.fromHexString(claim.messageHash), {
-      timeoutSeconds: 120,
-    });
-
-    // Claim the bridged fee juice on L2 (admin claims on behalf of FPC)
-    await feeJuice.methods
-      .claim(
-        subscriptionFPC.address,
-        claim.claimAmount,
-        claim.claimSecret,
-        claim.messageLeafIndex,
-      )
-      .send({ from: admin });
-
-    // Verify FPC now has a fee juice balance
-    const { result: balance } = await feeJuice.methods
-      .balance_of_public(subscriptionFPC.address)
-      .simulate({ from: admin });
-
-    expect(balance).toBeGreaterThan(0n);
-
     userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
 
     const deployerInstance = await getContractInstanceFromInstantiationParams(
       EcdsaAccountDeployerContract.artifact,
       { salt: new Fr(0) },
     );
-
     deployerAddress = deployerInstance.address;
 
     await wallet.registerContract(
@@ -142,10 +86,10 @@ describe("SubscriptionFPC", () => {
       EcdsaAccountDeployerContract.artifact,
     );
     await userWallet.registerContract(
-      subscriptionFPCInstance,
+      fpcInstance,
       SubscriptionFPC.artifact,
+      fpcSecretKey,
     );
-
     subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
       await Fr.random(),
@@ -170,21 +114,37 @@ describe("SubscriptionFPC", () => {
         Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
       )
       .getFunctionCall();
-    const { maxFee } = await subscriptionFPC.helpers.setup({
+
+    const { maxFee } = await subscriptionFPC.helpers.calibrate({
       adminWallet: wallet,
       adminAddress: admin,
-      userWallet: userWallet,
+      userWallet,
       userAddress: dummyAccount.address,
       node,
       sampleCall,
-      feeMultiplier: 10,
+      feeMultiplier: 50,
     });
 
     expect(maxFee).toBeGreaterThan(0n);
+
+    await subscriptionFPC.methods
+      .sign_up(
+        sampleCall.to,
+        sampleCall.selector,
+        PRODUCTION_INDEX,
+        1 /* max_uses */,
+        maxFee,
+        1 /* max_users */,
+      )
+      .send({ from: admin });
   });
 
-  it("allows a user to subscribe to a sponsored app", async () => {
-    const fpc = await subscriptionFPC.withWallet(userWallet);
+  it("allows a user to subscribe and get a sponsored call in the same tx", async () => {
+    const fpc = subscriptionFPC.withWallet(userWallet);
+    const deployer = EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    );
 
     subscribedAccountManager = await userWallet.createECDSARAccount(
       await Fr.random(),
@@ -193,32 +153,9 @@ describe("SubscriptionFPC", () => {
     );
 
     const subscriptionFPCInstance = await node.getContract(fpc.address);
-
     await userWallet.registerContract(
       subscriptionFPCInstance,
       SubscriptionFPC.artifact,
-    );
-
-    const selector = await EcdsaAccountDeployerContract.at(
-      deployerAddress,
-      userWallet,
-    ).methods.deploy.selector();
-
-    await fpc.methods
-      .subscribe(
-        deployerAddress,
-        selector,
-        PRODUCTION_INDEX,
-        subscribedAccountManager.address,
-      )
-      .send({ from: NO_FROM });
-  });
-
-  it("allows the usage of the subscription to pay fees", async () => {
-    const fpc = subscriptionFPC.withWallet(userWallet);
-    const deployer = EcdsaAccountDeployerContract.at(
-      deployerAddress,
-      userWallet,
     );
 
     const sponsoredCall = await deployer.methods
@@ -230,10 +167,379 @@ describe("SubscriptionFPC", () => {
       )
       .getFunctionCall();
 
-    await fpc.helpers.sponsor({
+    await fpc.helpers.subscribe({
       call: sponsoredCall,
+
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,
     });
+  });
+});
+
+// ─── Token Transfer Subscription (multi-use) ─────────────────────────────────
+
+describe("Token transfer subscription (multi-use)", () => {
+  const MAX_USES = 4; // subscribe consumes 1 use + 3 sponsor calls
+  const MAX_USERS = 10;
+  const SALT = new Fr(0);
+
+  let userWallet: EmbeddedWallet;
+  let token: TokenContract;
+  let userAddress: AztecAddress;
+  let recipientAddress: AztecAddress;
+
+  async function createTransferAuthWit(call: FunctionCall) {
+    return userWallet.createAuthWit(userAddress, {
+      caller: subscriptionFPC.address,
+      call,
+    });
+  }
+
+  beforeAll(async () => {
+    // Deploy Token contract (admin is the minter)
+    const {
+      receipt: { contract: rawToken, instance: tokenInstance },
+    } = await TokenContract.deploy(wallet, admin, "TestToken", "TT", 18).send({
+      from: admin,
+      wait: { returnReceipt: true },
+    });
+    token = rawToken;
+
+    // Set up user wallet
+    userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
+
+    // Register contracts in user wallet
+    await userWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
+    await userWallet.registerContract(tokenInstance, TokenContractArtifact);
+    // Deploy the user account via admin (so it exists on-chain)
+    const userSecret = await Fr.random();
+    const userAccountManager = await wallet.createECDSARAccount(
+      userSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+    userAddress = userAccountManager.address;
+    const userDeployMethod = await userAccountManager.getDeployMethod();
+    await userDeployMethod.send({ from: admin });
+
+    // Create the account in the user's wallet
+    await userWallet.createECDSARAccount(userSecret, SALT, SIGNING_PRIVATE_KEY);
+
+    // Deploy the recipient account via admin (so it exists on-chain)
+    const recipientSecret = await Fr.random();
+    const recipientAccountManager = await wallet.createECDSARAccount(
+      recipientSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+    recipientAddress = recipientAccountManager.address;
+    const recipientDeployMethod =
+      await recipientAccountManager.getDeployMethod();
+    await recipientDeployMethod.send({ from: admin });
+
+    // Create the account in the user's wallet
+    await userWallet.createECDSARAccount(
+      recipientSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+
+    // Mint tokens to the user privately
+    await token.methods
+      .mint_to_private(userAddress, 1000n)
+      .send({ from: admin });
+
+    // Add admin as sender for the user to receive their minted token notes
+    await userWallet.registerSender(admin, "admin");
+  });
+
+  it("calibrates and sets up transfer_in_private as a sponsored app", async () => {
+    const userToken = TokenContract.at(token.address, userWallet);
+
+    const sampleCall = await userToken.methods
+      .transfer_in_private(userAddress, recipientAddress, 10n, 0)
+      .getFunctionCall();
+
+    const authWit = await createTransferAuthWit(sampleCall);
+
+    const { maxFee } = await subscriptionFPC.helpers.calibrate({
+      adminWallet: wallet,
+      adminAddress: admin,
+      userWallet,
+      userAddress,
+      node,
+      sampleCall,
+      feeMultiplier: 50,
+      authWitnesses: [authWit],
+    });
+
+    expect(maxFee).toBeGreaterThan(0n);
+
+    await subscriptionFPC.methods
+      .sign_up(
+        sampleCall.to,
+        sampleCall.selector,
+        PRODUCTION_INDEX,
+        MAX_USES,
+        maxFee,
+        MAX_USERS,
+      )
+      .send({ from: admin });
+  });
+
+  it("subscribes and makes a sponsored transfer_in_private", async () => {
+    const userToken = TokenContract.at(token.address, userWallet);
+    const fpc = subscriptionFPC.withWallet(userWallet);
+
+    const sponsoredCall = await userToken.methods
+      .transfer_in_private(userAddress, recipientAddress, 10n, 0)
+      .getFunctionCall();
+
+    const authWit = await createTransferAuthWit(sponsoredCall);
+
+    await fpc.helpers.subscribe({
+      call: sponsoredCall,
+
+      configIndex: PRODUCTION_INDEX,
+      userAddress,
+      authWitnesses: [authWit],
+    });
+  });
+
+  it("uses the subscription for a second sponsored transfer", async () => {
+    const userToken = TokenContract.at(token.address, userWallet);
+    const fpc = subscriptionFPC.withWallet(userWallet);
+
+    const sponsoredCall = await userToken.methods
+      .transfer_in_private(userAddress, recipientAddress, 15n, 0)
+      .getFunctionCall();
+
+    const authWit = await createTransferAuthWit(sponsoredCall);
+
+    await fpc.helpers.sponsor({
+      call: sponsoredCall,
+      configIndex: PRODUCTION_INDEX,
+      userAddress,
+      authWitnesses: [authWit],
+    });
+  });
+
+  it("verifies recipient received all transfers", async () => {
+    const userToken = TokenContract.at(token.address, userWallet);
+
+    // subscribe(10) + sponsor(15) = 25
+    const { result: recipientBalance } = await userToken.methods
+      .balance_of_private(recipientAddress)
+      .simulate({ from: recipientAddress });
+
+    expect(recipientBalance).toBe(25n);
+
+    const { result: userBalance } = await userToken.methods
+      .balance_of_private(userAddress)
+      .simulate({ from: userAddress });
+
+    expect(userBalance).toBe(975n);
+  });
+});
+
+// ─── Failure Cases ────────────────────────────────────────────────────────────
+
+describe("Failure cases", () => {
+  const FAILURE_INDEX = 2;
+  const SALT = new Fr(0);
+
+  let userWallet: EmbeddedWallet;
+  let token: TokenContract;
+  let userAddress: AztecAddress;
+  let recipientAddress: AztecAddress;
+
+  async function createTransferAuthWit(call: FunctionCall) {
+    return userWallet.createAuthWit(userAddress, {
+      caller: subscriptionFPC.address,
+      call,
+    });
+  }
+
+  beforeAll(async () => {
+    // Deploy Token contract
+    const {
+      receipt: { contract: rawToken, instance: tokenInstance },
+    } = await TokenContract.deploy(wallet, admin, "FailToken", "FT", 18).send({
+      from: admin,
+      wait: { returnReceipt: true },
+    });
+    token = rawToken;
+
+    // Set up user wallet
+    userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
+    await userWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
+    await userWallet.registerContract(tokenInstance, TokenContractArtifact);
+
+    // Deploy user account
+    const userSecret = await Fr.random();
+    const userAccountManager = await wallet.createECDSARAccount(
+      userSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+    userAddress = userAccountManager.address;
+    await (await userAccountManager.getDeployMethod()).send({ from: admin });
+    await userWallet.createECDSARAccount(userSecret, SALT, SIGNING_PRIVATE_KEY);
+
+    // Deploy recipient account
+    const recipientSecret = await Fr.random();
+    const recipientAccountManager = await wallet.createECDSARAccount(
+      recipientSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+    recipientAddress = recipientAccountManager.address;
+    await (
+      await recipientAccountManager.getDeployMethod()
+    ).send({
+      from: admin,
+    });
+    await userWallet.createECDSARAccount(
+      recipientSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+
+    // Mint tokens to user
+    await token.methods
+      .mint_to_private(userAddress, 1000n)
+      .send({ from: admin });
+    await userWallet.registerSender(admin, "admin");
+
+    // Set up a sponsored app with max_uses=1, max_users=1
+    const userToken = TokenContract.at(token.address, userWallet);
+    const sampleCall = await userToken.methods
+      .transfer_in_private(userAddress, recipientAddress, 1n, 0)
+      .getFunctionCall();
+
+    const authWit = await createTransferAuthWit(sampleCall);
+
+    const { maxFee } = await subscriptionFPC.helpers.calibrate({
+      adminWallet: wallet,
+      adminAddress: admin,
+      userWallet,
+      userAddress,
+      node,
+      sampleCall,
+      feeMultiplier: 50,
+      authWitnesses: [authWit],
+    });
+
+    await subscriptionFPC.methods
+      .sign_up(
+        sampleCall.to,
+        sampleCall.selector,
+        FAILURE_INDEX,
+        1 /* max_uses */,
+        maxFee,
+        1 /* max_users */,
+      )
+      .send({ from: admin });
+
+    // Subscribe — consumes the only slot and the only use
+    const subscribeCall = await userToken.methods
+      .transfer_in_private(userAddress, recipientAddress, 1n, 0)
+      .getFunctionCall();
+    const subscribeAuthWit = await createTransferAuthWit(subscribeCall);
+
+    const fpc = subscriptionFPC.withWallet(userWallet);
+    await fpc.helpers.subscribe({
+      call: subscribeCall,
+
+      configIndex: FAILURE_INDEX,
+      userAddress,
+      authWitnesses: [subscribeAuthWit],
+    });
+  });
+
+  it("rejects sponsor call when subscription uses are exhausted", async () => {
+    const userToken = TokenContract.at(token.address, userWallet);
+    const fpc = subscriptionFPC.withWallet(userWallet);
+
+    const sponsoredCall = await userToken.methods
+      .transfer_in_private(userAddress, recipientAddress, 1n, 0)
+      .getFunctionCall();
+
+    const authWit = await createTransferAuthWit(sponsoredCall);
+
+    // The subscription had max_uses=1 and subscribe consumed it.
+    // sponsor calls pop_notes which should fail — no note to pop.
+    await expect(
+      fpc.helpers.sponsor({
+        call: sponsoredCall,
+        configIndex: FAILURE_INDEX,
+        userAddress,
+        authWitnesses: [authWit],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("fails in simulation when no slots are available", async () => {
+    // All slots are consumed in private. A griefer can't build a valid tx —
+    // pop_notes finds no slot note and fails during simulation.
+
+    const grieferWallet = await GrieferWallet.create(node, {
+      ephemeral: true,
+    });
+    await grieferWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
+    await grieferWallet.registerContract(
+      await node.getContract(token.address),
+      TokenContractArtifact,
+    );
+
+    // Create and deploy a griefer account
+    const grieferSecret = await Fr.random();
+    const grieferAccountManager = await wallet.createECDSARAccount(
+      grieferSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+    const grieferAddress = grieferAccountManager.address;
+    await (await grieferAccountManager.getDeployMethod()).send({ from: admin });
+    await grieferWallet.createECDSARAccount(
+      grieferSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+
+    const grieferToken = TokenContract.at(token.address, grieferWallet);
+    const griefCall = await grieferToken.methods
+      .transfer_in_private(grieferAddress, recipientAddress, 1n, 0)
+      .getFunctionCall();
+
+    const griefAuthWit = await grieferWallet.createAuthWit(grieferAddress, {
+      caller: subscriptionFPC.address,
+      call: griefCall,
+    });
+
+    const fpc = subscriptionFPC.withWallet(grieferWallet);
+
+    // The subscribe call fails during simulation — no slot note to pop
+    await expect(
+      fpc.helpers.subscribe({
+        call: griefCall,
+
+        configIndex: FAILURE_INDEX,
+        userAddress: grieferAddress,
+        authWitnesses: [griefAuthWit],
+      }),
+    ).rejects.toThrow();
   });
 });

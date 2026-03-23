@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import type { AztecAddress } from '@aztec/aztec.js/addresses';
 import type { Wallet } from '@aztec/aztec.js/wallet';
 import { EmbeddedWallet } from '../wallet';
@@ -53,6 +53,9 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
   const isExternal = externalWallet !== null;
   const activeWallet: Wallet | null = externalWallet ?? wallet;
 
+  // Guard against concurrent connectAztecWallet calls (StrictMode, re-renders)
+  const connectingRef = useRef<Promise<void> | null>(null);
+
   const initEmbeddedWallet = useCallback(async (): Promise<EmbeddedWallet> => {
     const node = getAztecNode(activeNetwork.aztecNodeUrl);
     return EmbeddedWallet.create(node, { pxeConfig: { proverEnabled: true } });
@@ -78,24 +81,34 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
 
   // Create or load embedded wallet with initializerless account
   const connectAztecWallet = useCallback(async () => {
-    setStatus('creating');
-    setError(null);
-    try {
-      const w = await initEmbeddedWallet();
+    // Deduplicate: if already connecting, return the in-flight promise
+    if (connectingRef.current) return connectingRef.current;
 
-      // Try loading existing stored account, or create a new one
-      let accountManager = await w.loadStoredAccount();
-      if (!accountManager) {
-        accountManager = await w.createInitializerlessAccount();
+    const doConnect = async () => {
+      setStatus('creating');
+      setError(null);
+      try {
+        const w = await initEmbeddedWallet();
+
+        // Try loading existing stored account, or create a new one
+        let accountManager = await w.loadStoredAccount();
+        if (!accountManager) {
+          accountManager = await w.createInitializerlessAccount();
+        }
+
+        setWallet(w);
+        setAddress(accountManager.address);
+        setStatus('ready');
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to create Aztec wallet');
+        setStatus('error');
+      } finally {
+        connectingRef.current = null;
       }
+    };
 
-      setWallet(w);
-      setAddress(accountManager.address);
-      setStatus('ready');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create Aztec wallet');
-      setStatus('error');
-    }
+    connectingRef.current = doConnect();
+    return connectingRef.current;
   }, [initEmbeddedWallet]);
 
   // Connect external wallet (from wallet SDK discovery)

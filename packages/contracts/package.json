@@ -12,13 +12,15 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.2.0-nightly.20260322",
-    "@aztec/aztec.js": "v4.2.0-nightly.20260322",
-    "@aztec/constants": "v4.2.0-nightly.20260322",
-    "@aztec/entrypoints": "v4.2.0-nightly.20260322",
-    "@aztec/ethereum": "v4.2.0-nightly.20260322",
-    "@aztec/foundation": "v4.2.0-nightly.20260322",
-    "@aztec/wallets": "v4.2.0-nightly.20260322",
+    "@aztec/accounts": "v4.2.0-nightly.20260323",
+    "@aztec/aztec.js": "v4.2.0-nightly.20260323",
+    "@aztec/constants": "v4.2.0-nightly.20260323",
+    "@aztec/entrypoints": "v4.2.0-nightly.20260323",
+    "@aztec/ethereum": "v4.2.0-nightly.20260323",
+    "@aztec/foundation": "v4.2.0-nightly.20260323",
+    "@aztec/noir-contracts.js": "v4.2.0-nightly.20260323",
+    "@aztec/stdlib": "v4.2.0-nightly.20260323",
+    "@aztec/wallets": "v4.2.0-nightly.20260323",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }
