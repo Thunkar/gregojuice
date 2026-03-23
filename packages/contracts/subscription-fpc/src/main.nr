@@ -6,7 +6,7 @@ contract SubscriptionFPC {
     use aztec::{
         authwit::entrypoint::FunctionCall,
         macros::{
-            functions::{allow_phase_change, external, initializer, internal},
+            functions::{allow_phase_change, external, initializer, internal, only_self},
             notes::note,
             storage::storage,
         },
@@ -15,7 +15,7 @@ contract SubscriptionFPC {
         protocol::{
             abis::function_selector::FunctionSelector,
             address::AztecAddress,
-            constants::MAX_NOTE_HASHES_PER_CALL,
+            constants::{MAX_NOTE_HASHES_PER_CALL, MAX_NOTE_HASHES_PER_TX},
             hash::poseidon2_hash,
             traits::{Packable, ToField},
         },
@@ -35,7 +35,6 @@ contract SubscriptionFPC {
     #[derive(Packable, Eq)]
     #[note]
     struct SlotNote {
-        slot: u32,
         config_id: Field,
         max_fee: u128,
         max_uses: u32,
@@ -77,25 +76,62 @@ contract SubscriptionFPC {
             selector.to_field(),
             current_index.to_field(),
         ]);
-        assert(
-            max_users <= MAX_NOTE_HASHES_PER_CALL,
-            "Cannot sign up more than 16 users at a time",
-        );
+        assert(max_users <= MAX_NOTE_HASHES_PER_TX, "Cannot sign up more than 64 users at a time");
         // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
         // Since this value is only used for unconstrained tagging and not for any constrained logic,
         // it is safe to set from a constrained context.
         unsafe {
             set_sender_for_tags(self.address);
         }
+        let mut remaining = max_users;
         for i in 0..MAX_NOTE_HASHES_PER_CALL {
             if i < max_users {
                 self
                     .storage
                     .slots
                     .at(self.address)
-                    .insert(SlotNote { slot: i, config_id, max_uses, max_fee })
+                    .insert(SlotNote { config_id, max_uses, max_fee })
                     .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
+                remaining -= 1;
             }
+        }
+        if remaining > 0 {
+            self.call_self._recurse_create_slot_notes(
+                remaining,
+                config_id,
+                max_uses,
+                max_fee,
+            )
+        }
+    }
+
+    #[external("private")]
+    #[only_self]
+    fn _recurse_create_slot_notes(
+        users_left: u32,
+        config_id: Field,
+        max_uses: u32,
+        max_fee: u128,
+    ) {
+        let mut remaining = users_left;
+        for i in 0..MAX_NOTE_HASHES_PER_CALL {
+            if i < users_left {
+                self
+                    .storage
+                    .slots
+                    .at(self.address)
+                    .insert(SlotNote { config_id, max_uses, max_fee })
+                    .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
+                remaining -= 1;
+            }
+        }
+        if remaining > 0 {
+            self.call_self._recurse_create_slot_notes(
+                remaining,
+                config_id,
+                max_uses,
+                max_fee,
+            )
         }
     }
 
@@ -184,7 +220,7 @@ contract SubscriptionFPC {
 
     #[external("private")]
     #[allow_phase_change]
-    fn subscribe(call: FunctionCall, slot_id: u32, current_index: u32, user: AztecAddress) {
+    fn subscribe(call: FunctionCall, current_index: u32, user: AztecAddress) {
         // Assert we're at the top of the stack
         assert(
             self.context.maybe_msg_sender() == Option::none(),
@@ -198,9 +234,9 @@ contract SubscriptionFPC {
         ]);
 
         let options = NoteGetterOptions::new().set_limit(1).select(
-            SlotNote::properties().slot,
+            SlotNote::properties().config_id,
             Comparator.EQ,
-            slot_id,
+            config_id,
         );
         let slots = self.storage.slots.at(self.address).pop_notes(options);
         let slot = slots.get(0);

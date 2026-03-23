@@ -92,7 +92,7 @@ export async function calibrateSponsoredApp(params: {
   const noirCall = await buildNoirFunctionCall(sampleCall);
 
   const { estimatedGas } = await userFpc.methods
-    .subscribe(noirCall, 0, 0, userAddress)
+    .subscribe(noirCall, 0, userAddress)
     .with({
       authWitnesses,
       extraHashedArgs: [
@@ -132,8 +132,6 @@ export async function subscribeAndCall(params: {
   fpc: SubscriptionFPCContract;
   /** The FunctionCall to sponsor (from .getFunctionCall()) */
   call: FunctionCall;
-  /** The slot ID to consume (0..max_users-1) */
-  slotId: number;
   /** The config index for the sponsored app */
   configIndex: number;
   /** The subscribing user's address */
@@ -141,19 +139,12 @@ export async function subscribeAndCall(params: {
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
 }) {
-  const {
-    fpc,
-    call,
-    slotId,
-    configIndex,
-    userAddress,
-    authWitnesses = [],
-  } = params;
+  const { fpc, call, configIndex, userAddress, authWitnesses = [] } = params;
 
   const noirCall = await buildNoirFunctionCall(call);
 
   return fpc.methods
-    .subscribe(noirCall, slotId, configIndex, userAddress)
+    .subscribe(noirCall, configIndex, userAddress)
     .with({
       authWitnesses,
       extraHashedArgs: [
@@ -286,7 +277,6 @@ export class SubscriptionFPC {
        */
       subscribe: (params: {
         call: FunctionCall;
-        slotId: number;
         configIndex: number;
         userAddress: AztecAddress;
         authWitnesses?: AuthWitness[];

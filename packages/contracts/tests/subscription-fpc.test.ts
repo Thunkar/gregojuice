@@ -169,9 +169,130 @@ describe("Account deployment subscription", () => {
 
     await fpc.helpers.subscribe({
       call: sponsoredCall,
-      slotId: 0,
+
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,
+    });
+  });
+});
+
+// ─── Slot creation with recursion (max_users > MAX_NOTE_HASHES_PER_CALL) ─────
+
+describe("Slot creation recursion", () => {
+  const RECURSION_CONFIG_INDEX = 3;
+  const SLOT_COUNT = 20; // > MAX_NOTE_HASHES_PER_CALL (16), triggers recursion
+
+  let userWallet: EmbeddedWallet;
+  let deployerAddress: AztecAddress;
+
+  beforeAll(async () => {
+    userWallet = await EmbeddedWallet.create(node, { ephemeral: true });
+
+    const deployerInstance = await getContractInstanceFromInstantiationParams(
+      EcdsaAccountDeployerContract.artifact,
+      { salt: new Fr(0) },
+    );
+    deployerAddress = deployerInstance.address;
+
+    await userWallet.registerContract(
+      deployerInstance,
+      EcdsaAccountDeployerContract.artifact,
+    );
+    await userWallet.registerContract(
+      fpcInstance,
+      SubscriptionFPC.artifact,
+      fpcSecretKey,
+    );
+  });
+
+  it("signs up with more users than fit in a single call", async () => {
+    const dummyAccount = await userWallet.createECDSARAccount(
+      await Fr.random(),
+      await Fr.random(),
+      SIGNING_PRIVATE_KEY,
+    );
+    const sampleCall = await EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    )
+      .methods.deploy(
+        dummyAccount.address,
+        await Fr.random(),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
+      )
+      .getFunctionCall();
+
+    const { maxFee } = await subscriptionFPC.helpers.calibrate({
+      adminWallet: wallet,
+      adminAddress: admin,
+      userWallet,
+      userAddress: dummyAccount.address,
+      node,
+      sampleCall,
+      feeMultiplier: 20,
+    });
+
+    // This triggers recursion: 20 slots = 16 in first call + 4 in recursive call
+    await subscriptionFPC.methods
+      .sign_up(
+        sampleCall.to,
+        sampleCall.selector,
+        RECURSION_CONFIG_INDEX,
+        1 /* max_uses */,
+        maxFee,
+        SLOT_COUNT,
+      )
+      .send({ from: admin });
+  });
+
+  it("allows two different users to subscribe from the recursive slot batch", async () => {
+    const fpc = subscriptionFPC.withWallet(userWallet);
+    const deployer = EcdsaAccountDeployerContract.at(
+      deployerAddress,
+      userWallet,
+    );
+
+    // First user subscribes
+    const user1 = await userWallet.createECDSARAccount(
+      await Fr.random(),
+      await Fr.random(),
+      SIGNING_PRIVATE_KEY,
+    );
+    const call1 = await deployer.methods
+      .deploy(
+        user1.address,
+        await Fr.random(),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
+      )
+      .getFunctionCall();
+
+    await fpc.helpers.subscribe({
+      call: call1,
+      configIndex: RECURSION_CONFIG_INDEX,
+      userAddress: user1.address,
+    });
+
+    // Second user subscribes
+    const user2 = await userWallet.createECDSARAccount(
+      await Fr.random(),
+      await Fr.random(),
+      SIGNING_PRIVATE_KEY,
+    );
+    const call2 = await deployer.methods
+      .deploy(
+        user2.address,
+        await Fr.random(),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
+      )
+      .getFunctionCall();
+
+    await fpc.helpers.subscribe({
+      call: call2,
+      configIndex: RECURSION_CONFIG_INDEX,
+      userAddress: user2.address,
     });
   });
 });
@@ -303,7 +424,7 @@ describe("Token transfer subscription (multi-use)", () => {
 
     await fpc.helpers.subscribe({
       call: sponsoredCall,
-      slotId: 0,
+
       configIndex: PRODUCTION_INDEX,
       userAddress,
       authWitnesses: [authWit],
@@ -458,7 +579,7 @@ describe("Failure cases", () => {
     const fpc = subscriptionFPC.withWallet(userWallet);
     await fpc.helpers.subscribe({
       call: subscribeCall,
-      slotId: 0,
+
       configIndex: FAILURE_INDEX,
       userAddress,
       authWitnesses: [subscribeAuthWit],
@@ -535,7 +656,7 @@ describe("Failure cases", () => {
     await expect(
       fpc.helpers.subscribe({
         call: griefCall,
-        slotId: 0,
+
         configIndex: FAILURE_INDEX,
         userAddress: grieferAddress,
         authWitnesses: [griefAuthWit],
