@@ -885,6 +885,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aztec/noir-contracts.js@npm:v4.2.0-nightly.20260322":
+  version: 4.2.0-nightly.20260322
+  resolution: "@aztec/noir-contracts.js@npm:4.2.0-nightly.20260322"
+  dependencies:
+    "@aztec/aztec.js": "npm:4.2.0-nightly.20260322"
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/9e81617c5fbe15a1c18d061b6dee48572f7983a150b390657d53dd622555e15e7e03fbc7fe7898d10870a2913260fba16319305304112cd86f0f41f67352b610
+  languageName: node
+  linkType: hard
+
 "@aztec/noir-noir_codegen@npm:4.2.0-nightly.20260322":
   version: 4.2.0-nightly.20260322
   resolution: "@aztec/noir-noir_codegen@npm:4.2.0-nightly.20260322"
@@ -1721,6 +1731,8 @@ __metadata:
     "@aztec/entrypoints": "npm:v4.2.0-nightly.20260322"
     "@aztec/ethereum": "npm:v4.2.0-nightly.20260322"
     "@aztec/foundation": "npm:v4.2.0-nightly.20260322"
+    "@aztec/noir-contracts.js": "npm:v4.2.0-nightly.20260322"
+    "@aztec/stdlib": "npm:v4.2.0-nightly.20260322"
     "@aztec/wallets": "npm:v4.2.0-nightly.20260322"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"

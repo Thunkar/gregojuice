@@ -8,6 +8,7 @@ import {
   type FunctionCall,
 } from "@aztec/aztec.js/abi";
 import type { Wallet } from "@aztec/aztec.js/wallet";
+import type { AuthWitness } from "@aztec/stdlib/auth-witness";
 import type { Gas, GasSettings } from "@aztec/stdlib/gas";
 import {
   SubscriptionFPCContract,
@@ -55,6 +56,8 @@ export async function calibrateSponsoredApp(params: {
   maxUsers?: number;
   /** Fee safety multiplier on currentFees (default 10) */
   feeMultiplier?: number;
+  /** Auth witnesses required by the sponsored call (e.g. for transfer_in_private) */
+  authWitnesses?: AuthWitness[];
 }): Promise<{
   maxFee: bigint;
   estimatedGas: Pick<GasSettings, "gasLimits" | "teardownGasLimits">;
@@ -68,6 +71,7 @@ export async function calibrateSponsoredApp(params: {
     fpcAddress,
     sampleCall,
     feeMultiplier = 10,
+    authWitnesses = [],
   } = params;
 
   const appAddress = sampleCall.to;
@@ -88,6 +92,7 @@ export async function calibrateSponsoredApp(params: {
   const { estimatedGas } = await userFpc.methods
     .subscribe(noirCall, 0, userAddress)
     .with({
+      authWitnesses,
       extraHashedArgs: [
         new HashedValues(
           sampleCall.args,
@@ -129,14 +134,17 @@ export async function subscribeAndCall(params: {
   configIndex: number;
   /** The subscribing user's address */
   userAddress: AztecAddress;
+  /** Auth witnesses required by the sponsored call */
+  authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress } = params;
+  const { fpc, call, configIndex, userAddress, authWitnesses = [] } = params;
 
   const noirCall = await buildNoirFunctionCall(call);
 
   return fpc.methods
     .subscribe(noirCall, configIndex, userAddress)
     .with({
+      authWitnesses,
       extraHashedArgs: [
         new HashedValues(call.args, await computeVarArgsHash(call.args)),
       ],
@@ -162,14 +170,17 @@ export async function sendSponsoredCall(params: {
   configIndex: number;
   /** The subscribing user's address */
   userAddress: AztecAddress;
+  /** Auth witnesses required by the sponsored call */
+  authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress } = params;
+  const { fpc, call, configIndex, userAddress, authWitnesses = [] } = params;
 
   const noirCall = await buildNoirFunctionCall(call);
 
   return fpc.methods
     .sponsor(noirCall, configIndex, userAddress)
     .with({
+      authWitnesses,
       extraHashedArgs: [
         new HashedValues(call.args, await computeVarArgsHash(call.args)),
       ],
@@ -233,6 +244,7 @@ export class SubscriptionFPC {
         maxUses?: number;
         maxUsers?: number;
         feeMultiplier?: number;
+        authWitnesses?: AuthWitness[];
       }): Promise<{
         maxFee: bigint;
         estimatedGas: { gasLimits: Gas; teardownGasLimits: Gas };
@@ -250,6 +262,7 @@ export class SubscriptionFPC {
         call: FunctionCall;
         configIndex: number;
         userAddress: AztecAddress;
+        authWitnesses?: AuthWitness[];
       }) =>
         subscribeAndCall({
           ...params,
@@ -264,6 +277,7 @@ export class SubscriptionFPC {
         call: FunctionCall;
         configIndex: number;
         userAddress: AztecAddress;
+        authWitnesses?: AuthWitness[];
       }) =>
         sendSponsoredCall({
           ...params,
