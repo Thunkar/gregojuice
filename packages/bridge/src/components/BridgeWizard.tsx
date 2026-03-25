@@ -1,4 +1,5 @@
 import { Box, Paper, LinearProgress, Alert } from "@mui/material";
+import { formatUnits } from "viem";
 import { StepRow } from "./wizard/StepRow";
 import { Step1L1Wallet } from "./wizard/Step1L1Wallet";
 import { Step2AztecAccount } from "./wizard/Step2AztecAccount";
@@ -54,7 +55,7 @@ export function BridgeWizard() {
         label="Aztec Account"
         description={
           w.aztecAccountReady
-            ? `${w.aztecAddress?.toString().slice(0, 10)}...${w.aztecStatus === "funded" ? " (funded)" : ""}${w.feeJuiceBalance && BigInt(w.feeJuiceBalance) > 0n ? ` — FJ: ${w.feeJuiceBalance}` : ""}`
+            ? `${w.aztecAddress?.toString().slice(0, 10)}...${w.aztecStatus === "funded" ? " (funded)" : ""}${w.feeJuiceBalance && BigInt(w.feeJuiceBalance) > 0n ? ` — ${formatUnits(BigInt(w.feeJuiceBalance), 18)} FJ` : ""}`
             : "Do you have an Aztec wallet?"
         }
         status={w.stepStatus(2)}
@@ -78,7 +79,9 @@ export function BridgeWizard() {
           w.recipientReady
             ? w.recipientChoice === "self"
               ? "Bridge to myself"
-              : `${w.effectiveRecipient.slice(0, 10)}...`
+              : w.recipients.length > 1
+                ? `${w.recipients.length} recipients`
+                : `${w.recipients[0]?.address.slice(0, 10)}...`
             : "Who receives the fee juice?"
         }
         status={w.stepStatus(3)}
@@ -89,10 +92,12 @@ export function BridgeWizard() {
           isExternal={w.isExternal}
           recipientChoice={w.recipientChoice}
           setRecipientChoice={w.setRecipientChoice}
-          manualAddress={w.manualAddress}
-          setManualAddress={w.setManualAddress}
+          recipients={w.recipients}
+          setRecipients={w.setRecipients}
           recipientReady={w.recipientReady}
           advanceFromStep3={w.advanceFromStep3}
+          prefilled={w.recipientPrefilled}
+          queryRecipients={w.queryRecipients}
         />
       </StepRow>
 
@@ -105,8 +110,9 @@ export function BridgeWizard() {
         onToggle={() => w.toggle(4)}
       >
         <Step4BridgeClaim
-          amount={w.amount}
-          setAmount={w.setAmount}
+          recipients={w.recipients}
+          setRecipients={w.setRecipients}
+          allCredentials={w.allCredentials}
           balance={w.balance}
           faucetLocked={w.faucetLocked}
           hasBalance={w.hasBalance}
@@ -119,7 +125,6 @@ export function BridgeWizard() {
           messageStatus={w.messageStatus}
           claimed={w.claimed}
           isClaiming={w.isClaiming}
-          feeJuiceBalance={w.feeJuiceBalance}
         />
 
         {/* Error */}

@@ -1,4 +1,4 @@
-import type { BridgeSession, BridgePhase, RecipientChoice } from "./types";
+import type { BridgeSession, BridgePhase } from "./types";
 import { SESSION_KEY, SESSION_TTL_MS } from "./constants";
 import { determineClaimPath } from "./claim-path";
 
@@ -37,51 +37,37 @@ export function sessionToPhase(session: BridgeSession): BridgePhase {
     return { type: "l1-pending", pendingBridge: session.l1BridgeParams };
   }
 
-  if (session.phase === "bridged" && session.credentials) {
+  const allCreds = session.allCredentials;
+  if (!allCreds || allCreds.length === 0) return { type: "idle" };
+
+  if (session.phase === "bridged") {
     return {
       type: "waiting-l2-sync",
-      credentials: session.credentials,
-      ephemeral: session.ephemeralCredentials ?? null,
-      messageReady: false,
-      ephMessageReady: !session.ephemeralCredentials,
+      allCredentials: allCreds,
+      messagesReady: allCreds.map(() => false),
     };
   }
 
-  if (session.phase === "claiming" && session.credentials) {
-    // Tx was sent and is mining — resume polling the node directly
+  if (session.phase === "claiming") {
+    // Tx was sent and is mining — resume polling
     if (session.txProgressSnapshot?.aztecTxHash) {
       return {
         type: "claim-sent",
-        credentials: session.credentials,
+        allCredentials: allCreds,
         txHash: session.txProgressSnapshot.aztecTxHash,
         snapshot: session.txProgressSnapshot,
       };
     }
-    // Tx was never sent (refresh during simulating/proving) — try to
-    // re-derive the claim path so we can re-trigger the claim.
-    const claimPath = determineClaimPath(
-      session.recipientChoice,
-      session.ephemeralCredentials ?? null,
-      session.credentials,
-      null, // feeJuiceBalance unknown on restore — will be re-evaluated
-    );
+    // Tx not yet sent — try to derive claim path
+    const claimPath = determineClaimPath(session.recipientChoice, allCreds, null);
     if (claimPath) {
-      return {
-        type: "ready-to-claim",
-        credentials: session.credentials,
-        ephemeral: session.ephemeralCredentials ?? null,
-        claimPath,
-      };
+      return { type: "ready-to-claim", allCredentials: allCreds, claimPath };
     }
-    // Can't determine path yet (third-party claim, balance unknown).
-    // Fall back to waiting-l2-sync with messages pre-marked ready so that
-    // when WALLET_READY fires with the balance, the reducer can transition.
+    // Can't determine path yet — fall back to waiting-l2-sync with messages pre-marked ready
     return {
       type: "waiting-l2-sync",
-      credentials: session.credentials,
-      ephemeral: session.ephemeralCredentials ?? null,
-      messageReady: true,
-      ephMessageReady: true,
+      allCredentials: allCreds,
+      messagesReady: allCreds.map(() => true),
     };
   }
 
@@ -94,16 +80,14 @@ export function phaseToSession(
   ctx: {
     recipientChoice: "self" | "other";
     isExternal: boolean;
-    amount?: string;
-    recipient?: string;
+    recipients: Array<{ address: string; amount: string }>;
     networkId: string;
   },
 ): BridgeSession | null {
   const base = {
     recipientChoice: ctx.recipientChoice,
     isExternal: ctx.isExternal,
-    amount: ctx.amount,
-    recipient: ctx.recipient,
+    recipients: ctx.recipients,
     networkId: ctx.networkId,
     timestamp: Date.now(),
   };
@@ -112,13 +96,12 @@ export function phaseToSession(
     case "l1-pending":
       return { ...base, phase: "l1-pending", l1BridgeParams: phase.pendingBridge };
     case "waiting-l2-sync":
-      return { ...base, phase: "bridged", credentials: phase.credentials, ephemeralCredentials: phase.ephemeral };
+      return { ...base, phase: "bridged", allCredentials: phase.allCredentials };
     case "ready-to-claim":
-      return { ...base, phase: "claiming", credentials: phase.credentials, ephemeralCredentials: phase.ephemeral };
     case "claiming":
-      return { ...base, phase: "claiming", credentials: phase.credentials, ephemeralCredentials: phase.ephemeral };
+      return { ...base, phase: "claiming", allCredentials: phase.allCredentials };
     case "claim-sent":
-      return { ...base, phase: "claiming", credentials: phase.credentials, txProgressSnapshot: phase.snapshot };
+      return { ...base, phase: "claiming", allCredentials: phase.allCredentials, txProgressSnapshot: phase.snapshot };
     default:
       return null;
   }

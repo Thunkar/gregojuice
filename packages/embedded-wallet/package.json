@@ -1,0 +1,23 @@
+{
+  "name": "@gregojuice/embedded-wallet",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf ./dist .tsbuildinfo"
+  },
+  "dependencies": {
+    "@aztec/aztec.js": "v4.2.0-nightly.20260323",
+    "@aztec/entrypoints": "v4.2.0-nightly.20260323",
+    "@aztec/foundation": "v4.2.0-nightly.20260323",
+    "@aztec/pxe": "v4.2.0-nightly.20260323",
+    "@aztec/stdlib": "v4.2.0-nightly.20260323",
+    "@aztec/wallet-sdk": "v4.2.0-nightly.20260323",
+    "@aztec/wallets": "v4.2.0-nightly.20260323"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.3"
+  }
+}

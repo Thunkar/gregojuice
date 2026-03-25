@@ -8,13 +8,14 @@ import {
   getFeeJuiceBalance,
   getMintAmount,
   bridgeFeeJuice,
-  bridgeDouble,
+  bridgeMultiple,
   pollMessageReadiness,
   waitForAztecTx,
   resumePendingBridge,
   type L1Addresses,
 } from "../../services/bridgeService";
-import { txProgress } from "../../wallet";
+import { txProgress } from "@gregojuice/embedded-wallet";
+import { getQueryParams } from "../../config/query-params";
 import { determineClaimPath } from "./claim-path";
 import {
   loadSession,
@@ -30,6 +31,7 @@ import type {
   BridgePhase,
   BridgeAction,
   BridgeStep,
+  ClaimCredentials,
 } from "./types";
 
 // ── Reducer ───────────────────────────────────────────────────────────
@@ -44,89 +46,65 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
     case "L1_CONFIRMED":
       return {
         type: "waiting-l2-sync",
-        credentials: action.credentials,
-        ephemeral: action.ephemeral,
-        messageReady: false,
-        ephMessageReady: !action.ephemeral,
+        allCredentials: action.allCredentials,
+        messagesReady: action.allCredentials.map(() => false),
       };
 
     case "MESSAGE_READY": {
       if (state.type !== "waiting-l2-sync") return state;
-      const newMessageReady = action.which === "main" ? true : state.messageReady;
-      const newEphReady = action.which === "ephemeral" ? true : state.ephMessageReady;
-      // If both messages are now ready AND wallet is ready, try to transition
-      if (newMessageReady && newEphReady && action.walletReady) {
+      const newReady = [...state.messagesReady];
+      newReady[action.index] = true;
+      const allReady = newReady.every(Boolean);
+      if (allReady && action.walletReady) {
         const claimPath = determineClaimPath(
           action.recipientChoice,
-          state.ephemeral,
-          state.credentials,
+          state.allCredentials,
           action.feeJuiceBalance,
         );
         if (claimPath) {
-          return {
-            type: "ready-to-claim",
-            credentials: state.credentials,
-            ephemeral: state.ephemeral,
-            claimPath,
-          };
+          return { type: "ready-to-claim", allCredentials: state.allCredentials, claimPath };
         }
       }
-      return { ...state, messageReady: newMessageReady, ephMessageReady: newEphReady };
+      return { ...state, messagesReady: newReady };
     }
 
     case "WALLET_READY": {
-      // Only meaningful in waiting-l2-sync when both messages are ready
       if (state.type !== "waiting-l2-sync") return state;
-      if (!state.messageReady || !state.ephMessageReady) return state;
+      if (!state.messagesReady.every(Boolean)) return state;
       const claimPath = determineClaimPath(
         action.recipientChoice,
-        state.ephemeral,
-        state.credentials,
+        state.allCredentials,
         action.feeJuiceBalance,
       );
-      if (!claimPath) return state; // can't claim yet, stay in waiting-l2-sync
-      return {
-        type: "ready-to-claim",
-        credentials: state.credentials,
-        ephemeral: state.ephemeral,
-        claimPath,
-      };
+      if (!claimPath) return state;
+      return { type: "ready-to-claim", allCredentials: state.allCredentials, claimPath };
     }
 
     case "WALLET_NOT_READY": {
-      // If we were ready-to-claim but wallet disconnected, go back
       if (state.type !== "ready-to-claim") return state;
       return {
         type: "waiting-l2-sync",
-        credentials: state.credentials,
-        ephemeral: state.ephemeral,
-        messageReady: true,
-        ephMessageReady: true,
+        allCredentials: state.allCredentials,
+        messagesReady: state.allCredentials.map(() => true),
       };
     }
 
     case "CLAIM_STARTED": {
       if (state.type !== "ready-to-claim") return state;
-      return {
-        type: "claiming",
-        credentials: state.credentials,
-        ephemeral: state.ephemeral,
-        claimPath: state.claimPath,
-      };
+      return { type: "claiming", allCredentials: state.allCredentials, claimPath: state.claimPath };
     }
 
     case "TX_SENT": {
       if (state.type !== "claiming") return state;
       return {
         type: "claim-sent",
-        credentials: state.credentials,
+        allCredentials: state.allCredentials,
         txHash: action.txHash,
         snapshot: action.snapshot,
       };
     }
 
     case "CLAIM_DONE":
-      // Accept from claiming (fast path — no TX_SENT event) or claim-sent
       if (state.type !== "claiming" && state.type !== "claim-sent") return state;
       return { type: "done" };
 
@@ -153,12 +131,15 @@ export function useBridgeWizard() {
     connectAztecWallet,
     claimSelf,
     claimForRecipient,
-    claimBoth,
+    claimAll,
     resetAccount,
     refreshFeeJuiceBalance,
     isExternal,
     error: aztecError,
   } = useAztecWallet();
+
+  // ── Iframe / query-param overrides ────────────────────────────────
+  const [{ recipient: queryRecipient, recipients: queryRecipients, isIframe }] = useState(getQueryParams);
 
   // ── Session restore (computed once) ─────────────────────────────────
   const [initialSession] = useState(() => loadSession(activeNetwork.id));
@@ -193,12 +174,25 @@ export function useBridgeWizard() {
 
   // ── Step 3: Recipient ───────────────────────────────────────────────
   const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(
-    initialSession?.recipientChoice ?? null,
+    queryRecipient || queryRecipients ? "other" : (initialSession?.recipientChoice ?? null),
   );
-  const [manualAddress, setManualAddress] = useState(initialSession?.recipient ?? "");
+  // Unified recipients list: addresses collected in Step 3, amounts in Step 4
+  const [recipients, setRecipients] = useState<Array<{ address: string; amount: string }>>(() => {
+    if (queryRecipient) return [{ address: queryRecipient, amount: "" }];
+    if (initialSession?.recipients?.length) return initialSession.recipients;
+    return [{ address: "", amount: "" }];
+  });
 
   // ── Step 4: Amount + UI state ───────────────────────────────────────
-  const [amount, setAmount] = useState(initialSession?.amount ?? "");
+  // Primary amount reads/writes recipients[0].amount
+  const amount = recipients[0]?.amount ?? "";
+  const setAmount = useCallback((val: string) => {
+    setRecipients((prev) => {
+      const updated = [...prev];
+      updated[0] = { ...updated[0], amount: val };
+      return updated;
+    });
+  }, []);
   const [bridgeStepLabel, setBridgeStepLabel] = useState(
     bridge.type === "l1-pending" ? "Resuming — waiting for L1 confirmation..." : "",
   );
@@ -217,12 +211,14 @@ export function useBridgeWizard() {
   const effectiveRecipient =
     recipientChoice === "self"
       ? (aztecAddress?.toString() ?? "")
-      : manualAddress;
+      : (recipients[0]?.address ?? "");
 
   const recipientReady =
-    recipientChoice === "self" ? !!aztecAddress : manualAddress.length >= 10;
+    recipientChoice === "self"
+      ? !!aztecAddress
+      : recipients.length > 0 && recipients.every((r) => r.address.length >= 10);
 
-  const needsDualBridge =
+  const needsMultiBridge =
     aztecChoice === "new" &&
     recipientChoice === "other" &&
     aztecStatus !== "funded";
@@ -239,25 +235,22 @@ export function useBridgeWizard() {
     bridge.type === "claiming" ||
     bridge.type === "claim-sent" ||
     bridge.type === "done" ||
-    (bridge.type === "waiting-l2-sync" && bridge.messageReady && bridge.ephMessageReady);
+    (bridge.type === "waiting-l2-sync" && bridge.messagesReady.every(Boolean));
 
   const claimed = bridge.type === "done";
   const isClaiming = bridge.type === "claiming" || bridge.type === "claim-sent";
   const isBridging = bridge.type === "l1-pending";
   const walletReady = aztecStatus === "ready" || aztecStatus === "funded";
 
-  // Refs for current values — used by polling callbacks in the orchestrator
-  // so they always read fresh values without re-running the effect.
   const walletReadyRef = useRef(walletReady);
   const recipientChoiceRef = useRef(recipientChoice);
   const feeJuiceBalanceRef = useRef(feeJuiceBalance);
+  const lastCredentialsRef = useRef<ClaimCredentials[] | null>(null);
   walletReadyRef.current = walletReady;
   recipientChoiceRef.current = recipientChoice;
   feeJuiceBalanceRef.current = feeJuiceBalance;
 
   // ── Effect: Wallet status relay ─────────────────────────────────────
-  // Tells the reducer when external conditions change so it can transition
-  // waiting-l2-sync → ready-to-claim (or ready-to-claim → waiting-l2-sync).
 
   useEffect(() => {
     if (walletReady) {
@@ -268,8 +261,6 @@ export function useBridgeWizard() {
   }, [walletReady, recipientChoice, feeJuiceBalance]);
 
   // ── Effect: Orchestrator ────────────────────────────────────────────
-  // Single effect that kicks off async work based on the current phase.
-  // Only re-runs when bridge.type changes (phase transitions).
 
   useEffect(() => {
     let cancelled = false;
@@ -279,13 +270,9 @@ export function useBridgeWizard() {
       case "l1-pending": {
         const { pendingBridge } = bridge;
         resumePendingBridge(activeNetwork.l1ChainId, pendingBridge)
-          .then((result) => {
+          .then((allCredentials) => {
             if (cancelled) return;
-            if ("ephemeral" in result) {
-              dispatch({ type: "L1_CONFIRMED", credentials: result.main, ephemeral: result.ephemeral });
-            } else {
-              dispatch({ type: "L1_CONFIRMED", credentials: result, ephemeral: null });
-            }
+            dispatch({ type: "L1_CONFIRMED", allCredentials });
           })
           .catch((err) => {
             if (!cancelled) dispatch({ type: "ERROR", message: err instanceof Error ? err.message : "L1 resume failed" });
@@ -295,32 +282,28 @@ export function useBridgeWizard() {
 
       case "waiting-l2-sync": {
         const cancellers: Array<() => void> = [];
-        // Polling callbacks read from refs so they always have fresh values
-        const makeMessageAction = (which: "main" | "ephemeral") => ({
-          type: "MESSAGE_READY" as const,
-          which,
-          recipientChoice: recipientChoiceRef.current,
-          feeJuiceBalance: feeJuiceBalanceRef.current,
-          walletReady: walletReadyRef.current,
+        // Poll each credential's message readiness
+        bridge.allCredentials.forEach((cred, index) => {
+          if (bridge.messagesReady[index]) return; // already ready
+          const { cancel } = pollMessageReadiness(
+            activeNetwork.aztecNodeUrl,
+            cred.messageHash,
+            (status) => {
+              if (status === "ready") {
+                dispatch({
+                  type: "MESSAGE_READY",
+                  index,
+                  recipientChoice: recipientChoiceRef.current,
+                  feeJuiceBalance: feeJuiceBalanceRef.current,
+                  walletReady: walletReadyRef.current,
+                });
+              }
+            },
+          );
+          cancellers.push(cancel);
         });
-        if (!bridge.messageReady) {
-          const { cancel } = pollMessageReadiness(
-            activeNetwork.aztecNodeUrl,
-            bridge.credentials.messageHash,
-            (status) => { if (status === "ready") dispatch(makeMessageAction("main")); },
-          );
-          cancellers.push(cancel);
-        }
-        if (bridge.ephemeral && !bridge.ephMessageReady) {
-          const { cancel } = pollMessageReadiness(
-            activeNetwork.aztecNodeUrl,
-            bridge.ephemeral.messageHash,
-            (status) => { if (status === "ready") dispatch(makeMessageAction("ephemeral")); },
-          );
-          cancellers.push(cancel);
-        }
-        // If messages were already ready (restore), immediately re-check wallet
-        if (bridge.messageReady && bridge.ephMessageReady && walletReady) {
+        // If all messages were already ready (restore), re-check wallet
+        if (bridge.messagesReady.every(Boolean) && walletReady) {
           dispatch({ type: "WALLET_READY", recipientChoice, feeJuiceBalance });
         }
         cleanup = () => cancellers.forEach((c) => c());
@@ -328,16 +311,13 @@ export function useBridgeWizard() {
       }
 
       case "ready-to-claim": {
-        // Auto-trigger: transition to claiming immediately
         dispatch({ type: "CLAIM_STARTED" });
         break;
       }
 
       case "claiming": {
-        const { credentials, claimPath } = bridge;
+        const { allCredentials, claimPath } = bridge;
 
-        // Subscribe to txProgress BEFORE starting the claim.
-        // Capture the hash from "sending" (mining event doesn't carry it).
         let capturedTxHash: string | null = null;
         const unsub = txProgress.subscribe((event) => {
           if (event.phase === "sending" && event.aztecTxHash) {
@@ -356,23 +336,19 @@ export function useBridgeWizard() {
           }
         });
 
-        // Fire the claim. We only catch pre-send errors here.
-        // Post-send completion is handled by the claim-sent phase.
         const claimPromise = (async () => {
           switch (claimPath.kind) {
             case "self":
-              return claimSelf(credentials);
-            case "both":
-              return claimBoth(claimPath.ephemeral, credentials, credentials.recipient);
+              return claimSelf(allCredentials[0]);
+            case "multiple":
+              return claimAll(claimPath.ephemeral, claimPath.others);
             case "for-recipient":
-              return claimForRecipient(credentials, credentials.recipient);
+              return claimForRecipient(allCredentials[0], allCredentials[0].recipient);
           }
         })();
 
         claimPromise
           .then(() => {
-            // If we never got a TX_SENT event (e.g. external wallet path),
-            // the claim completed fully — go straight to done.
             if (!capturedTxHash && !cancelled) {
               dispatch({ type: "CLAIM_DONE" });
             }
@@ -389,7 +365,6 @@ export function useBridgeWizard() {
         const { txHash, snapshot } = bridge;
         const miningStart = Date.now();
 
-        // Re-emit mining event for TxNotificationCenter
         const timer = setTimeout(() => {
           txProgress.emit({
             txId: snapshot.txId,
@@ -439,7 +414,6 @@ export function useBridgeWizard() {
   }, [bridge.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Effect: Persistence ─────────────────────────────────────────────
-  // Single writer per phase. No races.
 
   useEffect(() => {
     if (bridge.type === "done") { clearSession(); return; }
@@ -448,12 +422,11 @@ export function useBridgeWizard() {
     const session = phaseToSession(bridge, {
       recipientChoice: recipientChoice ?? "self",
       isExternal,
-      amount,
-      recipient: effectiveRecipient,
+      recipients,
       networkId: activeNetwork.id,
     });
     if (session) saveSession(session);
-  }, [bridge, recipientChoice, isExternal, amount, effectiveRecipient, activeNetwork.id]);
+  }, [bridge, recipientChoice, isExternal, recipients, activeNetwork.id]);
 
   // ── Effect: Propagate reducer errors ────────────────────────────────
   useEffect(() => {
@@ -464,6 +437,30 @@ export function useBridgeWizard() {
   useEffect(() => {
     if (claimed) refreshFeeJuiceBalance();
   }, [claimed, refreshFeeJuiceBalance]);
+
+  // ── Effect: postMessage to parent iframe ──────────────────────────
+  useEffect(() => {
+    if (!isIframe) return;
+    const msg: Record<string, unknown> = { type: "gregojuice-bridge" };
+    switch (bridge.type) {
+      case "l1-pending":
+        msg.status = "bridging";
+        break;
+      case "waiting-l2-sync":
+        msg.status = "syncing";
+        break;
+      case "done":
+        msg.status = "complete";
+        break;
+      case "error":
+        msg.status = "error";
+        msg.error = bridge.message;
+        break;
+      default:
+        return;
+    }
+    window.parent.postMessage(msg, "*");
+  }, [bridge.type, isIframe]);
 
   // ── Step 1: Fetch L1 info ───────────────────────────────────────────
 
@@ -535,8 +532,10 @@ export function useBridgeWizard() {
     if (recipientReady && wizardStep === 3) {
       setWizardStep(4);
       setExpandedStep(4);
-      if (faucetLocked && mintAmountValue != null)
-        setAmount(formatUnits(mintAmountValue, 18));
+      if (faucetLocked && mintAmountValue != null) {
+        const faucetAmount = formatUnits(mintAmountValue, 18);
+        setRecipients((prev) => prev.map((r) => ({ ...r, amount: r.amount || faucetAmount })));
+      }
     }
   }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
 
@@ -555,33 +554,21 @@ export function useBridgeWizard() {
     if (!account || !l1Addresses) return;
     setError(null);
     try {
-      if (!amount) { setError("Please enter an amount"); return; }
-      const bridgeAmount = parseUnits(amount, balance?.decimals ?? 18);
-      if (bridgeAmount <= 0n) { setError("Amount must be greater than 0"); return; }
-      if (!effectiveRecipient || effectiveRecipient.length < 10) { setError("Invalid recipient"); return; }
+      if (!recipients.every((r) => r.address.length >= 10)) { setError("Invalid recipient address"); return; }
+      if (!recipients.every((r) => r.amount)) { setError("Please enter an amount for each recipient"); return; }
 
-      if (needsDualBridge && aztecAddress) {
-        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits("100", 18);
-        const totalNeeded = bridgeAmount + (faucetLocked ? 0n : ephAmount);
-        if (!faucetLocked && balance && totalNeeded > balance.balance) {
-          setError(`Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)} (${formatUnits(bridgeAmount, balance.decimals)} for recipient + ${formatUnits(ephAmount, balance.decimals)} for claimer gas)`);
-          return;
-        }
-        const result = await bridgeDouble({
-          l1RpcUrl: activeNetwork.l1RpcUrl,
-          chainId: l1Addresses.l1ChainId,
-          addresses: l1Addresses,
-          ephemeralRecipient: aztecAddress.toString(),
-          ephemeralAmount: ephAmount,
-          mainRecipient: effectiveRecipient,
-          mainAmount: bridgeAmount,
-          mint: faucetLocked,
-          onStep: onBridgeStep,
-          onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
-        });
-        dispatch({ type: "L1_CONFIRMED", credentials: result.main, ephemeral: result.ephemeral });
-      } else {
-        if (!faucetLocked && balance && bridgeAmount > balance.balance) {
+      // Parse all recipients into { address, amount } with bigint amounts
+      const parsedRecipients = queryRecipients
+        ? queryRecipients.map((r) => ({ address: r.address, amount: r.amount }))
+        : recipients.map((r) => ({ address: r.address, amount: parseUnits(r.amount, balance?.decimals ?? 18) }));
+
+      if (parsedRecipients.some((r) => r.amount <= 0n)) { setError("Amounts must be greater than 0"); return; }
+
+      const totalAmount = parsedRecipients.reduce((sum, r) => sum + r.amount, 0n);
+
+      if (parsedRecipients.length === 1 && recipientChoice === "self") {
+        // Self-claim: single bridge to self
+        if (!faucetLocked && balance && totalAmount > balance.balance) {
           setError("Insufficient balance");
           return;
         }
@@ -589,13 +576,64 @@ export function useBridgeWizard() {
           l1RpcUrl: activeNetwork.l1RpcUrl,
           chainId: l1Addresses.l1ChainId,
           addresses: l1Addresses,
-          aztecRecipient: effectiveRecipient,
-          amount: bridgeAmount,
+          aztecRecipient: parsedRecipients[0].address,
+          amount: parsedRecipients[0].amount,
           mint: faucetLocked,
           onStep: onBridgeStep,
           onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
         });
-        dispatch({ type: "L1_CONFIRMED", credentials: result, ephemeral: null });
+        dispatch({ type: "L1_CONFIRMED", allCredentials: [result] });
+      } else if (needsMultiBridge && aztecAddress) {
+        // Internal wallet: prepend ephemeral (gas) recipient
+        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits("100", 18);
+        const totalNeeded = totalAmount + (faucetLocked ? 0n : ephAmount);
+        if (!faucetLocked && balance && totalNeeded > balance.balance) {
+          setError(`Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)}`);
+          return;
+        }
+        const allCredentials = await bridgeMultiple({
+          l1RpcUrl: activeNetwork.l1RpcUrl,
+          chainId: l1Addresses.l1ChainId,
+          addresses: l1Addresses,
+          recipients: [
+            { address: aztecAddress.toString(), amount: ephAmount },
+            ...parsedRecipients,
+          ],
+          mint: faucetLocked,
+          onStep: onBridgeStep,
+          onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+        });
+        dispatch({ type: "L1_CONFIRMED", allCredentials });
+      } else {
+        // External wallet or single non-self recipient: bridge directly
+        if (!faucetLocked && balance && totalAmount > balance.balance) {
+          setError("Insufficient balance");
+          return;
+        }
+        if (parsedRecipients.length === 1) {
+          const result = await bridgeFeeJuice({
+            l1RpcUrl: activeNetwork.l1RpcUrl,
+            chainId: l1Addresses.l1ChainId,
+            addresses: l1Addresses,
+            aztecRecipient: parsedRecipients[0].address,
+            amount: parsedRecipients[0].amount,
+            mint: faucetLocked,
+            onStep: onBridgeStep,
+            onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+          });
+          dispatch({ type: "L1_CONFIRMED", allCredentials: [result] });
+        } else {
+          const allCredentials = await bridgeMultiple({
+            l1RpcUrl: activeNetwork.l1RpcUrl,
+            chainId: l1Addresses.l1ChainId,
+            addresses: l1Addresses,
+            recipients: parsedRecipients,
+            mint: faucetLocked,
+            onStep: onBridgeStep,
+            onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+          });
+          dispatch({ type: "L1_CONFIRMED", allCredentials });
+        }
       }
       await refreshBalance();
     } catch (err: unknown) {
@@ -611,7 +649,7 @@ export function useBridgeWizard() {
     setBridgeStepLabel("");
     setAztecChoice(null);
     setRecipientChoice(null);
-    setManualAddress("");
+    setRecipients([{ address: "", amount: "" }]);
     setAmount("");
     setError(null);
   };
@@ -630,30 +668,37 @@ export function useBridgeWizard() {
     return "pending";
   };
 
+  // Keep credentials available even after "done" for the claim summary display
+  const liveCredentials =
+    bridge.type === "waiting-l2-sync" || bridge.type === "ready-to-claim" ||
+    bridge.type === "claiming" || bridge.type === "claim-sent"
+      ? bridge.allCredentials : null;
+  if (liveCredentials) lastCredentialsRef.current = liveCredentials;
+  const allCredentials = liveCredentials ?? lastCredentialsRef.current;
+
+  // For display: the "main" credentials (excluding ephemeral if multi)
+  const credentials = allCredentials
+    ? (allCredentials.length > 1 ? allCredentials[allCredentials.length - 1] : allCredentials[0])
+    : null;
+
   const messageStatus: "ready" | "pending" | "error" =
     bridge.type === "waiting-l2-sync"
-      ? bridge.messageReady ? "ready" : "pending"
+      ? (bridge.messagesReady.every(Boolean) ? "ready" : "pending")
       : bridgeDone ? "ready" : "pending";
 
   const ephMessageStatus: "ready" | "pending" | "error" =
-    bridge.type === "waiting-l2-sync"
-      ? bridge.ephMessageReady ? "ready" : "pending"
+    bridge.type === "waiting-l2-sync" && bridge.allCredentials.length > 1
+      ? (bridge.messagesReady[0] ? "ready" : "pending")
       : "ready";
+
+  const ephemeralCredentials =
+    allCredentials && allCredentials.length > 1 ? allCredentials[0] : null;
 
   const bridgeStep: BridgeStep =
     bridge.type === "l1-pending" ? "waiting-confirmation"
       : bridge.type === "error" ? "error"
       : bridge.type === "idle" ? "idle"
       : "done";
-
-  const credentials =
-    bridge.type === "waiting-l2-sync" || bridge.type === "ready-to-claim" ||
-    bridge.type === "claiming" || bridge.type === "claim-sent"
-      ? bridge.credentials : null;
-
-  const ephemeralCredentials =
-    bridge.type === "waiting-l2-sync" || bridge.type === "ready-to-claim" || bridge.type === "claiming"
-      ? bridge.ephemeral : null;
 
   const step4Desc = claimed
     ? "Complete!"
@@ -673,11 +718,13 @@ export function useBridgeWizard() {
     wizardStep, expandedStep, toggle, stepStatus, progress,
     l1Addresses, balance, isLoadingInfo, hasFaucet, hasBalance, faucetLocked, mintAmountValue,
     aztecChoice, setAztecChoice, aztecAccountReady,
-    recipientChoice, setRecipientChoice, manualAddress, setManualAddress,
-    effectiveRecipient, recipientReady, advanceFromStep3,
-    amount, setAmount, bridgeStep, bridgeStepLabel, credentials, ephemeralCredentials,
-    messageStatus, ephMessageStatus, claimed, isClaiming, needsDualBridge, isBridging,
+    recipientChoice, setRecipientChoice, recipients, setRecipients,
+    recipientReady, advanceFromStep3,
+    bridgeStep, bridgeStepLabel, allCredentials, credentials, ephemeralCredentials,
+    messageStatus, ephMessageStatus, claimed, isClaiming, needsMultiBridge, isBridging,
     bridgeDone, syncDone, step4Desc, handleBridge, handleReset,
     error, setError,
+    isIframe, recipientPrefilled: !!(queryRecipient || queryRecipients),
+    queryRecipients,
   };
 }

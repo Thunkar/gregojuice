@@ -1,5 +1,5 @@
 import type { ClaimCredentials, BridgeStep, PendingBridge, MessageStatus } from "../../services/bridgeService";
-import type { PhaseTiming } from "../../wallet";
+import type { PhaseTiming } from "@gregojuice/embedded-wallet";
 
 export type WizardStep = 1 | 2 | 3 | 4;
 export type AztecChoice = "existing" | "new" | null;
@@ -9,7 +9,7 @@ export type RecipientChoice = "self" | "other" | null;
 
 export type ClaimPath =
   | { kind: "self" }
-  | { kind: "both"; ephemeral: ClaimCredentials; recipient: string }
+  | { kind: "multiple"; ephemeral: ClaimCredentials; others: ClaimCredentials[] }
   | { kind: "for-recipient"; recipient: string };
 
 // ── Tx progress snapshot (for crash recovery) ─────────────────────────
@@ -24,20 +24,25 @@ export interface TxProgressSnapshot {
 
 // ── Bridge state machine ──────────────────────────────────────────────
 
+/**
+ * allCredentials[0] is always the ephemeral (fee payer) credential when length > 1.
+ * For self-claim (length === 1), allCredentials[0] is the self-claim credential.
+ * messagesReady[i] tracks whether each credential's L1→L2 message is synced.
+ */
 export type BridgePhase =
   | { type: "idle" }
   | { type: "l1-pending"; pendingBridge: PendingBridge }
-  | { type: "waiting-l2-sync"; credentials: ClaimCredentials; ephemeral: ClaimCredentials | null; messageReady: boolean; ephMessageReady: boolean }
-  | { type: "ready-to-claim"; credentials: ClaimCredentials; ephemeral: ClaimCredentials | null; claimPath: ClaimPath }
-  | { type: "claiming"; credentials: ClaimCredentials; ephemeral: ClaimCredentials | null; claimPath: ClaimPath }
-  | { type: "claim-sent"; credentials: ClaimCredentials; txHash: string; snapshot: TxProgressSnapshot }
+  | { type: "waiting-l2-sync"; allCredentials: ClaimCredentials[]; messagesReady: boolean[] }
+  | { type: "ready-to-claim"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
+  | { type: "claiming"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
+  | { type: "claim-sent"; allCredentials: ClaimCredentials[]; txHash: string; snapshot: TxProgressSnapshot }
   | { type: "done" }
   | { type: "error"; message: string };
 
 export type BridgeAction =
   | { type: "BRIDGE_STARTED"; pendingBridge: PendingBridge }
-  | { type: "L1_CONFIRMED"; credentials: ClaimCredentials; ephemeral: ClaimCredentials | null }
-  | { type: "MESSAGE_READY"; which: "main" | "ephemeral"; recipientChoice: RecipientChoice; feeJuiceBalance: string | null; walletReady: boolean }
+  | { type: "L1_CONFIRMED"; allCredentials: ClaimCredentials[] }
+  | { type: "MESSAGE_READY"; index: number; recipientChoice: RecipientChoice; feeJuiceBalance: string | null; walletReady: boolean }
   | { type: "WALLET_READY"; recipientChoice: RecipientChoice; feeJuiceBalance: string | null }
   | { type: "WALLET_NOT_READY" }
   | { type: "CLAIM_STARTED" }
@@ -50,12 +55,11 @@ export type BridgeAction =
 
 export interface BridgeSession {
   phase: "l1-pending" | "bridged" | "claiming";
-  credentials?: ClaimCredentials;
-  ephemeralCredentials?: ClaimCredentials | null;
+  allCredentials?: ClaimCredentials[];
   recipientChoice: "self" | "other";
   isExternal?: boolean;
-  amount?: string;
-  recipient?: string;
+  /** All recipients with their amounts (address + amount pairs) */
+  recipients?: Array<{ address: string; amount: string }>;
   networkId: string;
   timestamp: number;
   txProgressSnapshot?: TxProgressSnapshot;

@@ -1707,6 +1707,7 @@ __metadata:
     "@aztec/wallets": "npm:v4.2.0-nightly.20260323"
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.0"
+    "@gregojuice/embedded-wallet": "workspace:*"
     "@mui/icons-material": "npm:^6.3.1"
     "@mui/material": "npm:^6.3.1"
     "@types/react": "npm:^19.0.6"
@@ -1721,7 +1722,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@gregojuice/contracts@workspace:packages/contracts":
+"@gregojuice/contracts@workspace:*, @gregojuice/contracts@workspace:packages/contracts":
   version: 0.0.0-use.local
   resolution: "@gregojuice/contracts@workspace:packages/contracts"
   dependencies:
@@ -1736,6 +1737,49 @@ __metadata:
     "@aztec/wallets": "npm:v4.2.0-nightly.20260323"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"
+  languageName: unknown
+  linkType: soft
+
+"@gregojuice/embedded-wallet@workspace:*, @gregojuice/embedded-wallet@workspace:packages/embedded-wallet":
+  version: 0.0.0-use.local
+  resolution: "@gregojuice/embedded-wallet@workspace:packages/embedded-wallet"
+  dependencies:
+    "@aztec/aztec.js": "npm:v4.2.0-nightly.20260323"
+    "@aztec/entrypoints": "npm:v4.2.0-nightly.20260323"
+    "@aztec/foundation": "npm:v4.2.0-nightly.20260323"
+    "@aztec/pxe": "npm:v4.2.0-nightly.20260323"
+    "@aztec/stdlib": "npm:v4.2.0-nightly.20260323"
+    "@aztec/wallet-sdk": "npm:v4.2.0-nightly.20260323"
+    "@aztec/wallets": "npm:v4.2.0-nightly.20260323"
+    typescript: "npm:~5.7.3"
+  languageName: unknown
+  linkType: soft
+
+"@gregojuice/fpc-operator@workspace:packages/fpc-operator":
+  version: 0.0.0-use.local
+  resolution: "@gregojuice/fpc-operator@workspace:packages/fpc-operator"
+  dependencies:
+    "@aztec/aztec.js": "npm:v4.2.0-nightly.20260323"
+    "@aztec/entrypoints": "npm:v4.2.0-nightly.20260323"
+    "@aztec/foundation": "npm:v4.2.0-nightly.20260323"
+    "@aztec/pxe": "npm:v4.2.0-nightly.20260323"
+    "@aztec/stdlib": "npm:v4.2.0-nightly.20260323"
+    "@aztec/wallet-sdk": "npm:v4.2.0-nightly.20260323"
+    "@aztec/wallets": "npm:v4.2.0-nightly.20260323"
+    "@emotion/react": "npm:^11.14.0"
+    "@emotion/styled": "npm:^11.14.0"
+    "@gregojuice/contracts": "workspace:*"
+    "@gregojuice/embedded-wallet": "workspace:*"
+    "@mui/icons-material": "npm:^6.3.1"
+    "@mui/material": "npm:^6.3.1"
+    "@types/react": "npm:^19.0.6"
+    "@types/react-dom": "npm:^19.0.3"
+    "@vitejs/plugin-react-swc": "npm:^3.7.2"
+    react: "npm:^18.3.1"
+    react-dom: "npm:^18.3.1"
+    typescript: "npm:~5.7.3"
+    vite: "npm:^7.1.4"
+    vite-plugin-node-polyfills: "npm:^0.24.0"
   languageName: unknown
   linkType: soft
 

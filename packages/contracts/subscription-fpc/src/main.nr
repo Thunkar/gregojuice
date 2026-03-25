@@ -6,16 +6,20 @@ contract SubscriptionFPC {
     use aztec::{
         authwit::entrypoint::FunctionCall,
         macros::{
-            functions::{allow_phase_change, external, initializer, internal, only_self},
+            functions::{allow_phase_change, external, initializer, internal},
             notes::note,
             storage::storage,
         },
         messages::message_delivery::MessageDelivery,
-        note::{note_getter_options::NoteGetterOptions, note_interface::NoteProperties},
+        note::{
+            note_getter_options::NoteGetterOptions,
+            note_interface::NoteProperties,
+            note_viewer_options::NoteViewerOptions,
+        },
         protocol::{
             abis::function_selector::FunctionSelector,
             address::AztecAddress,
-            constants::{MAX_NOTE_HASHES_PER_CALL, MAX_NOTE_HASHES_PER_TX},
+            constants::{MAX_NOTE_HASHES_PER_CALL},
             hash::poseidon2_hash,
             traits::{Packable, ToField},
         },
@@ -224,6 +228,38 @@ contract SubscriptionFPC {
 
         // We allow calling the sponsored function in the same tx as the subscription
         self.internal._call_sponsored_fn(call, slot.max_fee);
+    }
+
+
+    #[external("utility")]
+    unconstrained fn count_available_slots(config_id: Field) -> u32 {
+        let options = NoteViewerOptions::new().select(
+            SlotNote::properties().config_id,
+            Comparator.EQ,
+            config_id,
+        );
+        let slots = self.storage.slots.at(self.address).view_notes(options);
+        slots.len()
+    }
+
+    #[external("utility")]
+    unconstrained fn get_subscription_info(
+        user: AztecAddress,
+        config_id: Field,
+    ) -> (bool, u32) {
+        let options = NoteViewerOptions::new()
+            .select(
+                SubscriptionNote::properties().config_id,
+                Comparator.EQ,
+                config_id,
+            )
+            .set_limit(1);
+        let subs = self.storage.subscriptions.at(user).view_notes(options);
+        if subs.len() > 0 {
+            (true, subs.get_unchecked(0).uses)
+        } else {
+            (false, 0)
+        }
     }
 
 }

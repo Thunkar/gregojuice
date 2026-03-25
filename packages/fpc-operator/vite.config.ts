@@ -4,10 +4,8 @@ import { defineConfig, loadEnv, Plugin, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { PolyfillOptions, nodePolyfills } from "vite-plugin-node-polyfills";
 
-// Resolve the actual location of vite-plugin-node-polyfills (may be hoisted to root node_modules)
 const polyfillsDir = dirname(dirname(fileURLToPath(import.meta.resolve("vite-plugin-node-polyfills"))));
 
-// Workaround for https://github.com/davidmyersdev/vite-plugin-node-polyfills/issues/81
 const nodePolyfillsFix = (options?: PolyfillOptions | undefined): Plugin => {
   return {
     ...nodePolyfills(options),
@@ -30,10 +28,10 @@ export default defineConfig(({ mode }) => {
     base: "./",
     logLevel: process.env.CI ? "error" : undefined,
     server: {
+      port: 5174,
       headers: {
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp",
-        "Cross-Origin-Resource-Policy": "cross-origin",
       },
       fs: {
         allow: [searchForWorkspaceRoot(process.cwd())],

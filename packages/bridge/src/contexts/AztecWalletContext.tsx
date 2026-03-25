@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
-import type { AztecAddress } from '@aztec/aztec.js/addresses';
+import { AztecAddress } from '@aztec/stdlib/aztec-address';
 import type { Wallet } from '@aztec/aztec.js/wallet';
-import { EmbeddedWallet } from '../wallet';
+import { FeeJuiceContract } from '@aztec/aztec.js/protocol';
+import { Fr } from '@aztec/foundation/curves/bn254';
+import { EmbeddedWallet } from '@gregojuice/embedded-wallet';
 import { useNetwork } from './NetworkContext';
-import { getAztecNode, type ClaimCredentials, claimFeeJuice, claimBothInSingleTx } from '../services/bridgeService';
+import { getAztecNode, type ClaimCredentials, claimFeeJuice, claimAllInSingleTx } from '../services/bridgeService';
 
 type AztecWalletStatus =
   | 'disconnected'
@@ -27,7 +29,7 @@ interface AztecWalletContextType {
   connectExternalWallet: (wallet: Wallet, walletAddress: AztecAddress) => Promise<void>;
   claimSelf: (claim: ClaimCredentials) => Promise<void>;
   claimForRecipient: (claim: ClaimCredentials, targetAddress: string) => Promise<void>;
-  claimBoth: (callerClaim: ClaimCredentials, recipientClaim: ClaimCredentials, targetAddress: string) => Promise<void>;
+  claimAll: (callerClaim: ClaimCredentials, otherClaims: ClaimCredentials[]) => Promise<void>;
   resetAccount: () => Promise<void>;
   disconnect: () => void;
   refreshFeeJuiceBalance: () => Promise<void>;
@@ -64,7 +66,6 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
   const refreshFeeJuiceBalance = useCallback(async () => {
     if (!activeWallet || !address) return;
     try {
-      const { FeeJuiceContract } = await import('@aztec/aztec.js/protocol');
       const fj = FeeJuiceContract.at(activeWallet);
       const { result } = await fj.methods.balance_of_public(address).simulate({ from: address });
       setFeeJuiceBalance(result.toString());
@@ -141,16 +142,13 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     setStatus('claiming');
     setError(null);
     try {
-      const { FeeJuiceContract } = await import('@aztec/aztec.js/protocol');
-      const { AztecAddress: AztecAddr } = await import('@aztec/stdlib/aztec-address');
-      const { Fr: FrField } = await import('@aztec/foundation/curves/bn254');
       const fj = FeeJuiceContract.at(activeWallet);
-      const target = AztecAddr.fromString(targetAddress);
+      const target = AztecAddress.fromString(targetAddress);
       await fj.methods.claim(
         target,
         BigInt(claim.claimAmount),
-        FrField.fromHexString(claim.claimSecret),
-        FrField.fromHexString(`0x${BigInt(claim.messageLeafIndex).toString(16).padStart(64, "0")}`),
+        Fr.fromHexString(claim.claimSecret),
+        Fr.fromHexString(`0x${BigInt(claim.messageLeafIndex).toString(16).padStart(64, "0")}`),
       ).send({ from: address });
       setStatus('funded');
     } catch (err: unknown) {
@@ -159,13 +157,13 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     }
   }, [activeWallet, address]);
 
-  // Claim both the caller's fee juice AND the recipient's in a single L2 tx
-  const claimBoth = useCallback(async (callerClaim: ClaimCredentials, recipientClaim: ClaimCredentials, targetAddress: string) => {
+  // Claim fee juice for the caller and N other recipients in a single L2 tx
+  const claimAll = useCallback(async (callerClaim: ClaimCredentials, otherClaims: ClaimCredentials[]) => {
     if (!activeWallet || !address) throw new Error('No wallet connected');
     setStatus('claiming');
     setError(null);
     try {
-      await claimBothInSingleTx(activeWallet, address, callerClaim, targetAddress, recipientClaim);
+      await claimAllInSingleTx(activeWallet, address, callerClaim, otherClaims);
       setStatus('funded');
       refreshFeeJuiceBalance();
     } catch (err: unknown) {
@@ -201,7 +199,7 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     <AztecWalletContext.Provider
       value={{
         status, wallet, externalWallet, address, feeJuiceBalance, error, isExternal,
-        connectAztecWallet, connectExternalWallet, claimSelf, claimForRecipient, claimBoth,
+        connectAztecWallet, connectExternalWallet, claimSelf, claimForRecipient, claimAll,
         resetAccount, disconnect, refreshFeeJuiceBalance,
       }}
     >

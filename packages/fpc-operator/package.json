@@ -1,5 +1,5 @@
 {
-  "name": "@gregojuice/bridge",
+  "name": "@gregojuice/fpc-operator",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,9 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "clean": "rm -rf ./dist .tsbuildinfo",
-    "preview": "vite preview",
-    "forge:build": "cd contracts && forge build",
-    "forge:deploy": "cd contracts && forge script script/Deploy.s.sol --rpc-url ${L1_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com} --private-key $PRIVATE_KEY --broadcast"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@aztec/aztec.js": "v4.2.0-nightly.20260323",
@@ -20,12 +18,12 @@
     "@aztec/wallet-sdk": "v4.2.0-nightly.20260323",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@gregojuice/contracts": "workspace:*",
     "@gregojuice/embedded-wallet": "workspace:*",
     "@mui/icons-material": "^6.3.1",
     "@mui/material": "^6.3.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "viem": "^2.23.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@aztec/wallets": "v4.2.0-nightly.20260323",
