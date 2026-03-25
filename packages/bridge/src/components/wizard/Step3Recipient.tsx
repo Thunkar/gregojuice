@@ -5,13 +5,10 @@ import {
   IconButton,
   ToggleButtonGroup,
   ToggleButton,
-  Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-import { formatUnits } from "viem";
 import type { RecipientChoice } from "./types";
-import type { RecipientEntry } from "../../config/query-params";
 
 interface Recipient {
   address: string;
@@ -27,7 +24,6 @@ interface Step3RecipientProps {
   recipientReady: boolean;
   advanceFromStep3: () => void;
   prefilled?: boolean;
-  queryRecipients?: RecipientEntry[] | null;
 }
 
 function RecipientRows({
@@ -94,48 +90,7 @@ export function Step3Recipient({
   recipientReady,
   advanceFromStep3,
   prefilled,
-  queryRecipients,
 }: Step3RecipientProps) {
-  // Multi-recipient mode from query params: read-only list
-  if (queryRecipients && queryRecipients.length > 0) {
-    return (
-      <>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Bridging to {queryRecipients.length} recipients:
-        </Typography>
-        {queryRecipients.map((r, i) => (
-          <Box key={i} sx={{ display: "flex", gap: 1, mb: 1, alignItems: "center" }}>
-            <TextField
-              fullWidth
-              label={`Recipient ${i + 1}`}
-              value={r.address}
-              slotProps={{ input: { readOnly: true } }}
-              size="small"
-              sx={{ flex: 3 }}
-            />
-            <TextField
-              label="Amount (FJ)"
-              value={formatUnits(r.amount, 18)}
-              slotProps={{ input: { readOnly: true } }}
-              size="small"
-              sx={{ flex: 1 }}
-            />
-          </Box>
-        ))}
-        <Button
-          fullWidth
-          variant="contained"
-          color="primary"
-          onClick={advanceFromStep3}
-          sx={{ mt: 1 }}
-        >
-          Continue
-        </Button>
-      </>
-    );
-  }
-
-  // Prefilled single recipient (backwards compat)
   if (prefilled) {
     return (
       <>

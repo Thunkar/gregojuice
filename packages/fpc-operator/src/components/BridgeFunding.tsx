@@ -1,8 +1,17 @@
 import { useEffect, useRef, useCallback } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box } from "@mui/material";
+
+interface Recipient {
+  address: string;
+  /** Amount in human-readable FJ (e.g. "100") */
+  amount: string;
+}
 
 interface BridgeFundingProps {
-  recipientAddress: string;
+  /** Single recipient address (uses ?recipient=) */
+  recipient?: string;
+  /** Multiple recipients with amounts (uses ?recipients=addr,amt;addr,amt) */
+  recipients?: Recipient[];
   networkId: string;
   bridgeUrl: string;
   onComplete?: () => void;
@@ -10,7 +19,8 @@ interface BridgeFundingProps {
 }
 
 export function BridgeFunding({
-  recipientAddress,
+  recipient,
+  recipients,
   networkId,
   bridgeUrl,
   onComplete,
@@ -33,25 +43,29 @@ export function BridgeFunding({
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
 
-  const src = `${bridgeUrl}?recipient=${encodeURIComponent(recipientAddress)}&network=${encodeURIComponent(networkId)}`;
+  const params = new URLSearchParams();
+  params.set("network", networkId);
+  params.set("embedded", "true");
+
+  if (recipients && recipients.length > 0) {
+    params.set("recipients", recipients.map((r) => `${r.address},${r.amount}`).join(";"));
+  } else if (recipient) {
+    params.set("recipient", recipient);
+  }
+
+  const src = `${bridgeUrl}?${params.toString()}`;
 
   return (
-    <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        Bridge fee juice to fund your FPC contract:
-      </Typography>
-      <Box
-        component="iframe"
-        ref={iframeRef}
-        src={src}
-        allow="ethereum; cross-origin-isolated"
-        sx={{
-          width: "100%",
-          height: 500,
-          border: "1px solid",
-          borderColor: "divider",
-        }}
-      />
-    </Box>
+    <Box
+      component="iframe"
+      ref={iframeRef}
+      src={src}
+      allow="ethereum; cross-origin-isolated"
+      sx={{
+        width: "100%",
+        height: 500,
+        border: "none",
+      }}
+    />
   );
 }

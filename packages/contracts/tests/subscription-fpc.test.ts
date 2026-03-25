@@ -98,14 +98,14 @@ describe("Account deployment subscription", () => {
   });
 
   it("calibrates and sets up a sponsored app", async () => {
-    const dummyAccount = await userWallet.createECDSARAccount(
+    const dummyAccount = await wallet.createECDSARAccount(
       await Fr.random(),
       await Fr.random(),
       SIGNING_PRIVATE_KEY,
     );
     const sampleCall = await EcdsaAccountDeployerContract.at(
       deployerAddress,
-      userWallet,
+      wallet,
     )
       .methods.deploy(
         dummyAccount.address,
@@ -118,11 +118,10 @@ describe("Account deployment subscription", () => {
     const { maxFee } = await subscriptionFPC.helpers.calibrate({
       adminWallet: wallet,
       adminAddress: admin,
-      userWallet,
-      userAddress: dummyAccount.address,
       node,
       sampleCall,
       feeMultiplier: 50,
+      additionalScopes: [dummyAccount.address],
     });
 
     expect(maxFee).toBeGreaterThan(0n);
@@ -188,13 +187,6 @@ describe("Token transfer subscription (multi-use)", () => {
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
 
-  async function createTransferAuthWit(call: FunctionCall) {
-    return userWallet.createAuthWit(userAddress, {
-      caller: subscriptionFPC.address,
-      call,
-    });
-  }
-
   beforeAll(async () => {
     // Deploy Token contract (admin is the minter)
     const {
@@ -248,6 +240,9 @@ describe("Token transfer subscription (multi-use)", () => {
       SIGNING_PRIVATE_KEY,
     );
 
+    // Mint tokens to the admin privately
+    await token.methods.mint_to_private(admin, 1000n).send({ from: admin });
+
     // Mint tokens to the user privately
     await token.methods
       .mint_to_private(userAddress, 1000n)
@@ -258,23 +253,22 @@ describe("Token transfer subscription (multi-use)", () => {
   });
 
   it("calibrates and sets up transfer_in_private as a sponsored app", async () => {
-    const userToken = TokenContract.at(token.address, userWallet);
-
-    const sampleCall = await userToken.methods
-      .transfer_in_private(userAddress, recipientAddress, 10n, 0)
+    const sampleCall = await token.methods
+      .transfer_in_private(admin, recipientAddress, 10n, 0)
       .getFunctionCall();
 
-    const authWit = await createTransferAuthWit(sampleCall);
+    const authwit = await wallet.createAuthWit(admin, {
+      caller: subscriptionFPC.address,
+      call: sampleCall,
+    });
 
     const { maxFee } = await subscriptionFPC.helpers.calibrate({
       adminWallet: wallet,
       adminAddress: admin,
-      userWallet,
-      userAddress,
       node,
       sampleCall,
       feeMultiplier: 50,
-      authWitnesses: [authWit],
+      authWitnesses: [authwit],
     });
 
     expect(maxFee).toBeGreaterThan(0n);
@@ -299,11 +293,13 @@ describe("Token transfer subscription (multi-use)", () => {
       .transfer_in_private(userAddress, recipientAddress, 10n, 0)
       .getFunctionCall();
 
-    const authWit = await createTransferAuthWit(sponsoredCall);
+    const authWit = await userWallet.createAuthWit(userAddress, {
+      caller: fpc.address,
+      call: sponsoredCall,
+    });
 
     await fpc.helpers.subscribe({
       call: sponsoredCall,
-
       configIndex: PRODUCTION_INDEX,
       userAddress,
       authWitnesses: [authWit],
@@ -318,8 +314,10 @@ describe("Token transfer subscription (multi-use)", () => {
       .transfer_in_private(userAddress, recipientAddress, 15n, 0)
       .getFunctionCall();
 
-    const authWit = await createTransferAuthWit(sponsoredCall);
-
+    const authWit = await userWallet.createAuthWit(userAddress, {
+      caller: fpc.address,
+      call: sponsoredCall,
+    });
     await fpc.helpers.sponsor({
       call: sponsoredCall,
       configIndex: PRODUCTION_INDEX,
@@ -356,13 +354,6 @@ describe("Failure cases", () => {
   let token: TokenContract;
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
-
-  async function createTransferAuthWit(call: FunctionCall) {
-    return userWallet.createAuthWit(userAddress, {
-      caller: subscriptionFPC.address,
-      call,
-    });
-  }
 
   beforeAll(async () => {
     // Deploy Token contract
@@ -417,25 +408,29 @@ describe("Failure cases", () => {
     await token.methods
       .mint_to_private(userAddress, 1000n)
       .send({ from: admin });
+
+    // Mint tokens to the admin privately
+    await token.methods.mint_to_private(admin, 1000n).send({ from: admin });
+
     await userWallet.registerSender(admin, "admin");
 
     // Set up a sponsored app with max_uses=1, max_users=1
-    const userToken = TokenContract.at(token.address, userWallet);
-    const sampleCall = await userToken.methods
-      .transfer_in_private(userAddress, recipientAddress, 1n, 0)
+    const sampleCall = await token.methods
+      .transfer_in_private(admin, recipientAddress, 1n, 0)
       .getFunctionCall();
 
-    const authWit = await createTransferAuthWit(sampleCall);
+    const authwit = await wallet.createAuthWit(admin, {
+      caller: subscriptionFPC.address,
+      call: sampleCall,
+    });
 
     const { maxFee } = await subscriptionFPC.helpers.calibrate({
       adminWallet: wallet,
       adminAddress: admin,
-      userWallet,
-      userAddress,
       node,
       sampleCall,
       feeMultiplier: 50,
-      authWitnesses: [authWit],
+      authWitnesses: [authwit],
     });
 
     await subscriptionFPC.methods
@@ -450,10 +445,14 @@ describe("Failure cases", () => {
       .send({ from: admin });
 
     // Subscribe — consumes the only slot and the only use
+    const userToken = TokenContract.at(token.address, userWallet);
     const subscribeCall = await userToken.methods
       .transfer_in_private(userAddress, recipientAddress, 1n, 0)
       .getFunctionCall();
-    const subscribeAuthWit = await createTransferAuthWit(subscribeCall);
+    const subscribeAuthWit = await userWallet.createAuthWit(userAddress, {
+      caller: subscriptionFPC.address,
+      call: subscribeCall,
+    });
 
     const fpc = subscriptionFPC.withWallet(userWallet);
     await fpc.helpers.subscribe({
@@ -473,8 +472,10 @@ describe("Failure cases", () => {
       .transfer_in_private(userAddress, recipientAddress, 1n, 0)
       .getFunctionCall();
 
-    const authWit = await createTransferAuthWit(sponsoredCall);
-
+    const authWit = await userWallet.createAuthWit(userAddress, {
+      caller: subscriptionFPC.address,
+      call: sponsoredCall,
+    });
     // The subscription had max_uses=1 and subscribe consumed it.
     // sponsor calls pop_notes which should fail — no note to pop.
     await expect(

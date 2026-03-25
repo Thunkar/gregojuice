@@ -18,5 +18,6 @@ export {
   computeContractSalt as computeImmutablesSalt,
   createImmutablesCapsule,
   deployWithImmutables,
+  computeImmutablesAddress,
   IMMUTABLES_SLOT,
 } from "./immutables";

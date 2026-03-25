@@ -17,6 +17,7 @@ interface Step2AztecAccountProps {
   aztecStatus: string;
   aztecError: string | null;
   resetAccount: () => Promise<void>;
+  forceEmbedded?: boolean;
 }
 
 export function Step2AztecAccount({
@@ -26,25 +27,28 @@ export function Step2AztecAccount({
   aztecStatus,
   aztecError,
   resetAccount,
+  forceEmbedded,
 }: Step2AztecAccountProps) {
   if (!aztecAccountReady) {
     return (
       <Box>
-        <ToggleButtonGroup
-          value={aztecChoice}
-          exclusive
-          onChange={(_, v) => {
-            if (v) setAztecChoice(v);
-          }}
-          fullWidth
-          size="small"
-          sx={{ mb: 2 }}
-        >
-          <ToggleButton value="existing">I Have a Wallet</ToggleButton>
-          <ToggleButton value="new">Use an Embedded Wallet</ToggleButton>
-        </ToggleButtonGroup>
+        {!forceEmbedded && (
+          <ToggleButtonGroup
+            value={aztecChoice}
+            exclusive
+            onChange={(_, v) => {
+              if (v) setAztecChoice(v);
+            }}
+            fullWidth
+            size="small"
+            sx={{ mb: 2 }}
+          >
+            <ToggleButton value="existing">I Have a Wallet</ToggleButton>
+            <ToggleButton value="new">Use an Embedded Wallet</ToggleButton>
+          </ToggleButtonGroup>
+        )}
 
-        {aztecChoice === "existing" && <ExternalWalletConnect />}
+        {aztecChoice === "existing" && !forceEmbedded && <ExternalWalletConnect />}
 
         {aztecChoice === "new" && (
           <Box>

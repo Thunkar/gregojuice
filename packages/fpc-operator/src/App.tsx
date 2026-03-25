@@ -5,41 +5,29 @@ import {
   Container,
   Box,
   Typography,
-  CircularProgress,
-  Tabs,
-  Tab,
   Paper,
-  Alert,
   Chip,
 } from "@mui/material";
 import { theme } from "./theme";
 import { useWallet } from "./contexts/WalletContext";
 import { useNetwork } from "./contexts/NetworkContext";
 import { getStoredFPC, loadExistingFPC } from "./services/fpcService";
-import { FPCDeploy } from "./components/FPCDeploy";
-import { AppSignUp } from "./components/AppSignUp";
-import { AppList } from "./components/AppList";
-import { BridgeFunding } from "./components/BridgeFunding";
+import { SetupWizard } from "./components/SetupWizard";
+import { Dashboard } from "./components/Dashboard";
 import { TxNotificationCenter } from "./components/TxNotificationCenter";
 import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
-import type { SubscriptionFPCContract as SubscriptionFPC } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
+import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 
 export function App() {
   const { status, wallet, address, node, error: walletError } = useWallet();
   const { activeNetwork } = useNetwork();
-  const [fpc, setFpc] = useState<SubscriptionFPC | null>(null);
+  const [fpc, setFpc] = useState<SubscriptionFPCContract | null>(null);
   const [fpcAddress, setFpcAddress] = useState<string | null>(null);
-  const [tab, setTab] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [listKey, setListKey] = useState(0);
 
-  const bridgeUrl = import.meta.env.VITE_BRIDGE_URL ?? "http://localhost:5173";
-
-  const handleFPCDeployed = useCallback(
+  const handleSetupComplete = useCallback(
     async (addr: string) => {
       if (!wallet || !node) return;
       setFpcAddress(addr);
-      setLoadError(null);
       try {
         const loaded = await loadExistingFPC(wallet, node, {
           address: addr,
@@ -47,19 +35,20 @@ export function App() {
         });
         setFpc(loaded);
       } catch (err) {
-        setLoadError(err instanceof Error ? err.message : "Failed to load FPC");
+        console.error("Failed to load FPC:", err);
       }
     },
     [wallet, node],
   );
 
+  // Auto-load stored FPC on wallet ready
   useEffect(() => {
     if (status !== "ready" || !wallet) return;
     const stored = getStoredFPC();
-    if (stored) {
-      handleFPCDeployed(stored.address);
-    }
-  }, [status, wallet, handleFPCDeployed]);
+    if (stored?.deployed) handleSetupComplete(stored.address);
+  }, [status, wallet, handleSetupComplete]);
+
+  const setupComplete = !!fpc && !!address && !!fpcAddress;
 
   return (
     <ThemeProvider theme={theme}>
@@ -90,7 +79,7 @@ export function App() {
       >
         <Container maxWidth="sm" sx={{ position: "relative", zIndex: 1 }}>
           {/* Header */}
-          <Box sx={{ textAlign: "center", mb: 6, mt: 4 }}>
+          <Box sx={{ textAlign: "center", mb: 4, mt: 4 }}>
             <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
               <GregoJuiceLogo height={56} />
             </Box>
@@ -101,11 +90,7 @@ export function App() {
 
           {/* Status chips */}
           <Box sx={{ display: "flex", justifyContent: "center", gap: 1, mb: 3 }}>
-            <Chip
-              label={activeNetwork.name}
-              size="small"
-              variant="outlined"
-            />
+            <Chip label={activeNetwork.name} size="small" variant="outlined" />
             {address && (
               <Chip
                 label={`Admin: ${address.toString().slice(0, 10)}...`}
@@ -124,86 +109,15 @@ export function App() {
             )}
           </Box>
 
-          {/* Main content */}
           <Paper sx={{ p: 3 }}>
-            {status === "loading" && (
-              <Box sx={{ textAlign: "center", py: 6 }}>
-                <CircularProgress sx={{ mb: 2 }} />
-                <Typography color="text.secondary">
-                  Initializing embedded wallet...
-                </Typography>
-              </Box>
-            )}
-
-            {status === "error" && (
-              <Alert severity="error">{walletError}</Alert>
-            )}
-
-            {status === "ready" && !fpc && !loadError && (
-              <FPCDeploy onDeployed={handleFPCDeployed} />
-            )}
-
-            {loadError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {loadError}
-              </Alert>
-            )}
-
-            {status === "ready" && fpc && address && (
-              <>
-                <Tabs
-                  value={tab}
-                  onChange={(_, v) => setTab(v)}
-                  sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
-                >
-                  <Tab label="Sign Up App" />
-                  <Tab label="Registered Apps" />
-                  <Tab label="Fund Admin" />
-                  {fpcAddress && <Tab label="Fund FPC" />}
-                </Tabs>
-
-                {tab === 0 && (
-                  <AppSignUp
-                    fpc={fpc}
-                    adminAddress={address}
-                    onSignedUp={() => setListKey((k) => k + 1)}
-                  />
-                )}
-                {tab === 1 && <AppList key={listKey} fpc={fpc} />}
-                {tab === 2 && (
-                  <Box>
-                    <Typography variant="h6" sx={{ mb: 2 }}>
-                      Fund Admin Account
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Your admin account needs fee juice to send transactions
-                      (deploying the FPC, signing up apps). Bridge funds to your
-                      admin address below.
-                    </Typography>
-                    <BridgeFunding
-                      recipientAddress={address.toString()}
-                      networkId={activeNetwork.id}
-                      bridgeUrl={bridgeUrl}
-                    />
-                  </Box>
-                )}
-                {tab === 3 && fpcAddress && (
-                  <Box>
-                    <Typography variant="h6" sx={{ mb: 2 }}>
-                      Fund FPC Contract
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      The FPC needs fee juice to sponsor transactions for your
-                      users. Bridge funds to the FPC address below.
-                    </Typography>
-                    <BridgeFunding
-                      recipientAddress={fpcAddress}
-                      networkId={activeNetwork.id}
-                      bridgeUrl={bridgeUrl}
-                    />
-                  </Box>
-                )}
-              </>
+            {!setupComplete ? (
+              <SetupWizard onComplete={handleSetupComplete} />
+            ) : (
+              <Dashboard
+                fpc={fpc}
+                adminAddress={address}
+                fpcAddress={fpcAddress}
+              />
             )}
           </Paper>
 

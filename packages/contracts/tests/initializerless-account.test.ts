@@ -26,11 +26,9 @@ import {
   serializeSigningKey,
   createSigningKeyCapsule,
   type SigningPublicKey,
-} from "../../bridge/src/wallet/initializerless-account.js";
-import {
   deployWithImmutables,
   computeImmutablesAddress,
-} from "../../bridge/src/wallet/immutables.js";
+} from "@gregojuice/embedded-wallet";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 

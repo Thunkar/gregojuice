@@ -11,7 +11,7 @@ export function BridgeWizard() {
   const w = useBridgeWizard();
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 3, ...(w.isIframe && { border: "none", background: "transparent", backdropFilter: "none" }) }}>
       {/* Progress bar */}
       <Box sx={{ mb: 2 }}>
         <LinearProgress
@@ -69,6 +69,7 @@ export function BridgeWizard() {
           aztecStatus={w.aztecStatus}
           aztecError={w.aztecError}
           resetAccount={w.resetAccount}
+          forceEmbedded={w.forceEmbedded}
         />
       </StepRow>
 
@@ -97,7 +98,6 @@ export function BridgeWizard() {
           recipientReady={w.recipientReady}
           advanceFromStep3={w.advanceFromStep3}
           prefilled={w.recipientPrefilled}
-          queryRecipients={w.queryRecipients}
         />
       </StepRow>
 

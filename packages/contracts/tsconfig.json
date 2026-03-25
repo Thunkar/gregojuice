@@ -6,5 +6,5 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true
   },
-  "include": ["artifacts/**/*.ts", "tests/**/*.ts", "src/**/*.ts", "../bridge/src/wallet/**/*.ts"]
+  "include": ["artifacts/**/*.ts", "tests/**/*.ts", "src/**/*.ts"]
 }

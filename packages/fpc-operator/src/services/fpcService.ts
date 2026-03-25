@@ -14,6 +14,8 @@ import { deriveKeys } from "@aztec/aztec.js/keys";
 
 const FPC_ADDRESS_KEY = "gregojuice_fpc_address";
 const FPC_SECRET_KEY = "gregojuice_fpc_secret";
+const FPC_SALT_KEY = "gregojuice_fpc_salt";
+const FPC_DEPLOYED_KEY = "gregojuice_fpc_deployed";
 const SIGNED_UP_APPS_KEY = "gregojuice_fpc_apps";
 
 // ── Stored FPC state ─────────────────────────────────────────────────
@@ -21,20 +23,33 @@ const SIGNED_UP_APPS_KEY = "gregojuice_fpc_apps";
 export interface StoredFPC {
   address: string;
   secretKey: string;
+  salt: string;
+  deployed: boolean;
 }
 
 export function getStoredFPC(): StoredFPC | null {
   try {
     const address = localStorage.getItem(FPC_ADDRESS_KEY);
     const secretKey = localStorage.getItem(FPC_SECRET_KEY);
-    if (address && secretKey) return { address, secretKey };
+    const salt = localStorage.getItem(FPC_SALT_KEY);
+    if (address && secretKey && salt) return {
+      address,
+      secretKey,
+      salt,
+      deployed: localStorage.getItem(FPC_DEPLOYED_KEY) === "true",
+    };
   } catch {}
   return null;
 }
 
-function storeFPC(address: string, secretKey: string) {
+function storeFPC(address: string, secretKey: string, salt: string) {
   localStorage.setItem(FPC_ADDRESS_KEY, address);
   localStorage.setItem(FPC_SECRET_KEY, secretKey);
+  localStorage.setItem(FPC_SALT_KEY, salt);
+}
+
+function markFPCDeployed() {
+  localStorage.setItem(FPC_DEPLOYED_KEY, "true");
 }
 
 // ── Signed-up app configs ────────────────────────────────────────────
@@ -82,13 +97,27 @@ export async function computeConfigId(
   ]);
 }
 
-// ── FPC deployment ───────────────────────────────────────────────────
+// ── FPC preparation + deployment ─────────────────────────────────────
 
-export async function deployFPC(
+/**
+ * Pre-computes the FPC address without deploying. The address is deterministic
+ * from the secret key and admin address, so it can be funded before deployment.
+ * Stores the FPC keys in localStorage for later deployment.
+ */
+export async function prepareFPC(
   wallet: EmbeddedWallet,
   adminAddress: AztecAddress,
 ): Promise<{ fpcAddress: AztecAddress; secretKey: Fr }> {
+  const stored = getStoredFPC();
+  if (stored) {
+    return {
+      fpcAddress: AztecAddress.fromString(stored.address),
+      secretKey: Fr.fromString(stored.secretKey),
+    };
+  }
+
   const secretKey = Fr.random();
+  const salt = Fr.random();
   const { publicKeys } = await deriveKeys(secretKey);
 
   const deployment = SubscriptionFPCContract.deployWithPublicKeys(
@@ -96,18 +125,42 @@ export async function deployFPC(
     wallet,
     adminAddress,
   );
-  const instance = await deployment.getInstance();
+  const instance = await deployment.getInstance({ contractAddressSalt: salt });
 
-  // Register the contract so the wallet's PXE can decrypt its notes
   await wallet.registerContract(instance, SubscriptionFPCContractArtifact, secretKey);
 
-  // Send the deployment tx
-  await deployment.send({ from: adminAddress });
+  storeFPC(instance.address.toString(), secretKey.toString(), salt.toString());
 
-  const fpcAddress = instance.address;
-  storeFPC(fpcAddress.toString(), secretKey.toString());
+  return { fpcAddress: instance.address, secretKey };
+}
 
-  return { fpcAddress, secretKey };
+/**
+ * Deploys the FPC contract on-chain. Must call prepareFPC first.
+ * The admin account must have fee juice to pay for the deployment tx.
+ */
+export async function deployFPC(
+  wallet: EmbeddedWallet,
+  adminAddress: AztecAddress,
+): Promise<{ fpcAddress: AztecAddress }> {
+  const stored = getStoredFPC();
+  if (!stored) throw new Error("Call prepareFPC first");
+
+  const secretKey = Fr.fromString(stored.secretKey);
+  const salt = Fr.fromString(stored.salt);
+  const { publicKeys } = await deriveKeys(secretKey);
+
+  const deployment = SubscriptionFPCContract.deployWithPublicKeys(
+    publicKeys,
+    wallet,
+    adminAddress,
+  );
+  // getInstance caches, so passing the salt here ensures the same address
+  await deployment.getInstance({ contractAddressSalt: salt });
+
+  await deployment.send({ from: adminAddress, contractAddressSalt: salt });
+  markFPCDeployed();
+
+  return { fpcAddress: AztecAddress.fromString(stored.address) };
 }
 
 // ── Load existing FPC ────────────────────────────────────────────────

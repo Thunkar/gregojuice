@@ -845,7 +845,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/l1-artifacts@npm:4.2.0-nightly.20260323":
+"@aztec/l1-artifacts@npm:4.2.0-nightly.20260323, @aztec/l1-artifacts@npm:v4.2.0-nightly.20260323":
   version: 4.2.0-nightly.20260323
   resolution: "@aztec/l1-artifacts@npm:4.2.0-nightly.20260323"
   dependencies:
@@ -1735,6 +1735,7 @@ __metadata:
     "@aztec/noir-contracts.js": "npm:v4.2.0-nightly.20260323"
     "@aztec/stdlib": "npm:v4.2.0-nightly.20260323"
     "@aztec/wallets": "npm:v4.2.0-nightly.20260323"
+    "@gregojuice/embedded-wallet": "workspace:*"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"
   languageName: unknown
@@ -1762,6 +1763,7 @@ __metadata:
     "@aztec/aztec.js": "npm:v4.2.0-nightly.20260323"
     "@aztec/entrypoints": "npm:v4.2.0-nightly.20260323"
     "@aztec/foundation": "npm:v4.2.0-nightly.20260323"
+    "@aztec/l1-artifacts": "npm:v4.2.0-nightly.20260323"
     "@aztec/pxe": "npm:v4.2.0-nightly.20260323"
     "@aztec/stdlib": "npm:v4.2.0-nightly.20260323"
     "@aztec/wallet-sdk": "npm:v4.2.0-nightly.20260323"
@@ -1777,7 +1779,9 @@ __metadata:
     "@vitejs/plugin-react-swc": "npm:^3.7.2"
     react: "npm:^18.3.1"
     react-dom: "npm:^18.3.1"
+    react-dropzone: "npm:^14.3.8"
     typescript: "npm:~5.7.3"
+    viem: "npm:^2.23.0"
     vite: "npm:^7.1.4"
     vite-plugin-node-polyfills: "npm:^0.24.0"
   languageName: unknown
@@ -4025,6 +4029,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"attr-accept@npm:^2.2.4":
+  version: 2.2.5
+  resolution: "attr-accept@npm:2.2.5"
+  checksum: 10c0/9b4cb82213925cab2d568f71b3f1c7a7778f9192829aac39a281e5418cd00c04a88f873eb89f187e0bf786fa34f8d52936f178e62cbefb9254d57ecd88ada99b
+  languageName: node
+  linkType: hard
+
 "available-typed-arrays@npm:^1.0.7":
   version: 1.0.7
   resolution: "available-typed-arrays@npm:1.0.7"
@@ -5268,6 +5279,15 @@ __metadata:
     picomatch:
       optional: true
   checksum: 10c0/e345083c4306b3aed6cb8ec551e26c36bab5c511e99ea4576a16750ddc8d3240e63826cc624f5ae17ad4dc82e68a253213b60d556c11bfad064b7607847ed07f
+  languageName: node
+  linkType: hard
+
+"file-selector@npm:^2.1.0":
+  version: 2.1.2
+  resolution: "file-selector@npm:2.1.2"
+  dependencies:
+    tslib: "npm:^2.7.0"
+  checksum: 10c0/fe827e0e95410aacfcc3eabc38c29cc36055257f03c1c06b631a2b5af9730c142ad2c52f5d64724d02231709617bda984701f52bd1f4b7aca50fb6585a27c1d2
   languageName: node
   linkType: hard
 
@@ -7538,6 +7558,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-dropzone@npm:^14.3.8":
+  version: 14.4.1
+  resolution: "react-dropzone@npm:14.4.1"
+  dependencies:
+    attr-accept: "npm:^2.2.4"
+    file-selector: "npm:^2.1.0"
+    prop-types: "npm:^15.8.1"
+  peerDependencies:
+    react: ">= 16.8 || 18.0.0"
+  checksum: 10c0/ee66f88a06fcd1250f0e0d79cc967055f9b9fb9ce1d024c2ca92ff165b81fb44fe680b5f4e1bd49f9ca64dd834018868a6d8996548426cafcc0d770c075570c8
+  languageName: node
+  linkType: hard
+
 "react-is@npm:^16.13.1, react-is@npm:^16.7.0":
   version: 16.13.1
   resolution: "react-is@npm:16.13.1"
@@ -8413,7 +8446,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.4.0, tslib@npm:^2.6.2":
+"tslib@npm:^2.4.0, tslib@npm:^2.6.2, tslib@npm:^2.7.0":
   version: 2.8.1
   resolution: "tslib@npm:2.8.1"
   checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62

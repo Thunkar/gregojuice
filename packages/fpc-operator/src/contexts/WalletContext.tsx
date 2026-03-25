@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
-import type { AztecNode } from "@aztec/aztec.js/node";
+import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
 import { EmbeddedWallet, txProgress } from "@gregojuice/embedded-wallet";
 import { useNetwork } from "./NetworkContext";
 
@@ -18,6 +18,9 @@ interface WalletContextType {
   wallet: EmbeddedWallet | null;
   address: AztecAddress | null;
   node: AztecNode | null;
+  rollupAddress: string | null;
+  l1ChainId: number | null;
+  l1RpcUrl: string | null;
   error: string | null;
 }
 
@@ -35,58 +38,55 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<EmbeddedWallet | null>(null);
   const [address, setAddress] = useState<AztecAddress | null>(null);
   const [node, setNode] = useState<AztecNode | null>(null);
+  const [rollupAddress, setRollupAddress] = useState<string | null>(null);
+  const [l1ChainId, setL1ChainId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const connectingRef = useRef(false);
+  const previousNodeUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (connectingRef.current) return;
-    connectingRef.current = true;
+    if (previousNodeUrlRef.current === activeNetwork.aztecNodeUrl) return;
+    previousNodeUrlRef.current = activeNetwork.aztecNodeUrl;
+
     setStatus("loading");
     setError(null);
 
-    let cancelled = false;
-
     (async () => {
       try {
-        const w = await EmbeddedWallet.create(activeNetwork.aztecNodeUrl, {
+        const nodeClient = createAztecNodeClient(activeNetwork.aztecNodeUrl);
+        const w = await EmbeddedWallet.create(nodeClient, {
           pxeConfig: { proverEnabled: true },
         });
 
-        if (cancelled) return;
-
-        // Load existing account or create a new one
         let accountManager = await w.loadStoredAccount();
         if (!accountManager) {
           accountManager = await w.createInitializerlessAccount();
         }
 
-        if (cancelled) return;
-
+        const nodeInfo = await nodeClient.getNodeInfo();
         const addr = accountManager.address;
         txProgress.setAccount(addr.toString());
 
         setWallet(w);
         setAddress(addr);
-        setNode(w.aztecNode);
+        setNode(nodeClient);
+        setRollupAddress(nodeInfo.l1ContractAddresses.rollupAddress.toString());
+        setL1ChainId(nodeInfo.l1ChainId);
         setStatus("ready");
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to initialize wallet");
-          setStatus("error");
-        }
-      } finally {
-        connectingRef.current = false;
+        setError(err instanceof Error ? err.message : "Failed to initialize wallet");
+        setStatus("error");
       }
     })();
-
-    return () => {
-      cancelled = true;
-      connectingRef.current = false;
-    };
   }, [activeNetwork.aztecNodeUrl]);
 
   return (
-    <WalletContext.Provider value={{ status, wallet, address, node, error }}>
+    <WalletContext.Provider
+      value={{
+        status, wallet, address, node,
+        rollupAddress, l1ChainId, l1RpcUrl: activeNetwork.l1RpcUrl,
+        error,
+      }}
+    >
       {children}
     </WalletContext.Provider>
   );

@@ -42,10 +42,6 @@ export async function calibrateSponsoredApp(params: {
   adminWallet: EmbeddedWallet;
   /** Address of the admin account in adminWallet */
   adminAddress: AztecAddress;
-  /** Wallet for the dummy user, must have sponsored app + FPC contracts registered */
-  userWallet: EmbeddedWallet;
-  /** Address of a dummy user account in userWallet */
-  userAddress: AztecAddress;
   /** Aztec node client */
   node: AztecNode;
   /** Address of the already-deployed and funded SubscriptionFPC contract */
@@ -58,8 +54,10 @@ export async function calibrateSponsoredApp(params: {
   maxUsers?: number;
   /** Fee safety multiplier on currentFees (default 10) */
   feeMultiplier?: number;
-  /** Auth witnesses required by the sponsored call (e.g. for transfer_in_private) */
+  /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
+  /** Additional scopes required by the sponsored call  */
+  additionalScopes?: AztecAddress[];
 }): Promise<{
   maxFee: bigint;
   estimatedGas: Pick<GasSettings, "gasLimits" | "teardownGasLimits">;
@@ -67,21 +65,19 @@ export async function calibrateSponsoredApp(params: {
   const {
     adminWallet,
     adminAddress,
-    userWallet,
-    userAddress,
     node,
     fpcAddress,
     sampleCall,
     feeMultiplier = 10,
     authWitnesses = [],
+    additionalScopes = [],
   } = params;
 
   const appAddress = sampleCall.to;
   const selector = sampleCall.selector;
 
-  // Instantiate the FPC for each wallet
+  // Instantiate the FPC
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-  const userFpc = SubscriptionFPCContract.at(fpcAddress, userWallet);
 
   // --- Step 1: Calibration sign_up (unique index per calibration, MAX fee) ---
   // Use a high index unlikely to collide with production indices
@@ -93,8 +89,8 @@ export async function calibrateSponsoredApp(params: {
   // --- Step 2: Simulate subscription to measure gas ---
   const noirCall = await buildNoirFunctionCall(sampleCall);
 
-  const { estimatedGas } = await userFpc.methods
-    .subscribe(noirCall, calibrationIndex, userAddress)
+  const { estimatedGas } = await adminFpc.methods
+    .subscribe(noirCall, calibrationIndex, adminAddress)
     .with({
       authWitnesses,
       extraHashedArgs: [
@@ -107,7 +103,7 @@ export async function calibrateSponsoredApp(params: {
     .simulate({
       from: NO_FROM,
       fee: { estimateGas: true, estimatedGasPadding: 0 },
-      additionalScopes: [userAddress, fpcAddress],
+      additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
     });
 
   // --- Step 3: Compute tight max_fee ---
@@ -256,14 +252,13 @@ export class SubscriptionFPC {
       calibrate: (params: {
         adminWallet: EmbeddedWallet;
         adminAddress: AztecAddress;
-        userWallet: EmbeddedWallet;
-        userAddress: AztecAddress;
         node: AztecNode;
         sampleCall: FunctionCall;
         maxUses?: number;
         maxUsers?: number;
         feeMultiplier?: number;
         authWitnesses?: AuthWitness[];
+        additionalScopes?: AztecAddress[];
       }): Promise<{
         maxFee: bigint;
         estimatedGas: { gasLimits: Gas; teardownGasLimits: Gas };
