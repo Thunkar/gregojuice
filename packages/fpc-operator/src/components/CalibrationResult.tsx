@@ -31,18 +31,24 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
 
   const [stats, setStats] = useState<FeeStats | null>(null);
   const [feeMultiplier, setFeeMultiplier] = useState(2);
-  const [blockRange, setBlockRange] = useState(100);
+  const [blockRangeInput, setBlockRangeInput] = useState("100");
+  const blockRange = parseInt(blockRangeInput) || 0;
   const [perTxUsd, setPerTxUsd] = useState<number | null>(null);
 
   const pricingService = useMemo(() => {
+    console.debug("FeePricingService init:", { rollupAddress, l1ChainId, l1RpcUrl });
     const svc = new FeePricingService(l1RpcUrl ?? undefined, l1ChainId ?? undefined);
     if (rollupAddress) svc.init(rollupAddress);
+    console.debug("FeePricingService enabled:", svc.enabled);
     return svc;
   }, [rollupAddress, l1ChainId, l1RpcUrl]);
 
   // Fetch fee stats from clustec
   const loadFeeStats = useCallback(() => {
-    fetchFeeStats(activeNetwork.id, blockRange).then(setStats).catch(() => {});
+    if (blockRange < 1) { setStats(null); return; }
+    fetchFeeStats(activeNetwork.id, blockRange)
+      .then(setStats)
+      .catch(() => setStats(null));
   }, [activeNetwork.id, blockRange]);
 
   useEffect(() => { loadFeeStats(); }, [loadFeeStats]);
@@ -67,14 +73,25 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
 
   // USD estimate per tx
   useEffect(() => {
-    if (!maxFeeFj || !pricingService.enabled) { setPerTxUsd(null); return; }
+    if (!maxFeeFj || !pricingService.enabled) {
+      console.debug("USD pricing skipped:", { maxFeeFj, enabled: pricingService.enabled });
+      setPerTxUsd(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const raw = parseUnits(maxFeeFj, 18);
+        // parseUnits can fail on too many decimals — truncate to 18
+        const truncated = maxFeeFj.includes(".")
+          ? maxFeeFj.slice(0, maxFeeFj.indexOf(".") + 19)
+          : maxFeeFj;
+        const raw = parseUnits(truncated, 18);
         const est = await pricingService.estimateCostUsd(raw);
         if (!cancelled && est) setPerTxUsd(est.costUsd);
-      } catch { if (!cancelled) setPerTxUsd(null); }
+      } catch (err) {
+        console.error("USD pricing failed:", err);
+        if (!cancelled) setPerTxUsd(null);
+      }
     })();
     return () => { cancelled = true; };
   }, [maxFeeFj, pricingService]);
@@ -142,10 +159,10 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
         <TextField
           label="Blocks"
           type="number"
-          value={blockRange}
-          onChange={(e) => setBlockRange(Math.max(1, parseInt(e.target.value) || 100))}
+          value={blockRangeInput}
+          onChange={(e) => setBlockRangeInput(e.target.value)}
           size="small"
-          sx={{ width: 80 }}
+          sx={{ width: 120 }}
         />
       </Box>
 
