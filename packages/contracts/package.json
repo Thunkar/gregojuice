@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "src/subscription-fpc.ts",
+  "exports": {
+    "./subscription-fpc": "./src/subscription-fpc.ts",
+    "./artifacts/*": "./artifacts/*"
+  },
   "scripts": {
     "clean": "rm -rf ./artifacts ./*/target",
     "compile": "aztec compile",

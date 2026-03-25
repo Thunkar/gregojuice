@@ -22,7 +22,7 @@ import { AuthWitness } from "@aztec/stdlib/auth-witness";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { deriveSigningKey } from "@aztec/stdlib/keys";
 
-import { SchnorrInitializerlessAccountContractArtifact } from "../../../contracts/artifacts/SchnorrInitializerlessAccount";
+import { SchnorrInitializerlessAccountContractArtifact } from "../../contracts/artifacts/SchnorrInitializerlessAccount";
 import * as immutables from "./immutables";
 
 // ---------------------------------------------------------------------------

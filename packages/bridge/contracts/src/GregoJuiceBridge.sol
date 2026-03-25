@@ -22,39 +22,35 @@ interface IFeeJuicePortal {
 
 /**
  * @title GregoJuiceBridge
- * @notice Atomic double-bridge: deposits fee juice to two Aztec recipients in a single L1 tx.
- *         Designed for the flow where a user needs to fund an ephemeral claimer account (small
- *         amount for gas) AND a target recipient (main amount) in one shot.
- *
- *         On testnet with a faucet, the contract can mint tokens directly.
- *         On mainnet, the user transfers tokens to this contract beforehand (via approve + call).
+ * @notice Atomic multi-bridge: deposits fee juice to N Aztec recipients in a single L1 tx.
+ *         Supports single and multiple recipient flows, with both faucet (testnet) and
+ *         user-funded (mainnet) paths.
  */
 contract GregoJuiceBridge {
     /**
-     * @notice Mint from faucet and bridge to two recipients atomically.
-     *         The faucet mints a fixed amount per call, so we mint twice and split.
+     * @notice Mint from faucet and bridge to multiple recipients atomically.
      * @param feeAssetHandler  Address of the fee asset handler (faucet)
      * @param feeJuice         Address of the fee juice ERC20 token
      * @param portal           Address of the FeeJuicePortal
-     * @param toSmall          Aztec address of the ephemeral claimer account
-     * @param amountSmall      Amount for the ephemeral account (gas money)
-     * @param secretHashSmall  Secret hash for the small claim
-     * @param toLarge          Aztec address of the target recipient
-     * @param amountLarge      Amount for the target recipient
-     * @param secretHashLarge  Secret hash for the large claim
+     * @param recipients       Aztec addresses of the recipients
+     * @param amounts          Amounts for each recipient
+     * @param secretHashes     Secret hashes for each claim
      */
-    function mintAndBridgeDouble(
+    function mintAndBridgeMultiple(
         address feeAssetHandler,
         address feeJuice,
         address portal,
-        bytes32 toSmall,
-        uint256 amountSmall,
-        bytes32 secretHashSmall,
-        bytes32 toLarge,
-        uint256 amountLarge,
-        bytes32 secretHashLarge
+        bytes32[] calldata recipients,
+        uint256[] calldata amounts,
+        bytes32[] calldata secretHashes
     ) external {
-        uint256 totalNeeded = amountSmall + amountLarge;
+        require(recipients.length == amounts.length, "length mismatch");
+        require(amounts.length == secretHashes.length, "length mismatch");
+
+        uint256 totalNeeded = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalNeeded += amounts[i];
+        }
 
         // Mint from faucet — may need multiple calls since mint() gives a fixed amount
         uint256 mintAmt = IFeeAssetHandler(feeAssetHandler).mintAmount();
@@ -66,34 +62,35 @@ contract GregoJuiceBridge {
         // Approve portal for total amount
         IERC20(feeJuice).approve(portal, totalNeeded);
 
-        // Two deposits in one tx
-        IFeeJuicePortal(portal).depositToAztecPublic(toSmall, amountSmall, secretHashSmall);
-        IFeeJuicePortal(portal).depositToAztecPublic(toLarge, amountLarge, secretHashLarge);
+        // Deposit for each recipient
+        for (uint256 i = 0; i < recipients.length; i++) {
+            IFeeJuicePortal(portal).depositToAztecPublic(recipients[i], amounts[i], secretHashes[i]);
+        }
     }
 
     /**
-     * @notice Bridge tokens (already held by the user) to two recipients atomically.
-     *         The user must approve this contract for `amountSmall + amountLarge` first.
+     * @notice Bridge tokens (already held by the user) to multiple recipients atomically.
+     *         The user must approve this contract for the total amount first.
      * @param feeJuice    Address of the fee juice ERC20 token
      * @param portal      Address of the FeeJuicePortal
-     * @param toSmall     Aztec address of the ephemeral claimer account
-     * @param amountSmall Amount for the ephemeral account
-     * @param secretHashSmall  Secret hash for the small claim
-     * @param toLarge     Aztec address of the target recipient
-     * @param amountLarge Amount for the target recipient
-     * @param secretHashLarge  Secret hash for the large claim
+     * @param recipients  Aztec addresses of the recipients
+     * @param amounts     Amounts for each recipient
+     * @param secretHashes Secret hashes for each claim
      */
-    function bridgeDouble(
+    function bridgeMultiple(
         address feeJuice,
         address portal,
-        bytes32 toSmall,
-        uint256 amountSmall,
-        bytes32 secretHashSmall,
-        bytes32 toLarge,
-        uint256 amountLarge,
-        bytes32 secretHashLarge
+        bytes32[] calldata recipients,
+        uint256[] calldata amounts,
+        bytes32[] calldata secretHashes
     ) external {
-        uint256 totalAmount = amountSmall + amountLarge;
+        require(recipients.length == amounts.length, "length mismatch");
+        require(amounts.length == secretHashes.length, "length mismatch");
+
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < amounts.length; i++) {
+            totalAmount += amounts[i];
+        }
 
         // Pull tokens from sender
         IERC20(feeJuice).transferFrom(msg.sender, address(this), totalAmount);
@@ -101,9 +98,10 @@ contract GregoJuiceBridge {
         // Approve portal
         IERC20(feeJuice).approve(portal, totalAmount);
 
-        // Two deposits in one tx
-        IFeeJuicePortal(portal).depositToAztecPublic(toSmall, amountSmall, secretHashSmall);
-        IFeeJuicePortal(portal).depositToAztecPublic(toLarge, amountLarge, secretHashLarge);
+        // Deposit for each recipient
+        for (uint256 i = 0; i < recipients.length; i++) {
+            IFeeJuicePortal(portal).depositToAztecPublic(recipients[i], amounts[i], secretHashes[i]);
+        }
     }
 
     /**

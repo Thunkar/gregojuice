@@ -1,35 +1,114 @@
-import { Box, Typography, TextField, Button, LinearProgress } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Box, Typography, TextField, Button, LinearProgress, CircularProgress } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
+import { formatUnits } from "viem";
+import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
+import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { BRIDGE_STEP_LABELS } from "./constants";
-import type { BridgeStep, MessageStatus } from "./types";
+import { useAztecWallet } from "../../contexts/AztecWalletContext";
+import type { BridgeStep, ClaimCredentials, MessageStatus } from "./types";
+
+interface Recipient {
+  address: string;
+  amount: string;
+}
 
 interface Step4BridgeClaimProps {
-  // Amount & balance
-  amount: string;
-  setAmount: (amount: string) => void;
+  recipients: Recipient[];
+  setRecipients: (r: Recipient[]) => void;
+  allCredentials: ClaimCredentials[] | null;
   balance: { formatted: string; decimals: number; balance: bigint } | null;
   faucetLocked: boolean;
   hasBalance: boolean;
 
-  // Bridge state
   bridgeStep: BridgeStep;
   bridgeStepLabel: string;
   isBridging: boolean;
   bridgeDone: boolean;
   handleBridge: () => void;
 
-  // Sync & claim state
   syncDone: boolean;
   messageStatus: MessageStatus;
   claimed: boolean;
   isClaiming: boolean;
-  feeJuiceBalance: string | null;
+}
+
+function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }) {
+  const { wallet, address } = useAztecWallet();
+  const [balances, setBalances] = useState<Record<string, string | null>>({});
+
+  // Filter out ephemeral (first entry if multiple)
+  const displayCredentials = allCredentials.length > 1 ? allCredentials.slice(1) : allCredentials;
+
+  // Fetch FJ balance for each recipient after claiming
+  useEffect(() => {
+    if (!wallet || !address) return;
+    let cancelled = false;
+
+    (async () => {
+      const fj = FeeJuiceContract.at(wallet);
+
+      const results: Record<string, string | null> = {};
+      await Promise.all(
+        displayCredentials.map(async (cred) => {
+          try {
+            const target = AztecAddress.fromString(cred.recipient);
+            const { result } = await fj.methods.balance_of_public(target).simulate({ from: address });
+            if (!cancelled) results[cred.recipient] = formatUnits(BigInt(result.toString()), 18);
+          } catch {
+            if (!cancelled) results[cred.recipient] = null;
+          }
+        }),
+      );
+      if (!cancelled) setBalances(results);
+    })();
+
+    return () => { cancelled = true; };
+  }, [wallet, address, displayCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Box sx={{ mt: 1 }}>
+      {displayCredentials.map((cred, i) => {
+        const bal = balances[cred.recipient];
+        return (
+          <Box
+            key={i}
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              py: 0.5,
+              borderBottom: i < displayCredentials.length - 1 ? "1px solid" : "none",
+              borderColor: "divider",
+            }}
+          >
+            <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
+              {cred.recipient.slice(0, 10)}...{cred.recipient.slice(-4)}
+            </Typography>
+            <Box sx={{ textAlign: "right" }}>
+              <Typography variant="body2" fontWeight={600} color="primary">
+                +{formatUnits(BigInt(cred.claimAmount), 18)} FJ
+              </Typography>
+              {bal !== undefined ? (
+                <Typography variant="caption" color="text.secondary">
+                  Balance: {bal ?? "—"} FJ
+                </Typography>
+              ) : (
+                <CircularProgress size={10} sx={{ ml: 0.5 }} />
+              )}
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
 }
 
 export function Step4BridgeClaim({
-  amount,
-  setAmount,
+  recipients,
+  setRecipients,
+  allCredentials,
   balance,
   faucetLocked,
   hasBalance,
@@ -42,65 +121,78 @@ export function Step4BridgeClaim({
   messageStatus,
   claimed,
   isClaiming,
-  feeJuiceBalance,
 }: Step4BridgeClaimProps) {
+  const updateAmount = (index: number, amount: string) => {
+    const updated = [...recipients];
+    updated[index] = { ...updated[index], amount };
+    setRecipients(updated);
+  };
+
+  const allAmountsFilled = recipients.every((r) => !!r.amount);
+
   return (
     <>
-      {/* Phase 1: Amount + Bridge */}
+      {/* Phase 1: Amounts + Bridge */}
       {!bridgeDone && (
         <Box>
-          <Box sx={{ mb: 2 }}>
-            {!faucetLocked && (
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 0.5,
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  fontWeight={500}
-                >
-                  Balance: {balance?.formatted ?? "..."}
-                </Typography>
-                {hasBalance && (
-                  <Button
-                    size="small"
-                    onClick={() => setAmount(balance!.formatted)}
-                    sx={{
-                      minWidth: "auto",
-                      px: 1,
-                      py: 0.25,
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      color: "primary.main",
-                      backgroundColor: "rgba(212,255,40,0.1)",
-                      border: "1px solid",
-                      borderColor: "primary.main",
-                      "&:hover": { backgroundColor: "rgba(212,255,40,0.2)" },
-                    }}
-                  >
-                    MAX
-                  </Button>
-                )}
-              </Box>
-            )}
-            <TextField
-              fullWidth
-              label="Amount"
-              placeholder="0.0"
-              value={amount}
-              onChange={(e) => {
-                if (!faucetLocked) setAmount(e.target.value);
+          {!faucetLocked && (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 0.5,
               }}
-              disabled={isBridging || faucetLocked}
-              type="number"
-              helperText={faucetLocked ? "Fixed faucet amount" : undefined}
-            />
+            >
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                fontWeight={500}
+              >
+                Balance: {balance?.formatted ?? "..."}
+              </Typography>
+              {hasBalance && recipients.length === 1 && (
+                <Button
+                  size="small"
+                  onClick={() => updateAmount(0, balance!.formatted)}
+                  sx={{
+                    minWidth: "auto",
+                    px: 1,
+                    py: 0.25,
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    color: "primary.main",
+                    backgroundColor: "rgba(212,255,40,0.1)",
+                    border: "1px solid",
+                    borderColor: "primary.main",
+                    "&:hover": { backgroundColor: "rgba(212,255,40,0.2)" },
+                  }}
+                >
+                  MAX
+                </Button>
+              )}
+            </Box>
+          )}
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 2 }}>
+            {recipients.map((r, i) => (
+              <TextField
+                key={i}
+                fullWidth
+                label={recipients.length > 1 ? `Amount for ${r.address.slice(0, 10)}...` : "Amount"}
+                placeholder="0.0"
+                value={r.amount}
+                onChange={(e) => {
+                  if (!faucetLocked) updateAmount(i, e.target.value);
+                }}
+                disabled={isBridging || faucetLocked}
+                type="number"
+                helperText={faucetLocked ? "Fixed faucet amount" : undefined}
+                size={recipients.length > 1 ? "small" : "medium"}
+              />
+            ))}
           </Box>
+
           {isBridging ? (
             <Box>
               <Typography
@@ -118,7 +210,7 @@ export function Step4BridgeClaim({
               variant="contained"
               color="primary"
               onClick={handleBridge}
-              disabled={!amount}
+              disabled={!allAmountsFilled}
             >
               {faucetLocked ? "Mint & Bridge" : "Bridge"}
             </Button>
@@ -169,34 +261,38 @@ export function Step4BridgeClaim({
             </Box>
 
             {/* 4c: Claim */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
               {claimed ? (
                 <CheckCircleIcon
-                  sx={{ color: "primary.main", fontSize: 18 }}
+                  sx={{ color: "primary.main", fontSize: 18, mt: 0.25 }}
                 />
               ) : (
                 <RadioButtonUncheckedIcon
                   sx={{
                     color: syncDone ? "text.primary" : "text.disabled",
                     fontSize: 18,
+                    mt: 0.25,
                   }}
                 />
               )}
-              <Typography
-                variant="body2"
-                fontWeight={500}
-                color={
-                  claimed
-                    ? "text.primary"
-                    : syncDone
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="body2"
+                  fontWeight={500}
+                  color={
+                    claimed
                       ? "text.primary"
-                      : "text.disabled"
-                }
-              >
-                {claimed
-                  ? `Claimed — FJ: ${feeJuiceBalance}`
-                  : "Claim fee juice"}
-              </Typography>
+                      : syncDone
+                        ? "text.primary"
+                        : "text.disabled"
+                  }
+                >
+                  {claimed ? "Claimed" : "Claim fee juice"}
+                </Typography>
+                {claimed && allCredentials && (
+                  <ClaimSummary allCredentials={allCredentials} />
+                )}
+              </Box>
             </Box>
           </Box>
 
