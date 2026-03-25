@@ -50,8 +50,14 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
 
         const fj = FeeJuiceContract.at(wallet);
         const [adminBal, fpcBal] = await Promise.all([
-          fj.methods.balance_of_public(address).simulate({ from: address }).then((r) => BigInt(r.result.toString())),
-          fj.methods.balance_of_public(fpcAddr).simulate({ from: address }).then((r) => BigInt(r.result.toString())),
+          fj.methods
+            .balance_of_public(address)
+            .simulate({ from: address })
+            .then((r) => BigInt(r.result.toString())),
+          fj.methods
+            .balance_of_public(fpcAddr)
+            .simulate({ from: address })
+            .then((r) => BigInt(r.result.toString())),
         ]);
 
         if (adminBal > 0n && fpcBal > 0n) {
@@ -79,12 +85,13 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     }
   };
 
-  const bridgeRecipients = address && fpcAddress
-    ? [
-        { address: address.toString(), amount: "100" },
-        { address: fpcAddress, amount: "100" },
-      ]
-    : null;
+  const bridgeRecipients =
+    address && fpcAddress
+      ? [
+          { address: address.toString(), amount: "" },
+          { address: fpcAddress, amount: "" },
+        ]
+      : null;
 
   return (
     <Box>
@@ -96,7 +103,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
               <CircularProgress size={20} />
               <Typography variant="body2" color="text.secondary">
-                {status === "loading" ? "Creating embedded wallet..." : "Computing FPC address..."}
+                {status === "loading"
+                  ? "Creating embedded wallet..."
+                  : "Computing FPC address..."}
               </Typography>
             </Box>
             {status === "error" && (
@@ -110,15 +119,24 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <StepLabel>{STEPS[1]}</StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Bridge fee juice to fund both your admin account and the FPC contract in a single transaction.
+              Bridge fee juice to fund both your admin account and the FPC
+              contract in a single transaction.
             </Typography>
             {address && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontFamily: "monospace" }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mb: 0.5, fontFamily: "monospace" }}
+              >
                 Admin: {address.toString().slice(0, 14)}...
               </Typography>
             )}
             {fpcAddress && (
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2, fontFamily: "monospace" }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mb: 2, fontFamily: "monospace" }}
+              >
                 FPC: {fpcAddress.slice(0, 14)}...
               </Typography>
             )}
@@ -146,7 +164,8 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <StepLabel>{STEPS[2]}</StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Deploy the SubscriptionFPC contract on-chain. Your account will be the admin.
+              Deploy the SubscriptionFPC contract on-chain. Your account will be
+              the admin.
             </Typography>
             {deployError && (
               <Alert severity="error" sx={{ mb: 2 }}>

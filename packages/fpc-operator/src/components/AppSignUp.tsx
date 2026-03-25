@@ -12,7 +12,11 @@ import {
   StepContent,
   ToggleButtonGroup,
   ToggleButton,
+  IconButton,
+  Chip,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
 import { Contract } from "@aztec/aztec.js/contracts";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
@@ -65,6 +69,13 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
 
+  // Extra contract registrations (for contracts called by the sponsored function)
+  const [extraContracts, setExtraContracts] = useState<Array<{ address: string; name: string }>>([]);
+  const [extraArtifact, setExtraArtifact] = useState<ContractArtifact | null>(null);
+  const [extraAddress, setExtraAddress] = useState("");
+  const [extraRegistering, setExtraRegistering] = useState(false);
+  const [extraError, setExtraError] = useState<string | null>(null);
+
   // Step 4: Args
   const [argValues, setArgValues] = useState<string[]>([]);
 
@@ -116,7 +127,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       if (!instance) throw new Error("Contract not found on-chain at this address");
       await wallet.registerContract(instance, artifact);
       setContractInstance(instance);
-      setActiveStep(3);
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -136,12 +146,34 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       await wallet.registerContract(instance, artifact);
       setContractInstance(instance);
       setContractAddress(instance.address.toString());
-      setActiveStep(3);
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : "Failed to compute instance");
     } finally {
       setRegistering(false);
     }
+  };
+
+  const handleRegisterExtra = async () => {
+    if (!wallet || !node || !extraArtifact || !extraAddress) return;
+    setExtraRegistering(true);
+    setExtraError(null);
+    try {
+      const address = AztecAddress.fromString(extraAddress);
+      const instance = await node.getContract(address);
+      if (!instance) throw new Error("Contract not found on-chain at this address");
+      await wallet.registerContract(instance, extraArtifact);
+      setExtraContracts((prev) => [...prev, { address: extraAddress, name: extraArtifact.name }]);
+      setExtraArtifact(null);
+      setExtraAddress("");
+    } catch (err) {
+      setExtraError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setExtraRegistering(false);
+    }
+  };
+
+  const removeExtraContract = (index: number) => {
+    setExtraContracts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleCalibrate = async () => {
@@ -302,9 +334,70 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
 
             {registerError && <Alert severity="error" sx={{ mt: 1 }}>{registerError}</Alert>}
             {contractInstance && (
-              <Alert severity="success" sx={{ mt: 1 }}>
-                Registered: {contractInstance.address.toString().slice(0, 14)}...
-              </Alert>
+              <>
+                <Alert severity="success" sx={{ mt: 1, mb: 2 }}>
+                  Registered: {contractInstance.address.toString().slice(0, 14)}...
+                </Alert>
+
+                {/* Extra contract registrations */}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  If the sponsored function calls other contracts, register them here.
+                </Typography>
+
+                {extraContracts.map((ec, i) => (
+                  <Chip
+                    key={i}
+                    label={`${ec.name} (${ec.address.slice(0, 10)}...)`}
+                    onDelete={() => removeExtraContract(i)}
+                    size="small"
+                    sx={{ mr: 0.5, mb: 0.5 }}
+                  />
+                ))}
+
+                {!extraArtifact ? (
+                  <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
+                ) : (
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
+                    <TextField
+                      fullWidth
+                      label="Contract Address"
+                      placeholder="0x..."
+                      value={extraAddress}
+                      onChange={(e) => setExtraAddress(e.target.value)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleRegisterExtra}
+                        disabled={extraRegistering || !extraAddress}
+                        startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                      >
+                        Register
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => { setExtraArtifact(null); setExtraAddress(""); setExtraError(null); }}
+                      >
+                        Cancel
+                      </Button>
+                    </Box>
+                    {extraError && <Alert severity="error" sx={{ mt: 1 }}>{extraError}</Alert>}
+                  </Box>
+                )}
+
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={() => setActiveStep(3)}
+                  sx={{ mt: 2 }}
+                >
+                  Continue
+                </Button>
+              </>
             )}
           </StepContent>
         </Step>

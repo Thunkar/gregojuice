@@ -13,8 +13,17 @@
 
 import {
   collectOffchainEffects,
+  SimulationOverrides,
+  mergeExecutionPayloads,
   type ExecutionPayload,
+  type TxSimulationResult,
+  TxExecutionRequest,
 } from "@aztec/stdlib/tx";
+import { NO_FROM } from "@aztec/aztec.js/account";
+import { DefaultEntrypoint } from "@aztec/entrypoints/default";
+import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
+import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
+import type { SimulateViaEntrypointOptions } from "@aztec/wallet-sdk/base-wallet";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
@@ -180,6 +189,104 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     if (account) {
       await this.walletDB.deleteAccount(account.item);
     }
+  }
+
+  /**
+   * Builds simulation overrides for all known accounts in the wallet.
+   * This ensures kernelless simulation works for any call that touches
+   * account contracts, including sponsored calls with NO_FROM.
+   */
+  private async buildAccountOverrides(): Promise<
+    Record<string, { instance: any; artifact: any }>
+  > {
+    const accounts = await this.getAccounts();
+    const contracts: Record<string, { instance: any; artifact: any }> = {};
+
+    const stubArtifact =
+      await this.accountContracts.getStubAccountContractArtifact();
+
+    for (const account of accounts) {
+      const address = account.item;
+      try {
+        const originalAccount = await this.getAccountFromAddress(address);
+        const completeAddress = originalAccount.getCompleteAddress();
+        const contractInstance = await this.pxe.getContractInstance(
+          completeAddress.address,
+        );
+        if (!contractInstance) continue;
+
+        const stubInstance = await getContractInstanceFromInstantiationParams(
+          stubArtifact,
+          {
+            salt: Fr.random(),
+          },
+        );
+
+        contracts[address.toString()] = {
+          instance: stubInstance,
+          artifact: stubArtifact,
+        };
+      } catch {
+        // Skip accounts that can't be resolved
+      }
+    }
+
+    return contracts;
+  }
+
+  protected override async simulateViaEntrypoint(
+    executionPayload: ExecutionPayload,
+    opts: SimulateViaEntrypointOptions,
+  ): Promise<TxSimulationResult> {
+    const { from, feeOptions, scopes, skipTxValidation, skipFeeEnforcement } =
+      opts;
+
+    const feeExecutionPayload =
+      await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
+    const finalExecutionPayload = feeExecutionPayload
+      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
+      : executionPayload;
+    const chainInfo = await this.getChainInfo();
+
+    // Build overrides for all known accounts
+    const accountOverrides = await this.buildAccountOverrides();
+    const overrides = new SimulationOverrides(
+      Object.keys(accountOverrides).length > 0 ? accountOverrides : undefined,
+    );
+
+    let txRequest: TxExecutionRequest;
+    if (from === NO_FROM) {
+      const entrypoint = new DefaultEntrypoint();
+      txRequest = await entrypoint.createTxExecutionRequest(
+        finalExecutionPayload,
+        feeOptions.gasSettings,
+        chainInfo,
+      );
+    } else {
+      const originalAccount = await this.getAccountFromAddress(from);
+      const completeAddress = originalAccount.getCompleteAddress();
+      const account =
+        await this.accountContracts.createStubAccount(completeAddress);
+      const executionOptions: DefaultAccountEntrypointOptions = {
+        txNonce: Fr.random(),
+        cancellable: false,
+        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
+      };
+      txRequest = await account.createTxExecutionRequest(
+        finalExecutionPayload,
+        feeOptions.gasSettings,
+        chainInfo,
+        executionOptions,
+      );
+    }
+
+    return this.pxe.simulateTx(txRequest, {
+      simulatePublic: true,
+      skipFeeEnforcement,
+      skipTxValidation,
+      overrides,
+      scopes,
+    });
   }
 
   override async sendTx<W extends InteractionWaitOptions = undefined>(

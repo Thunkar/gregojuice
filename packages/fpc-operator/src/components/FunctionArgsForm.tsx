@@ -79,7 +79,6 @@ export function FunctionArgsForm({ fn, values, onChange }: FunctionArgsFormProps
             onChange(updated);
           }}
           size="small"
-          helperText={`Default: ${defaultForType(param.type)}`}
         />
       ))}
     </Box>

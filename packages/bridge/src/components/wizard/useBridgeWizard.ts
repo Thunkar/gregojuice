@@ -24,6 +24,7 @@ import {
   sessionToPhase,
   phaseToSession,
 } from "./session";
+import { EPHEMERAL_CLAIM_GAS_FJ } from "./constants";
 import type {
   WizardStep,
   AztecChoice,
@@ -534,7 +535,7 @@ export function useBridgeWizard() {
       setExpandedStep(4);
       if (faucetLocked && mintAmountValue != null) {
         const faucetAmount = formatUnits(mintAmountValue, 18);
-        setRecipients((prev) => prev.map((r) => ({ ...r, amount: r.amount || faucetAmount })));
+        setRecipients((prev) => prev.map((r) => ({ ...r, amount: faucetAmount })));
       }
     }
   }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
@@ -588,7 +589,7 @@ export function useBridgeWizard() {
         dispatch({ type: "L1_CONFIRMED", allCredentials: [result] });
       } else if (needsMultiBridge && aztecAddress) {
         // Internal wallet: prepend ephemeral (gas) recipient
-        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits("100", 18);
+        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits(EPHEMERAL_CLAIM_GAS_FJ, 18);
         const totalNeeded = totalAmount + (faucetLocked ? 0n : ephAmount);
         if (!faucetLocked && balance && totalNeeded > balance.balance) {
           setError(`Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)}`);

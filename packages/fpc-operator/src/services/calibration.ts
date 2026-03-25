@@ -1,53 +1,56 @@
 import type { AztecNode } from "@aztec/aztec.js/node";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import type {
-  ContractArtifact,
-  FunctionAbi,
-  FunctionCall,
-} from "@aztec/aztec.js/abi";
+import type { AbiType, ContractArtifact, FunctionAbi } from "@aztec/aztec.js/abi";
 import { Contract } from "@aztec/aztec.js/contracts";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
-import { Fr } from "@aztec/aztec.js/fields";
 import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
-import { SubscriptionFPCContractArtifact } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 import { calibrateSponsoredApp } from "@gregojuice/contracts/subscription-fpc";
-import { getStoredFPC } from "./fpcService";
-import { deriveKeys } from "@aztec/aztec.js/keys";
 
 /**
- * Parses user-provided string args into the types expected by the contract function.
- * Simple heuristic: fields/integers → Fr or bigint, booleans → bool, addresses → AztecAddress.
+ * Converts user-provided string args into the format expected by contract.methods[name]().
+ * Follows the same pattern as the Aztec playground: fields and integers are passed as hex
+ * strings, booleans as booleans, addresses as strings, structs as objects.
+ * The contract methods API handles encoding internally via encodeArguments.
  */
-function parseArg(
-  value: string,
-  type: { kind: string; [key: string]: unknown },
-): unknown {
+function parseArg(value: string, type: AbiType): unknown {
   switch (type.kind) {
     case "field":
-      return new Fr(BigInt(value || "0"));
-    case "boolean":
-      return value === "true";
-    case "integer":
-      return BigInt(value || "0");
-    case "struct": {
-      const path = (type as { path?: string }).path ?? "";
-      if (path.includes("AztecAddress"))
-        return AztecAddress.fromString(value || "0x" + "0".repeat(64));
-      return new Fr(BigInt(value || "0"));
-    }
-    case "array": {
-      const inner = type as { type: { kind: string }; length: number };
+    case "integer": {
       try {
-        const items = JSON.parse(value) as string[];
-        return items.map((item) => parseArg(String(item), inner.type));
+        const v = value || "0";
+        const bigint = v.startsWith("0x") ? BigInt(v) : BigInt(v);
+        return "0x" + bigint.toString(16);
       } catch {
-        return Array.from({ length: inner.length }, () =>
-          parseArg("0", inner.type),
-        );
+        return "0x0";
       }
     }
+    case "boolean":
+      return value === "true";
+    case "struct": {
+      if ("path" in type && typeof type.path === "string" && type.path.includes("AztecAddress"))
+        return value || "0x" + "0".repeat(64);
+      // For other structs, pass as hex (best effort)
+      try {
+        return "0x" + BigInt(value || "0").toString(16);
+      } catch {
+        return "0x0";
+      }
+    }
+    case "array": {
+      if ("type" in type && "length" in type) {
+        const innerType = type.type as AbiType;
+        const len = type.length as number;
+        try {
+          const items = JSON.parse(value) as string[];
+          return items.map((item) => parseArg(String(item), innerType));
+        } catch {
+          return Array.from({ length: len }, () => parseArg("0", innerType));
+        }
+      }
+      return [];
+    }
     default:
-      return new Fr(BigInt(value || "0"));
+      return value || "0x0";
   }
 }
 
@@ -62,8 +65,8 @@ export interface CalibrationResult {
 /**
  * Runs calibration for a sponsored function.
  *
- * Creates an ephemeral dummy user wallet, registers the target contract and FPC
- * in both admin and dummy wallets, then runs `calibrateSponsoredApp`.
+ * Uses the admin wallet for both sign_up and subscribe simulation
+ * (no separate dummy user needed).
  */
 export async function runCalibration(params: {
   adminWallet: EmbeddedWallet;
@@ -86,11 +89,6 @@ export async function runCalibration(params: {
     argValues,
   } = params;
 
-  // Get FPC secret key for registration
-  const stored = getStoredFPC();
-  if (!stored) throw new Error("FPC not deployed — run setup first");
-  const fpcSecretKey = Fr.fromString(stored.secretKey);
-
   // Register the target contract in the admin wallet (if not already)
   const adminMeta = await adminWallet.getContractMetadata(
     contractInstance.address,
@@ -99,28 +97,8 @@ export async function runCalibration(params: {
     await adminWallet.registerContract(contractInstance, artifact);
   }
 
-  // Create ephemeral dummy user wallet
-  const dummyWallet = await EmbeddedWallet.create(node, {
-    pxeConfig: { proverEnabled: false },
-  });
-  const dummyAccount = await dummyWallet.createInitializerlessAccount();
-  const dummyAddress = dummyAccount.address;
-
-  // Register the target contract in the dummy wallet
-  await dummyWallet.registerContract(contractInstance, artifact);
-
-  // Register the FPC contract in the dummy wallet (needs the secret key for note decryption)
-  const fpcInstance = await node.getContract(fpcAddress);
-  if (!fpcInstance)
-    throw new Error("FPC contract not found on-chain — is it deployed?");
-  await dummyWallet.registerContract(
-    fpcInstance,
-    SubscriptionFPCContractArtifact,
-    fpcSecretKey,
-  );
-
   // Build the sample FunctionCall
-  const contract = Contract.at(contractInstance.address, artifact, dummyWallet);
+  const contract = Contract.at(contractInstance.address, artifact, adminWallet);
   const parsedArgs = selectedFunction.parameters.map((p, i) =>
     parseArg(argValues[i] ?? "0", p.type),
   );
@@ -128,7 +106,7 @@ export async function runCalibration(params: {
     ...parsedArgs,
   ).getFunctionCall();
 
-  // Run calibration
+  // Run calibration (uses admin wallet for both sign_up and subscribe simulation)
   const result = await calibrateSponsoredApp({
     adminWallet,
     adminAddress,

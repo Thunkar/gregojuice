@@ -6,7 +6,7 @@
   "main": "src/subscription-fpc.ts",
   "exports": {
     "./subscription-fpc": "./src/subscription-fpc.ts",
-    "./artifacts/*": "./artifacts/*"
+    "./artifacts/*": "./artifacts/*.ts"
   },
   "scripts": {
     "clean": "rm -rf ./artifacts ./*/target",
@@ -17,15 +17,15 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.2.0-nightly.20260323",
-    "@aztec/aztec.js": "v4.2.0-nightly.20260323",
-    "@aztec/constants": "v4.2.0-nightly.20260323",
-    "@aztec/entrypoints": "v4.2.0-nightly.20260323",
-    "@aztec/ethereum": "v4.2.0-nightly.20260323",
-    "@aztec/foundation": "v4.2.0-nightly.20260323",
-    "@aztec/noir-contracts.js": "v4.2.0-nightly.20260323",
-    "@aztec/stdlib": "v4.2.0-nightly.20260323",
-    "@aztec/wallets": "v4.2.0-nightly.20260323",
+    "@aztec/accounts": "v4.2.0-nightly.20260324",
+    "@aztec/aztec.js": "v4.2.0-nightly.20260324",
+    "@aztec/constants": "v4.2.0-nightly.20260324",
+    "@aztec/entrypoints": "v4.2.0-nightly.20260324",
+    "@aztec/ethereum": "v4.2.0-nightly.20260324",
+    "@aztec/foundation": "v4.2.0-nightly.20260324",
+    "@aztec/noir-contracts.js": "v4.2.0-nightly.20260324",
+    "@aztec/stdlib": "v4.2.0-nightly.20260324",
+    "@aztec/wallets": "v4.2.0-nightly.20260324",
     "@gregojuice/embedded-wallet": "workspace:*",
     "typescript": "~5.7.3",
     "vitest": "^3"
