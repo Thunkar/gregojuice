@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   ThemeProvider,
   CssBaseline,
@@ -8,6 +8,7 @@ import {
   Paper,
   Chip,
 } from "@mui/material";
+import { shortAddress } from "@gregojuice/common";
 import { theme } from "./theme";
 import { useWallet } from "./contexts/WalletContext";
 import { useNetwork } from "./contexts/NetworkContext";
@@ -29,10 +30,9 @@ export function App() {
       if (!wallet || !node) return;
       setFpcAddress(addr);
       try {
-        const loaded = await loadExistingFPC(wallet, node, {
-          address: addr,
-          secretKey: getStoredFPC()?.secretKey ?? "",
-        });
+        const stored = getStoredFPC();
+        if (!stored) return;
+        const loaded = await loadExistingFPC(wallet, node, stored);
         setFpc(loaded);
       } catch (err) {
         console.error("Failed to load FPC:", err);
@@ -40,13 +40,6 @@ export function App() {
     },
     [wallet, node],
   );
-
-  // Auto-load stored FPC on wallet ready
-  useEffect(() => {
-    if (status !== "ready" || !wallet) return;
-    const stored = getStoredFPC();
-    if (stored?.deployed) handleSetupComplete(stored.address);
-  }, [status, wallet, handleSetupComplete]);
 
   const setupComplete = !!fpc && !!address && !!fpcAddress;
 
@@ -93,7 +86,7 @@ export function App() {
             <Chip label={activeNetwork.name} size="small" variant="outlined" />
             {address && (
               <Chip
-                label={`Admin: ${address.toString().slice(0, 10)}...`}
+                label={`Admin: ${shortAddress(address.toString())}`}
                 size="small"
                 color="primary"
                 variant="outlined"
@@ -101,7 +94,7 @@ export function App() {
             )}
             {fpcAddress && (
               <Chip
-                label={`FPC: ${fpcAddress.slice(0, 10)}...`}
+                label={`FPC: ${shortAddress(fpcAddress)}`}
                 size="small"
                 color="success"
                 variant="outlined"
@@ -111,7 +104,7 @@ export function App() {
 
           <Paper sx={{ p: 3 }}>
             {!setupComplete ? (
-              <SetupWizard onComplete={handleSetupComplete} />
+              <SetupWizard onComplete={handleSetupComplete} onFpcAddressComputed={setFpcAddress} />
             ) : (
               <Dashboard
                 fpc={fpc}

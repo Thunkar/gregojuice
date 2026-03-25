@@ -6,5 +6,5 @@
     "moduleDetection": "force",
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts", "src/**/*.json"]
+  "include": ["src/**/*.ts"]
 }

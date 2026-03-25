@@ -4,7 +4,6 @@ import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 import { AppSignUp } from "./AppSignUp";
 import { AppList } from "./AppList";
-import { PricingTab } from "./PricingTab";
 import { BridgeFunding } from "./BridgeFunding";
 import { useNetwork } from "../contexts/NetworkContext";
 
@@ -29,7 +28,6 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
       >
         <Tab label="Sign Up App" />
         <Tab label="Registered Apps" />
-        <Tab label="Pricing" />
         <Tab label="Fund FPC" />
       </Tabs>
 
@@ -42,8 +40,7 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
         />
       )}
       {tab === 1 && <AppList key={listKey} fpc={fpc} />}
-      {tab === 2 && <PricingTab />}
-      {tab === 3 && (
+      {tab === 2 && (
         <BridgeFunding
           recipient={fpcAddress}
           networkId={activeNetwork.id}

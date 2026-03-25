@@ -5,6 +5,7 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import { formatUnits } from "viem";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
+import { shortAddress } from "@gregojuice/common";
 import { BRIDGE_STEP_LABELS } from "./constants";
 import { useAztecWallet } from "../../contexts/AztecWalletContext";
 import type { BridgeStep, ClaimCredentials, MessageStatus } from "./types";
@@ -84,7 +85,7 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
             }}
           >
             <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
-              {cred.recipient.slice(0, 10)}...{cred.recipient.slice(-4)}
+              {shortAddress(cred.recipient)}
             </Typography>
             <Box sx={{ textAlign: "right" }}>
               <Typography variant="body2" fontWeight={600} color="primary">
@@ -179,7 +180,7 @@ export function Step4BridgeClaim({
               <TextField
                 key={i}
                 fullWidth
-                label={recipients.length > 1 ? `Amount for ${r.address.slice(0, 10)}...` : "Amount"}
+                label={recipients.length > 1 ? `Amount for ${shortAddress(r.address)}` : "Amount"}
                 placeholder="0.0"
                 value={r.amount}
                 onChange={(e) => {

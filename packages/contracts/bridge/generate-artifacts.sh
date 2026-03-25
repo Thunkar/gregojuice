@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Compiles the Solidity contract and generates TypeScript artifacts
-# Usage: cd packages/bridge/contracts && ./generate-artifacts.sh
+# Usage: cd packages/contracts/bridge && ./generate-artifacts.sh
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ echo "Compiling with forge..."
 forge build
 
 ARTIFACT="out/GregoJuiceBridge.sol/GregoJuiceBridge.json"
-OUTPUT="../src/services/bridge-contract-artifacts.ts"
+OUTPUT="../../bridge/src/services/bridge-contract-artifacts.ts"
 
 echo "Generating TypeScript artifacts..."
 python3 -c "

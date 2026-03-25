@@ -110,10 +110,22 @@ export async function prepareFPC(
 ): Promise<{ fpcAddress: AztecAddress; secretKey: Fr }> {
   const stored = getStoredFPC();
   if (stored) {
-    return {
-      fpcAddress: AztecAddress.fromString(stored.address),
-      secretKey: Fr.fromString(stored.secretKey),
-    };
+    // Re-register on reload (PXE state doesn't persist across browser sessions)
+    const fpcAddress = AztecAddress.fromString(stored.address);
+    const secretKey = Fr.fromString(stored.secretKey);
+    const salt = Fr.fromString(stored.salt);
+    const meta = await wallet.getContractMetadata(fpcAddress);
+    if (!meta.instance) {
+      const { publicKeys } = await deriveKeys(secretKey);
+      const deployment = SubscriptionFPCContract.deployWithPublicKeys(
+        publicKeys,
+        wallet,
+        adminAddress,
+      );
+      const instance = await deployment.getInstance({ contractAddressSalt: salt });
+      await wallet.registerContract(instance, SubscriptionFPCContractArtifact, secretKey);
+    }
+    return { fpcAddress, secretKey };
   }
 
   const secretKey = Fr.random();

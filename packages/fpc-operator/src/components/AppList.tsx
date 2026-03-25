@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { shortAddress } from "@gregojuice/common";
 import { FunctionSelector } from "@aztec/aztec.js/abi";
 import type { SubscriptionFPCContract as SubscriptionFPC } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 import {
@@ -136,7 +137,7 @@ export function AppList({ fpc }: AppListProps) {
               return (
                 <TableRow key={i}>
                   <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
-                    {app.appAddress.slice(0, 10)}...{app.appAddress.slice(-4)}
+                    {shortAddress(app.appAddress)}
                   </TableCell>
                   <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
                     {app.functionSelector}

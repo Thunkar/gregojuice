@@ -11,19 +11,21 @@ import {
   StepContent,
 } from "@mui/material";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
+import { shortAddress } from "@gregojuice/common";
 import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
-import { prepareFPC, deployFPC, getStoredFPC } from "../services/fpcService";
+import { prepareFPC, deployFPC } from "../services/fpcService";
 import { BridgeFunding } from "./BridgeFunding";
 
 const STEPS = ["Initialize", "Fund Admin & FPC", "Deploy FPC"];
 
 interface SetupWizardProps {
   onComplete: (fpcAddress: string) => void;
+  onFpcAddressComputed?: (fpcAddress: string) => void;
 }
 
-export function SetupWizard({ onComplete }: SetupWizardProps) {
-  const { status, wallet, address } = useWallet();
+export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardProps) {
+  const { status, wallet, address, node } = useWallet();
   const { activeNetwork } = useNetwork();
   const [activeStep, setActiveStep] = useState(0);
   const [fpcAddress, setFpcAddress] = useState<string | null>(null);
@@ -31,23 +33,36 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [deployError, setDeployError] = useState<string | null>(null);
   const bridgeUrl = import.meta.env.VITE_BRIDGE_URL ?? "http://localhost:5173";
   const hasInitRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
-  // Once wallet is ready, compute FPC address and check balances (runs once)
+  // Once wallet is ready, determine the right starting step
   useEffect(() => {
-    if (status !== "ready" || !wallet || !address || hasInitRef.current) return;
-    hasInitRef.current = true;
-
-    const stored = getStoredFPC();
-    if (stored?.deployed) {
-      onComplete(stored.address);
+    if (
+      status !== "ready" ||
+      !wallet ||
+      !address ||
+      !node ||
+      hasInitRef.current
+    )
       return;
-    }
+    hasInitRef.current = true;
 
     (async () => {
       try {
         const { fpcAddress: fpcAddr } = await prepareFPC(wallet, address);
-        setFpcAddress(fpcAddr.toString());
+        const fpcAddrStr = fpcAddr.toString();
+        setFpcAddress(fpcAddrStr);
+        onFpcAddressComputed?.(fpcAddrStr);
 
+        // Check if the FPC is actually deployed on-chain (survives reorgs)
+        const onChainInstance = await node.getContract(fpcAddr);
+        if (onChainInstance) {
+          onCompleteRef.current(fpcAddr.toString());
+          return;
+        }
+
+        // Not deployed — check if addresses have funds to skip the funding step
         const fj = FeeJuiceContract.at(wallet);
         const [adminBal, fpcBal] = await Promise.all([
           fj.methods
@@ -65,11 +80,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         } else {
           setActiveStep(1);
         }
-      } catch {
+      } catch (err) {
+        console.error("Setup init failed:", err);
         setActiveStep(1);
       }
     })();
-  }, [status, wallet, address, onComplete]);
+  }, [status, wallet, address, node]);
 
   const handleDeploy = async () => {
     if (!wallet || !address) return;
@@ -77,7 +93,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
     setDeployError(null);
     try {
       const { fpcAddress: addr } = await deployFPC(wallet, address);
-      onComplete(addr.toString());
+      onCompleteRef.current(addr.toString());
     } catch (err) {
       setDeployError(err instanceof Error ? err.message : "Deploy failed");
     } finally {
@@ -122,24 +138,6 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               Bridge fee juice to fund both your admin account and the FPC
               contract in a single transaction.
             </Typography>
-            {address && (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mb: 0.5, fontFamily: "monospace" }}
-              >
-                Admin: {address.toString().slice(0, 14)}...
-              </Typography>
-            )}
-            {fpcAddress && (
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", mb: 2, fontFamily: "monospace" }}
-              >
-                FPC: {fpcAddress.slice(0, 14)}...
-              </Typography>
-            )}
             {bridgeRecipients && (
               <BridgeFunding
                 recipients={bridgeRecipients}
@@ -148,14 +146,6 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
                 onComplete={() => setActiveStep(2)}
               />
             )}
-            <Button
-              variant="text"
-              size="small"
-              onClick={() => setActiveStep(2)}
-              sx={{ mt: 1 }}
-            >
-              Skip (already funded)
-            </Button>
           </StepContent>
         </Step>
 

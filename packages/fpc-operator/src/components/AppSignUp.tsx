@@ -16,18 +16,20 @@ import {
   Chip,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
+import { shortAddress } from "@gregojuice/common";
 import { Contract } from "@aztec/aztec.js/contracts";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
 import { Fr } from "@aztec/aztec.js/fields";
-import { formatUnits, parseUnits } from "viem";
+import { parseUnits } from "viem";
 import { FunctionSelector as AztecFunctionSelector, type ContractArtifact, type FunctionAbi } from "@aztec/aztec.js/abi";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 import { useWallet } from "../contexts/WalletContext";
 import { signUpApp } from "../services/fpcService";
-import { runCalibration, type CalibrationResult as CalibrationData } from "../services/calibration";
+import { runCalibration, retryCalibrationSimulation, CalibrationError, type CalibrationResult as CalibrationData } from "../services/calibration";
 import { FeePricingService } from "../services/fee-pricing";
 import { ArtifactUpload } from "./ArtifactUpload";
 import { FunctionSelector } from "./FunctionSelector";
@@ -38,9 +40,7 @@ const STEPS = [
   "Upload Artifact",
   "Select Function",
   "Register Contract",
-  "Function Arguments",
-  "Calibrate",
-  "Sign Up",
+  "Calibrate & Sign Up",
 ];
 
 interface AppSignUpProps {
@@ -83,8 +83,9 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationData | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [calibrationIndex, setCalibrationIndex] = useState<number | null>(null);
 
-  // Step 6: Sign up
+  // Step 5: Sign up
   const [maxFeeFj, setMaxFeeFj] = useState("");
   const [maxUses, setMaxUses] = useState("1");
   const [maxUsers, setMaxUsers] = useState("16");
@@ -114,6 +115,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setSelectedFunction(fn);
     setArgValues(getDefaultArgs(fn));
     setCalibrationResult(null);
+    setCalibrationIndex(null);
     setActiveStep(2);
   };
 
@@ -181,20 +183,26 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setCalibrating(true);
     setCalibrationError(null);
     try {
-      const result = await runCalibration({
+      const baseParams = {
         adminWallet: wallet,
         adminAddress,
-        node,
         fpcAddress: AztecAddress.fromString(fpcAddress),
         artifact,
         contractInstance,
         selectedFunction,
         argValues,
-      });
+      };
+
+      const result = calibrationIndex !== null
+        ? await retryCalibrationSimulation({ ...baseParams, calibrationIndex })
+        : await runCalibration(baseParams);
+
       setCalibrationResult(result);
-      setMaxFeeFj(formatUnits(result.maxFee, 18));
-      setActiveStep(5);
+      setCalibrationIndex(result.calibrationIndex);
     } catch (err) {
+      if (err instanceof CalibrationError) {
+        setCalibrationIndex(err.calibrationIndex);
+      }
       setCalibrationError(err instanceof Error ? err.message : "Calibration failed");
     } finally {
       setCalibrating(false);
@@ -218,6 +226,24 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       });
       setSuccess(true);
       onSignedUp?.();
+      // Reset wizard after a short delay so the success message is visible
+      setTimeout(() => {
+        setActiveStep(0);
+        setArtifact(null);
+        setSelectedFunction(null);
+        setContractInstance(null);
+        setContractAddress("");
+        setArgValues([]);
+        setCalibrationResult(null);
+        setCalibrationIndex(null);
+        setCalibrationError(null);
+        setMaxFeeFj("");
+        setConfigIndex("0");
+        setMaxUses("1");
+        setMaxUsers("16");
+        setExtraContracts([]);
+        setSuccess(false);
+      }, 3000);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Sign-up failed");
     } finally {
@@ -232,7 +258,11 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       <Stepper activeStep={activeStep} orientation="vertical">
         {/* Step 0: Upload Artifact */}
         <Step>
-          <StepLabel>{STEPS[0]}</StepLabel>
+          <StepLabel
+            onClick={() => activeStep > 0 && setActiveStep(0)}
+            sx={{ cursor: activeStep > 0 ? "pointer" : "default" }}
+            optional={activeStep > 0 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
+          >{STEPS[0]}</StepLabel>
           <StepContent>
             {artifact ? (
               <Box>
@@ -251,7 +281,11 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
 
         {/* Step 1: Select Function */}
         <Step>
-          <StepLabel>{STEPS[1]}</StepLabel>
+          <StepLabel
+            onClick={() => activeStep > 1 && setActiveStep(1)}
+            sx={{ cursor: activeStep > 1 ? "pointer" : "default" }}
+            optional={activeStep > 1 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
+          >{STEPS[1]}</StepLabel>
           <StepContent>
             {artifact && (
               <FunctionSelector
@@ -265,7 +299,11 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
 
         {/* Step 2: Register Contract */}
         <Step>
-          <StepLabel>{STEPS[2]}</StepLabel>
+          <StepLabel
+            onClick={() => activeStep > 2 && setActiveStep(2)}
+            sx={{ cursor: activeStep > 2 ? "pointer" : "default" }}
+            optional={activeStep > 2 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
+          >{STEPS[2]}</StepLabel>
           <StepContent>
             <ToggleButtonGroup
               value={instanceMode}
@@ -336,7 +374,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
             {contractInstance && (
               <>
                 <Alert severity="success" sx={{ mt: 1, mb: 2 }}>
-                  Registered: {contractInstance.address.toString().slice(0, 14)}...
+                  Registered: {shortAddress(contractInstance.address.toString())}
                 </Alert>
 
                 {/* Extra contract registrations */}
@@ -347,7 +385,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                 {extraContracts.map((ec, i) => (
                   <Chip
                     key={i}
-                    label={`${ec.name} (${ec.address.slice(0, 10)}...)`}
+                    label={`${ec.name} (${shortAddress(ec.address)})`}
                     onDelete={() => removeExtraContract(i)}
                     size="small"
                     sx={{ mr: 0.5, mb: 0.5 }}
@@ -402,121 +440,119 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
           </StepContent>
         </Step>
 
-        {/* Step 3: Function Arguments */}
+        {/* Step 3: Calibrate & Sign Up */}
         <Step>
           <StepLabel>{STEPS[3]}</StepLabel>
           <StepContent>
             {selectedFunction && (
               <>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Pre-filled with zero defaults. Modify if the function needs specific values for accurate gas estimation.
+                  Function arguments for gas estimation. Modify and re-run if calibration fails.
                 </Typography>
-                <FunctionArgsForm fn={selectedFunction} values={argValues} onChange={setArgValues} />
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={() => setActiveStep(4)}
-                  sx={{ mt: 2 }}
-                >
-                  Continue
-                </Button>
+                <FunctionArgsForm fn={selectedFunction} values={argValues} onChange={setArgValues} adminAddress={adminAddress.toString()} />
+
+                {calibrationResult && (
+                  <Box sx={{ mt: 2 }}>
+                    <CalibrationResult
+                      result={calibrationResult}
+                      maxFeeFj={maxFeeFj}
+                      onMaxFeeChange={setMaxFeeFj}
+                      maxUses={parseInt(maxUses) || 1}
+                      maxUsers={parseInt(maxUsers) || 1}
+                    />
+                  </Box>
+                )}
+                {calibrationError && <Alert severity="error" sx={{ mt: 1 }}>{calibrationError}</Alert>}
+
+                {!calibrationResult ? (
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleCalibrate}
+                    disabled={calibrating}
+                    sx={{ mt: 2 }}
+                  >
+                    {calibrating ? (
+                      <>
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                        {calibrationIndex !== null ? "Retrying..." : "Calibrating..."}
+                      </>
+                    ) : calibrationIndex !== null ? (
+                      "Retry Calibration"
+                    ) : (
+                      "Run Calibration"
+                    )}
+                  </Button>
+                ) : (
+                  <>
+                    {/* Sign-up parameters */}
+                    <Box sx={{ display: "flex", gap: 2, mt: 2, mb: 2 }}>
+                      <TextField
+                        label="Config Index"
+                        type="number"
+                        value={configIndex}
+                        onChange={(e) => setConfigIndex(e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        label="Uses / subscription"
+                        type="number"
+                        value={maxUses}
+                        onChange={(e) => setMaxUses(e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        label="Users (slots)"
+                        type="number"
+                        value={maxUsers}
+                        onChange={(e) => setMaxUsers(e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                        helperText="1–16"
+                      />
+                    </Box>
+
+                    {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}
+                    {success && <Alert severity="success" sx={{ mb: 2 }}>App signed up successfully!</Alert>}
+
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleCalibrate}
+                        disabled={calibrating || submitting}
+                        sx={{ flex: 1 }}
+                      >
+                        {calibrating ? (
+                          <>
+                            <CircularProgress size={20} sx={{ mr: 1 }} />
+                            Recalibrating...
+                          </>
+                        ) : (
+                          "Recalibrate"
+                        )}
+                      </Button>
+                      <Button
+                        variant="contained"
+                        onClick={handleSignUp}
+                        disabled={submitting || calibrating || !maxFeeFj}
+                        sx={{ flex: 1 }}
+                      >
+                        {submitting ? (
+                          <>
+                            <CircularProgress size={20} sx={{ mr: 1 }} />
+                            Signing up...
+                          </>
+                        ) : (
+                          "Sign Up App"
+                        )}
+                      </Button>
+                    </Box>
+                  </>
+                )}
               </>
             )}
-          </StepContent>
-        </Step>
-
-        {/* Step 4: Calibrate */}
-        <Step>
-          <StepLabel>{STEPS[4]}</StepLabel>
-          <StepContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Run a calibration transaction to measure gas usage and compute the recommended max fee.
-            </Typography>
-
-            {calibrationResult && <CalibrationResult result={calibrationResult} />}
-            {calibrationError && <Alert severity="error" sx={{ mt: 1, mb: 1 }}>{calibrationError}</Alert>}
-
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={handleCalibrate}
-              disabled={calibrating}
-              sx={{ mt: calibrationResult ? 2 : 0 }}
-            >
-              {calibrating ? (
-                <>
-                  <CircularProgress size={20} sx={{ mr: 1 }} />
-                  Calibrating...
-                </>
-              ) : calibrationResult ? (
-                "Re-calibrate"
-              ) : (
-                "Run Calibration"
-              )}
-            </Button>
-          </StepContent>
-        </Step>
-
-        {/* Step 5: Sign Up */}
-        <Step>
-          <StepLabel>{STEPS[5]}</StepLabel>
-          <StepContent>
-            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-              <TextField
-                label="Max Fee (FJ)"
-                value={maxFeeFj}
-                onChange={(e) => setMaxFeeFj(e.target.value)}
-                size="small"
-                type="number"
-                sx={{ flex: 2 }}
-              />
-              <TextField
-                label="Config Index"
-                type="number"
-                value={configIndex}
-                onChange={(e) => setConfigIndex(e.target.value)}
-                size="small"
-                sx={{ flex: 1 }}
-              />
-            </Box>
-            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-              <TextField
-                label="Uses / subscription"
-                type="number"
-                value={maxUses}
-                onChange={(e) => setMaxUses(e.target.value)}
-                size="small"
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                label="Users (slots)"
-                type="number"
-                value={maxUsers}
-                onChange={(e) => setMaxUsers(e.target.value)}
-                size="small"
-                sx={{ flex: 1 }}
-                helperText="1–16 per call"
-              />
-            </Box>
-
-            {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}
-            {success && <Alert severity="success" sx={{ mb: 2 }}>App signed up successfully!</Alert>}
-
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={handleSignUp}
-              disabled={submitting || !maxFeeFj}
-            >
-              {submitting ? (
-                <>
-                  <CircularProgress size={20} sx={{ mr: 1 }} />
-                  Signing up...
-                </>
-              ) : (
-                "Sign Up App"
-              )}
-            </Button>
           </StepContent>
         </Step>
       </Stepper>

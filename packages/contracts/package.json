@@ -14,7 +14,10 @@
     "codegen": "aztec codegen ./target -o artifacts",
     "build": "yarn compile && yarn codegen",
     "build:codegen": "yarn codegen",
-    "test": "vitest run"
+    "test": "vitest run",
+    "forge:build": "cd bridge && forge build",
+    "forge:deploy": "cd bridge && forge script script/Deploy.s.sol --rpc-url ${L1_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com} --private-key $PRIVATE_KEY --broadcast",
+    "forge:artifacts": "cd bridge && ./generate-artifacts.sh"
   },
   "devDependencies": {
     "@aztec/accounts": "v4.2.0-nightly.20260324",

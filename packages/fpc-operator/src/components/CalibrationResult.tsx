@@ -1,17 +1,38 @@
-import { useEffect, useState, useMemo } from "react";
-import { Box, Typography, Paper } from "@mui/material";
-import { formatUnits } from "viem";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { Box, Typography, Paper, TextField, Slider } from "@mui/material";
+import { formatUnits, parseUnits } from "viem";
 import { useWallet } from "../contexts/WalletContext";
-import { FeePricingService } from "../services/fee-pricing";
+import { useNetwork } from "../contexts/NetworkContext";
+import { FeePricingService, fetchFeeStats, type FeeStats } from "../services/fee-pricing";
 import type { CalibrationResult as CalibrationData } from "../services/calibration";
 
 interface CalibrationResultProps {
   result: CalibrationData;
+  maxFeeFj: string;
+  onMaxFeeChange: (fj: string) => void;
+  maxUses: number;
+  maxUsers: number;
 }
 
-export function CalibrationResult({ result }: CalibrationResultProps) {
+function computeMaxFee(
+  gasLimits: { daGas: number; l2Gas: number },
+  teardownGasLimits: { daGas: number; l2Gas: number },
+  feePerDaGas: bigint,
+  feePerL2Gas: bigint,
+): bigint {
+  const totalDaGas = BigInt(gasLimits.daGas + teardownGasLimits.daGas);
+  const totalL2Gas = BigInt(gasLimits.l2Gas + teardownGasLimits.l2Gas);
+  return totalDaGas * feePerDaGas + totalL2Gas * feePerL2Gas;
+}
+
+export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, maxUsers }: CalibrationResultProps) {
   const { rollupAddress, l1ChainId, l1RpcUrl } = useWallet();
-  const [usdEstimate, setUsdEstimate] = useState<string | null>(null);
+  const { activeNetwork } = useNetwork();
+
+  const [stats, setStats] = useState<FeeStats | null>(null);
+  const [feeMultiplier, setFeeMultiplier] = useState(2);
+  const [blockRange, setBlockRange] = useState(100);
+  const [perTxUsd, setPerTxUsd] = useState<number | null>(null);
 
   const pricingService = useMemo(() => {
     const svc = new FeePricingService(l1RpcUrl ?? undefined, l1ChainId ?? undefined);
@@ -19,40 +40,148 @@ export function CalibrationResult({ result }: CalibrationResultProps) {
     return svc;
   }, [rollupAddress, l1ChainId, l1RpcUrl]);
 
-  useEffect(() => {
-    if (!pricingService.enabled || result.maxFee === 0n) return;
-    pricingService.estimateCostUsd(result.maxFee).then((r) => {
-      if (r) setUsdEstimate(`$${r.costUsd.toFixed(4)}`);
-    }).catch(() => {});
-  }, [pricingService, result.maxFee]);
+  // Fetch fee stats from clustec
+  const loadFeeStats = useCallback(() => {
+    fetchFeeStats(activeNetwork.id, blockRange).then(setStats).catch(() => {});
+  }, [activeNetwork.id, blockRange]);
 
-  const maxFeeFj = formatUnits(result.maxFee, 18);
+  useEffect(() => { loadFeeStats(); }, [loadFeeStats]);
+
+  // P75 fee-per-gas values from the network
+  const p75FeePerDaGas = stats ? BigInt(Math.round(Number(stats.maxFeePerDaGas.p75))) : null;
+  const p75FeePerL2Gas = stats ? BigInt(Math.round(Number(stats.maxFeePerL2Gas.p75))) : null;
+
+  // Compute max fee from calibrated gas limits × P75 fee-per-gas × multiplier
+  useEffect(() => {
+    if (p75FeePerDaGas === null || p75FeePerL2Gas === null) return;
+    const multiplierBp = BigInt(Math.round(feeMultiplier * 100));
+    const baseFee = computeMaxFee(
+      result.gasLimits,
+      result.teardownGasLimits,
+      p75FeePerDaGas,
+      p75FeePerL2Gas,
+    );
+    const maxFeeRaw = baseFee * multiplierBp / 100n;
+    onMaxFeeChange(formatUnits(maxFeeRaw, 18));
+  }, [p75FeePerDaGas, p75FeePerL2Gas, feeMultiplier, result, onMaxFeeChange]);
+
+  // USD estimate per tx
+  useEffect(() => {
+    if (!maxFeeFj || !pricingService.enabled) { setPerTxUsd(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = parseUnits(maxFeeFj, 18);
+        const est = await pricingService.estimateCostUsd(raw);
+        if (!cancelled && est) setPerTxUsd(est.costUsd);
+      } catch { if (!cancelled) setPerTxUsd(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [maxFeeFj, pricingService]);
+
+  const totalPackageFj = maxFeeFj ? (Number(maxFeeFj) * maxUses * maxUsers).toFixed(6) : null;
+  const totalPackageUsd = perTxUsd !== null ? perTxUsd * maxUses * maxUsers : null;
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Typography variant="subtitle2" sx={{ mb: 1.5 }}>
-        Calibration Results
+        Gas Estimates (from calibration)
       </Typography>
 
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-        <Typography variant="body2" color="text.secondary">Recommended Max Fee</Typography>
-        <Typography variant="body2" fontWeight={700} color="primary">
-          {maxFeeFj} FJ {usdEstimate && <Typography component="span" variant="caption" color="text.secondary">({usdEstimate})</Typography>}
+      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
+        <Typography variant="caption" color="text.secondary">Gas Limits</Typography>
+        <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+          DA: {result.gasLimits.daGas.toLocaleString()} · L2: {result.gasLimits.l2Gas.toLocaleString()}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">Teardown</Typography>
+        <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+          DA: {result.teardownGasLimits.daGas.toLocaleString()} · L2: {result.teardownGasLimits.l2Gas.toLocaleString()}
         </Typography>
       </Box>
 
-      <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">Gas Limits (DA / L2)</Typography>
-        <Typography variant="caption">
-          {result.estimatedGas.gasLimits.daGas} / {result.estimatedGas.gasLimits.l2Gas}
-        </Typography>
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Fee per Gas (network P75, last {blockRange} blocks)
+      </Typography>
+
+      {stats && (
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">DA fee/gas (P75)</Typography>
+          <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+            {Number(stats.maxFeePerDaGas.p75).toLocaleString()}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">L2 fee/gas (P75)</Typography>
+          <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+            {Number(stats.maxFeePerL2Gas.p75).toLocaleString()}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">Base fee L2</Typography>
+          <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+            {Number(stats.baseFee.l2).toLocaleString()}
+          </Typography>
+        </Box>
+      )}
+
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Max Fee
+      </Typography>
+
+      <Box sx={{ display: "flex", gap: 2, mb: 1 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="caption" color="text.secondary">Safety multiplier on P75 fee/gas</Typography>
+          <Slider
+            value={feeMultiplier}
+            onChange={(_, v) => setFeeMultiplier(v as number)}
+            min={1}
+            max={10}
+            step={0.5}
+            marks={[{ value: 1, label: "1x" }, { value: 5, label: "5x" }, { value: 10, label: "10x" }]}
+            valueLabelDisplay="auto"
+            valueLabelFormat={(v) => `${v}x`}
+            size="small"
+          />
+        </Box>
+        <TextField
+          label="Blocks"
+          type="number"
+          value={blockRange}
+          onChange={(e) => setBlockRange(Math.max(1, parseInt(e.target.value) || 100))}
+          size="small"
+          sx={{ width: 80 }}
+        />
       </Box>
 
-      <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-        <Typography variant="caption" color="text.secondary">Teardown Gas (DA / L2)</Typography>
-        <Typography variant="caption">
-          {result.estimatedGas.teardownGasLimits.daGas} / {result.estimatedGas.teardownGasLimits.l2Gas}
-        </Typography>
+      <TextField
+        fullWidth
+        label="Max Fee per tx (FJ)"
+        value={maxFeeFj}
+        onChange={(e) => onMaxFeeChange(e.target.value)}
+        size="small"
+        helperText={perTxUsd !== null ? `≈ $${perTxUsd.toFixed(6)} per sponsored tx` : "Adjust multiplier or enter manually"}
+        sx={{ mb: 2 }}
+      />
+
+      {/* Cost summary */}
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, p: 1.5, bgcolor: "rgba(212,255,40,0.05)", border: "1px solid", borderColor: "primary.main" }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Typography variant="caption" color="text.secondary">Per tx</Typography>
+          <Typography variant="caption" fontWeight={600}>
+            {maxFeeFj || "—"} FJ
+            {perTxUsd !== null && <Typography component="span" variant="caption" color="text.secondary"> (${perTxUsd.toFixed(6)})</Typography>}
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Typography variant="caption" color="text.secondary">Per subscription ({maxUses} uses)</Typography>
+          <Typography variant="caption" fontWeight={600}>
+            {maxFeeFj ? (Number(maxFeeFj) * maxUses).toFixed(6) : "—"} FJ
+            {perTxUsd !== null && <Typography component="span" variant="caption" color="text.secondary"> (${(perTxUsd * maxUses).toFixed(6)})</Typography>}
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid", borderColor: "divider", pt: 0.5 }}>
+          <Typography variant="caption" fontWeight={600}>Total ({maxUsers} × {maxUses})</Typography>
+          <Typography variant="caption" fontWeight={700} color="primary">
+            {totalPackageFj ?? "—"} FJ
+            {totalPackageUsd !== null && <Typography component="span" variant="caption" color="text.secondary"> (${totalPackageUsd.toFixed(4)})</Typography>}
+          </Typography>
+        </Box>
       </Box>
     </Paper>
   );
