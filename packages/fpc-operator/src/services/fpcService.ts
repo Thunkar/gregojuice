@@ -245,10 +245,15 @@ export async function queryAvailableSlots(
   fpc: SubscriptionFPCContract,
   configId: Fr,
 ): Promise<number> {
-  const result = await fpc.methods
-    .count_available_slots(configId)
-    .simulate();
-  return Number(result);
+  try {
+    const { result } = await fpc.methods
+      .count_available_slots(configId)
+      .simulate({ from: fpc.address });
+    return Number(result);
+  } catch (err) {
+    console.error("queryAvailableSlots failed:", err);
+    return -1;
+  }
 }
 
 // ── Query subscription info ──────────────────────────────────────────
@@ -258,9 +263,9 @@ export async function querySubscriptionInfo(
   user: AztecAddress,
   configId: Fr,
 ): Promise<{ hasSubscription: boolean; remainingUses: number }> {
-  const result = await fpc.methods
+  const { result } = await fpc.methods
     .get_subscription_info(user, configId)
-    .simulate();
+    .simulate({ from: fpc.address });
   return {
     hasSubscription: result[0] as boolean,
     remainingUses: Number(result[1]),

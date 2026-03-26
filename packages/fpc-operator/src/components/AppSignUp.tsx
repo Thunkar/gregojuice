@@ -37,9 +37,9 @@ import { FunctionArgsForm, getDefaultArgs } from "./FunctionArgsForm";
 import { CalibrationResult } from "./CalibrationResult";
 
 const STEPS = [
-  "Upload Artifact",
+  "Contract Artifact & Address",
   "Select Function",
-  "Register Contract",
+  "Additional Contracts",
   "Calibrate & Sign Up",
 ];
 
@@ -108,7 +108,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setSelectedFunction(null);
     setContractInstance(null);
     setCalibrationResult(null);
-    setActiveStep(1);
+    // Stay on step 0 — user still needs to register the contract address
   };
 
   const handleFunctionSelected = (fn: FunctionAbi) => {
@@ -129,6 +129,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       if (!instance) throw new Error("Contract not found on-chain at this address");
       await wallet.registerContract(instance, artifact);
       setContractInstance(instance);
+      setActiveStep(1);
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -148,6 +149,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       await wallet.registerContract(instance, artifact);
       setContractInstance(instance);
       setContractAddress(instance.address.toString());
+      setActiveStep(1);
     } catch (err) {
       setRegisterError(err instanceof Error ? err.message : "Failed to compute instance");
     } finally {
@@ -256,7 +258,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   return (
     <Box>
       <Stepper activeStep={activeStep} orientation="vertical">
-        {/* Step 0: Upload Artifact */}
+        {/* Step 0: Contract Artifact & Address */}
         <Step>
           <StepLabel
             onClick={() => activeStep > 0 && setActiveStep(0)}
@@ -264,17 +266,89 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
             optional={activeStep > 0 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
           >{STEPS[0]}</StepLabel>
           <StepContent>
-            {artifact ? (
-              <Box>
-                <Alert severity="success" sx={{ mb: 1 }}>
-                  Loaded: {artifact.name} ({artifact.functions.length} functions)
-                </Alert>
-                <Button size="small" onClick={() => { setArtifact(null); setActiveStep(0); }}>
-                  Change artifact
-                </Button>
-              </Box>
-            ) : (
+            {!artifact ? (
               <ArtifactUpload onArtifactLoaded={handleArtifactLoaded} />
+            ) : (
+              <Box>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+                  <Chip label={`${artifact.name} (${artifact.functions.length} functions)`} size="small" />
+                  <Button size="small" onClick={() => { setArtifact(null); setContractInstance(null); }}>
+                    Change
+                  </Button>
+                </Box>
+
+                <ToggleButtonGroup
+                  value={instanceMode}
+                  exclusive
+                  onChange={(_, v) => { if (v) setInstanceMode(v); }}
+                  fullWidth
+                  size="small"
+                  sx={{ mb: 2 }}
+                >
+                  <ToggleButton value="public">Publicly Deployed</ToggleButton>
+                  <ToggleButton value="compute">Compute from Params</ToggleButton>
+                </ToggleButtonGroup>
+
+                {instanceMode === "public" && (
+                  <Box>
+                    <TextField
+                      fullWidth
+                      label="Contract Address"
+                      placeholder="0x..."
+                      value={contractAddress}
+                      onChange={(e) => setContractAddress(e.target.value)}
+                      size="small"
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleRegisterPublic}
+                      disabled={registering || !contractAddress}
+                    >
+                      {registering ? <CircularProgress size={20} /> : "Fetch & Register"}
+                    </Button>
+                  </Box>
+                )}
+
+                {instanceMode === "compute" && (
+                  <Box>
+                    <TextField
+                      fullWidth
+                      label="Salt"
+                      placeholder="0 or 0x..."
+                      value={computeSalt}
+                      onChange={(e) => setComputeSalt(e.target.value)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Deployer Address"
+                      placeholder="0x... (or leave empty for zero)"
+                      value={computeDeployer}
+                      onChange={(e) => setComputeDeployer(e.target.value)}
+                      size="small"
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleRegisterComputed}
+                      disabled={registering}
+                    >
+                      {registering ? <CircularProgress size={20} /> : "Compute & Register"}
+                    </Button>
+                  </Box>
+                )}
+
+                {registerError && <Alert severity="error" sx={{ mt: 1 }}>{registerError}</Alert>}
+                {contractInstance && (
+                  <Alert severity="success" sx={{ mt: 1 }}>
+                    Registered: {shortAddress(contractInstance.address.toString())}
+                  </Alert>
+                )}
+              </Box>
             )}
           </StepContent>
         </Step>
@@ -297,7 +371,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
           </StepContent>
         </Step>
 
-        {/* Step 2: Register Contract */}
+        {/* Step 2: Additional Contracts */}
         <Step>
           <StepLabel
             onClick={() => activeStep > 2 && setActiveStep(2)}
@@ -305,138 +379,63 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
             optional={activeStep > 2 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
           >{STEPS[2]}</StepLabel>
           <StepContent>
-            <ToggleButtonGroup
-              value={instanceMode}
-              exclusive
-              onChange={(_, v) => { if (v) setInstanceMode(v); }}
-              fullWidth
-              size="small"
-              sx={{ mb: 2 }}
-            >
-              <ToggleButton value="public">Publicly Deployed</ToggleButton>
-              <ToggleButton value="compute">Compute from Params</ToggleButton>
-            </ToggleButtonGroup>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              If the sponsored function calls other contracts, register them here. Otherwise skip this step.
+            </Typography>
 
-            {instanceMode === "public" && (
-              <Box>
+            {extraContracts.map((ec, i) => (
+              <Chip
+                key={i}
+                label={`${ec.name} (${shortAddress(ec.address)})`}
+                onDelete={() => removeExtraContract(i)}
+                size="small"
+                sx={{ mr: 0.5, mb: 0.5 }}
+              />
+            ))}
+
+            {!extraArtifact ? (
+              <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
+            ) : (
+              <Box sx={{ mt: 1 }}>
+                <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
                 <TextField
                   fullWidth
                   label="Contract Address"
                   placeholder="0x..."
-                  value={contractAddress}
-                  onChange={(e) => setContractAddress(e.target.value)}
-                  size="small"
-                  sx={{ mb: 2 }}
-                />
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={handleRegisterPublic}
-                  disabled={registering || !contractAddress}
-                >
-                  {registering ? <CircularProgress size={20} /> : "Fetch & Register"}
-                </Button>
-              </Box>
-            )}
-
-            {instanceMode === "compute" && (
-              <Box>
-                <TextField
-                  fullWidth
-                  label="Salt"
-                  placeholder="0 or 0x..."
-                  value={computeSalt}
-                  onChange={(e) => setComputeSalt(e.target.value)}
+                  value={extraAddress}
+                  onChange={(e) => setExtraAddress(e.target.value)}
                   size="small"
                   sx={{ mb: 1 }}
                 />
-                <TextField
-                  fullWidth
-                  label="Deployer Address"
-                  placeholder="0x... (or leave empty for zero)"
-                  value={computeDeployer}
-                  onChange={(e) => setComputeDeployer(e.target.value)}
-                  size="small"
-                  sx={{ mb: 2 }}
-                />
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={handleRegisterComputed}
-                  disabled={registering}
-                >
-                  {registering ? <CircularProgress size={20} /> : "Compute & Register"}
-                </Button>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleRegisterExtra}
+                    disabled={extraRegistering || !extraAddress}
+                    startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                  >
+                    Register
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => { setExtraArtifact(null); setExtraAddress(""); setExtraError(null); }}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+                {extraError && <Alert severity="error" sx={{ mt: 1 }}>{extraError}</Alert>}
               </Box>
             )}
 
-            {registerError && <Alert severity="error" sx={{ mt: 1 }}>{registerError}</Alert>}
-            {contractInstance && (
-              <>
-                <Alert severity="success" sx={{ mt: 1, mb: 2 }}>
-                  Registered: {shortAddress(contractInstance.address.toString())}
-                </Alert>
-
-                {/* Extra contract registrations */}
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  If the sponsored function calls other contracts, register them here.
-                </Typography>
-
-                {extraContracts.map((ec, i) => (
-                  <Chip
-                    key={i}
-                    label={`${ec.name} (${shortAddress(ec.address)})`}
-                    onDelete={() => removeExtraContract(i)}
-                    size="small"
-                    sx={{ mr: 0.5, mb: 0.5 }}
-                  />
-                ))}
-
-                {!extraArtifact ? (
-                  <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
-                ) : (
-                  <Box sx={{ mt: 1 }}>
-                    <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
-                    <TextField
-                      fullWidth
-                      label="Contract Address"
-                      placeholder="0x..."
-                      value={extraAddress}
-                      onChange={(e) => setExtraAddress(e.target.value)}
-                      size="small"
-                      sx={{ mb: 1 }}
-                    />
-                    <Box sx={{ display: "flex", gap: 1 }}>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={handleRegisterExtra}
-                        disabled={extraRegistering || !extraAddress}
-                        startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
-                      >
-                        Register
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() => { setExtraArtifact(null); setExtraAddress(""); setExtraError(null); }}
-                      >
-                        Cancel
-                      </Button>
-                    </Box>
-                    {extraError && <Alert severity="error" sx={{ mt: 1 }}>{extraError}</Alert>}
-                  </Box>
-                )}
-
-                <Button
-                  fullWidth
-                  variant="contained"
-                  onClick={() => setActiveStep(3)}
-                  sx={{ mt: 2 }}
-                >
-                  Continue
-                </Button>
-              </>
-            )}
+            <Button
+              fullWidth
+              variant="contained"
+              onClick={() => setActiveStep(3)}
+              sx={{ mt: 2 }}
+            >
+              Continue
+            </Button>
           </StepContent>
         </Step>
 

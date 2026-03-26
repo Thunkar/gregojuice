@@ -64,13 +64,14 @@ export function App() {
             backgroundSize: "cover",
             backgroundPosition: "center",
             backgroundRepeat: "no-repeat",
-            filter: "grayscale(60%) brightness(0.5) contrast(0.8) saturate(0.8)",
+            filter:
+              "grayscale(60%) brightness(0.5) contrast(0.8) saturate(0.8)",
             opacity: 0.6,
             zIndex: 0,
           },
         }}
       >
-        <Container maxWidth="sm" sx={{ position: "relative", zIndex: 1 }}>
+        <Container maxWidth="md" sx={{ position: "relative", zIndex: 1 }}>
           {/* Header */}
           <Box sx={{ textAlign: "center", mb: 4, mt: 4 }}>
             <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
@@ -82,7 +83,9 @@ export function App() {
           </Box>
 
           {/* Status chips */}
-          <Box sx={{ display: "flex", justifyContent: "center", gap: 1, mb: 3 }}>
+          <Box
+            sx={{ display: "flex", justifyContent: "center", gap: 1, mb: 3 }}
+          >
             <Chip label={activeNetwork.name} size="small" variant="outlined" />
             {address && (
               <Chip
@@ -104,7 +107,10 @@ export function App() {
 
           <Paper sx={{ p: 3 }}>
             {!setupComplete ? (
-              <SetupWizard onComplete={handleSetupComplete} onFpcAddressComputed={setFpcAddress} />
+              <SetupWizard
+                onComplete={handleSetupComplete}
+                onFpcAddressComputed={setFpcAddress}
+              />
             ) : (
               <Dashboard
                 fpc={fpc}
@@ -116,9 +122,12 @@ export function App() {
 
           {/* Footer */}
           <Box sx={{ textAlign: "center", mt: 4, mb: 2 }}>
-            <Typography variant="body2" sx={{ color: "rgba(242, 238, 225, 0.4)" }}>
-              Deploy and manage Subscription FPC contracts for sponsoring
-              user transactions on Aztec.
+            <Typography
+              variant="body2"
+              sx={{ color: "rgba(242, 238, 225, 0.4)" }}
+            >
+              Deploy and manage Subscription FPC contracts for sponsoring user
+              transactions on Aztec.
             </Typography>
           </Box>
         </Container>

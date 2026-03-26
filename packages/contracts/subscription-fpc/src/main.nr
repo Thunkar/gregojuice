@@ -12,14 +12,13 @@ contract SubscriptionFPC {
         },
         messages::message_delivery::MessageDelivery,
         note::{
-            note_getter_options::NoteGetterOptions,
-            note_interface::NoteProperties,
+            note_getter_options::NoteGetterOptions, note_interface::NoteProperties,
             note_viewer_options::NoteViewerOptions,
         },
         protocol::{
             abis::function_selector::FunctionSelector,
             address::AztecAddress,
-            constants::{MAX_NOTE_HASHES_PER_CALL},
+            constants::MAX_NOTE_HASHES_PER_CALL,
             hash::poseidon2_hash,
             traits::{Packable, ToField},
         },
@@ -230,36 +229,60 @@ contract SubscriptionFPC {
         self.internal._call_sponsored_fn(call, slot.max_fee);
     }
 
-
     #[external("utility")]
     unconstrained fn count_available_slots(config_id: Field) -> u32 {
-        let options = NoteViewerOptions::new().select(
-            SlotNote::properties().config_id,
-            Comparator.EQ,
-            config_id,
-        );
-        let slots = self.storage.slots.at(self.address).view_notes(options);
-        slots.len()
+        count_slots_with_offset(self.storage.slots.at(self.address), config_id, 0)
     }
 
     #[external("utility")]
-    unconstrained fn get_subscription_info(
-        user: AztecAddress,
+    unconstrained fn get_subscription_info(user: AztecAddress, config_id: Field) -> (bool, u32) {
+        find_subscription_with_offset(self.storage.subscriptions.at(user), config_id, 0)
+    }
+
+    #[contract_library_method]
+    unconstrained fn count_slots_with_offset(
+        set: PrivateSet<SlotNote, aztec::context::UtilityContext>,
         config_id: Field,
+        offset: u32,
+    ) -> u32 {
+        let options = NoteViewerOptions::new()
+            .select(SlotNote::properties().config_id, Comparator.EQ, config_id)
+            .set_offset(offset);
+        let notes = set.view_notes(options);
+        let mut count: u32 = notes.len();
+        if notes.len() == options.limit {
+            count += count_slots_with_offset(set, config_id, offset + options.limit);
+        }
+        count
+    }
+
+    #[contract_library_method]
+    unconstrained fn find_subscription_with_offset(
+        set: PrivateSet<SubscriptionNote, aztec::context::UtilityContext>,
+        config_id: Field,
+        offset: u32,
     ) -> (bool, u32) {
         let options = NoteViewerOptions::new()
-            .select(
-                SubscriptionNote::properties().config_id,
-                Comparator.EQ,
-                config_id,
-            )
-            .set_limit(1);
-        let subs = self.storage.subscriptions.at(user).view_notes(options);
-        if subs.len() > 0 {
-            (true, subs.get_unchecked(0).uses)
-        } else {
-            (false, 0)
+            .select(SubscriptionNote::properties().config_id, Comparator.EQ, config_id)
+            .set_offset(offset);
+        let notes = set.view_notes(options);
+        let mut found = false;
+        let mut uses: u32 = 0;
+        for i in 0..options.limit {
+            if (i < notes.len()) & (!found) {
+                let note = notes.get_unchecked(i);
+                if note.config_id == config_id {
+                    found = true;
+                    uses = note.uses;
+                }
+            }
         }
+        if (!found) & (notes.len() == options.limit) {
+            let (f, u) = find_subscription_with_offset(set, config_id, offset + options.limit);
+            found = f;
+            uses = u;
+        }
+        (found, uses)
     }
 
 }

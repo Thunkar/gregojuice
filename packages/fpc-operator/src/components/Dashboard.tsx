@@ -39,7 +39,7 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
           onSignedUp={() => setListKey((k) => k + 1)}
         />
       )}
-      {tab === 1 && <AppList key={listKey} fpc={fpc} />}
+      {tab === 1 && <AppList key={listKey} fpc={fpc} fpcAddress={fpcAddress} />}
       {tab === 2 && (
         <BridgeFunding
           recipient={fpcAddress}

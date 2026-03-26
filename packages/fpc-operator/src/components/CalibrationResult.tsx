@@ -54,8 +54,8 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
   useEffect(() => { loadFeeStats(); }, [loadFeeStats]);
 
   // P75 fee-per-gas values from the network
-  const p75FeePerDaGas = stats ? BigInt(Math.round(Number(stats.maxFeePerDaGas.p75))) : null;
-  const p75FeePerL2Gas = stats ? BigInt(Math.round(Number(stats.maxFeePerL2Gas.p75))) : null;
+  const p75FeePerDaGas = stats?.maxFeePerDaGas?.p75 != null ? BigInt(Math.round(Number(stats.maxFeePerDaGas.p75))) : 0n;
+  const p75FeePerL2Gas = stats?.maxFeePerL2Gas?.p75 != null ? BigInt(Math.round(Number(stats.maxFeePerL2Gas.p75))) : null;
 
   // Compute max fee from calibrated gas limits × P75 fee-per-gas × multiplier
   useEffect(() => {
@@ -124,15 +124,15 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
           <Typography variant="caption" color="text.secondary">DA fee/gas (P75)</Typography>
           <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
-            {Number(stats.maxFeePerDaGas.p75).toLocaleString()}
+            {stats.maxFeePerDaGas?.p75 != null ? Number(stats.maxFeePerDaGas.p75).toLocaleString() : "—"}
           </Typography>
           <Typography variant="caption" color="text.secondary">L2 fee/gas (P75)</Typography>
           <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
-            {Number(stats.maxFeePerL2Gas.p75).toLocaleString()}
+            {stats.maxFeePerL2Gas?.p75 != null ? Number(stats.maxFeePerL2Gas.p75).toLocaleString() : "—"}
           </Typography>
           <Typography variant="caption" color="text.secondary">Base fee L2</Typography>
           <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
-            {Number(stats.baseFee.l2).toLocaleString()}
+            {stats.baseFee?.l2 != null ? Number(stats.baseFee.l2).toLocaleString() : "—"}
           </Typography>
         </Box>
       )}
