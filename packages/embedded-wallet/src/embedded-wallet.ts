@@ -337,17 +337,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     const startTime = Date.now();
     const phases: PhaseTiming[] = [];
 
-    const firstCall = executionPayload.calls?.[0];
-    const isSponsored =
-      firstCall?.name === "subscribe" || firstCall?.name === "sponsor";
-    const meaningfulCall = isSponsored
-      ? executionPayload.calls?.[1] ?? firstCall
-      : firstCall;
-    const fnName = meaningfulCall?.name ?? "Transaction";
-    const baseLabel = fnName
+    const fnName = executionPayload.calls?.[0]?.name ?? "Transaction";
+    const label = fnName
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
-    const label = isSponsored ? `Sponsored ${baseLabel}` : baseLabel;
 
     const emit = (
       phase: TxProgressEvent["phase"],
