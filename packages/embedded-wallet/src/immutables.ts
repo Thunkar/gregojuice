@@ -174,10 +174,12 @@ export function createImmutablesCapsule(
   actualSalt: Fr,
   serializedImmutables: Fr[],
 ): Capsule {
-  return new Capsule(contractAddress, IMMUTABLES_SLOT, [
-    actualSalt,
-    ...serializedImmutables,
-  ]);
+  return new Capsule(
+    contractAddress,
+    IMMUTABLES_SLOT,
+    [actualSalt, ...serializedImmutables],
+    contractAddress,
+  );
 }
 
 // ---------------------------------------------------------------------------

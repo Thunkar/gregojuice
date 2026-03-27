@@ -2,9 +2,13 @@
  * Query parameter parsing for iframe embedding mode.
  *
  * Supported params:
- *   ?recipient=0x...                          — single pre-filled recipient
+ *   ?recipient=0x...                          — single pre-filled recipient (no amount, set in Step 4)
  *   ?recipients=addr1,amount1;addr2,amount2   — multiple recipients with amounts (FJ, human-readable)
  *   ?network=testnet                          — override the initial network selection
+ *   ?embedded=true                            — force embedded wallet (skip external wallet option)
+ *
+ * Both ?recipient and ?recipients are normalized into the same `recipients` array.
+ * When ?recipient is used (no amount), the amount is left as 0 for the user to fill in Step 4.
  */
 
 import { parseUnits } from "viem";
@@ -15,14 +19,14 @@ export interface RecipientEntry {
 }
 
 export interface QueryParams {
-  /** Single pre-filled recipient address (legacy, backwards compat) */
-  recipient: string | null;
-  /** Multiple recipients with amounts (parsed from semicolon-separated pairs) */
+  /** Pre-filled recipients (from ?recipient= or ?recipients=) */
   recipients: RecipientEntry[] | null;
   /** Network id to select on boot */
   network: string | null;
   /** True when the app is running inside an iframe */
   isIframe: boolean;
+  /** Force embedded wallet mode (no external wallet option) */
+  forceEmbedded: boolean;
 }
 
 let cached: QueryParams | null = null;
@@ -30,14 +34,18 @@ let cached: QueryParams | null = null;
 /**
  * Parses "addr1,amount1;addr2,amount2" into RecipientEntry[].
  * Amounts are in human-readable FJ (e.g. "1.5" = 1.5 FJ).
+ * If amount is omitted, defaults to 0 (user fills in Step 4).
  */
 function parseRecipients(raw: string): RecipientEntry[] | null {
   if (!raw) return null;
   try {
     const entries = raw.split(";").map((pair) => {
-      const [address, amountStr] = pair.split(",");
-      if (!address || !amountStr) throw new Error("invalid pair");
-      return { address: address.trim(), amount: parseUnits(amountStr.trim(), 18) };
+      const parts = pair.split(",");
+      const address = parts[0]?.trim();
+      if (!address) throw new Error("missing address");
+      const amountStr = parts[1]?.trim();
+      const amount = amountStr ? parseUnits(amountStr, 18) : 0n;
+      return { address, amount };
     });
     return entries.length > 0 ? entries : null;
   } catch {
@@ -48,11 +56,23 @@ function parseRecipients(raw: string): RecipientEntry[] | null {
 export function getQueryParams(): QueryParams {
   if (cached) return cached;
   const params = new URLSearchParams(window.location.search);
+
+  // Normalize ?recipient=addr into recipients array
+  const recipientParam = params.get("recipient");
+  const recipientsParam = params.get("recipients");
+
+  let recipients: RecipientEntry[] | null = null;
+  if (recipientsParam) {
+    recipients = parseRecipients(recipientsParam);
+  } else if (recipientParam) {
+    recipients = [{ address: recipientParam.trim(), amount: 0n }];
+  }
+
   cached = {
-    recipient: params.get("recipient"),
-    recipients: parseRecipients(params.get("recipients") ?? ""),
+    recipients,
     network: params.get("network"),
     isIframe: window.self !== window.top,
+    forceEmbedded: params.get("embedded") === "true",
   };
   return cached;
 }

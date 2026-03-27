@@ -68,7 +68,11 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     try {
       const fj = FeeJuiceContract.at(activeWallet);
       const { result } = await fj.methods.balance_of_public(address).simulate({ from: address });
-      setFeeJuiceBalance(result.toString());
+      const bal = result.toString();
+      setFeeJuiceBalance(bal);
+      if (BigInt(bal) > 0n) {
+        setStatus(prev => prev === 'ready' ? 'funded' : prev);
+      }
     } catch {
       setFeeJuiceBalance(null);
     }

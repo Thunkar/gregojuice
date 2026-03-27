@@ -1,31 +1,52 @@
 {
   "name": "@gregojuice/contracts",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.0.5",
   "type": "module",
-  "main": "src/subscription-fpc.ts",
+  "main": "dist/src/subscription-fpc.js",
+  "types": "dist/src/subscription-fpc.d.ts",
   "exports": {
-    "./subscription-fpc": "./src/subscription-fpc.ts",
-    "./artifacts/*": "./artifacts/*"
+    "./subscription-fpc": {
+      "types": "./dist/src/subscription-fpc.d.ts",
+      "import": "./dist/src/subscription-fpc.js"
+    },
+    "./fpc-gas-constants": {
+      "types": "./dist/src/fpc-gas-constants.d.ts",
+      "import": "./dist/src/fpc-gas-constants.js"
+    },
+    "./artifacts/*": {
+      "types": "./dist/artifacts/*.d.ts",
+      "import": "./dist/artifacts/*.js"
+    }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "clean": "rm -rf ./artifacts ./*/target",
+    "clean": "rm -rf ./dist ./artifacts ./*/target",
     "compile": "aztec compile",
     "codegen": "aztec codegen ./target -o artifacts",
-    "build": "yarn compile && yarn codegen",
+    "build": "yarn compile && yarn codegen && tsc -p tsconfig.build.json",
     "build:codegen": "yarn codegen",
-    "test": "vitest run"
+    "build:ts": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "prepublishOnly": "yarn build:ts",
+    "forge:build": "cd bridge && forge build",
+    "forge:deploy": "cd bridge && forge script script/Deploy.s.sol --rpc-url ${L1_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com} --private-key $PRIVATE_KEY --broadcast",
+    "forge:artifacts": "cd bridge && ./generate-artifacts.sh"
+  },
+  "dependencies": {
+    "@aztec/aztec.js": "v4.2.0-aztecnr-rc.2",
+    "@aztec/foundation": "v4.2.0-aztecnr-rc.2",
+    "@aztec/stdlib": "v4.2.0-aztecnr-rc.2",
+    "@aztec/wallets": "v4.2.0-aztecnr-rc.2"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.2.0-nightly.20260323",
-    "@aztec/aztec.js": "v4.2.0-nightly.20260323",
-    "@aztec/constants": "v4.2.0-nightly.20260323",
-    "@aztec/entrypoints": "v4.2.0-nightly.20260323",
-    "@aztec/ethereum": "v4.2.0-nightly.20260323",
-    "@aztec/foundation": "v4.2.0-nightly.20260323",
-    "@aztec/noir-contracts.js": "v4.2.0-nightly.20260323",
-    "@aztec/stdlib": "v4.2.0-nightly.20260323",
-    "@aztec/wallets": "v4.2.0-nightly.20260323",
+    "@aztec/accounts": "v4.2.0-aztecnr-rc.2",
+    "@aztec/constants": "v4.2.0-aztecnr-rc.2",
+    "@aztec/entrypoints": "v4.2.0-aztecnr-rc.2",
+    "@aztec/ethereum": "v4.2.0-aztecnr-rc.2",
+    "@aztec/noir-contracts.js": "v4.2.0-aztecnr-rc.2",
+    "@gregojuice/embedded-wallet": "workspace:*",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }

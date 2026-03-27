@@ -24,6 +24,7 @@ import {
   sessionToPhase,
   phaseToSession,
 } from "./session";
+import { EPHEMERAL_CLAIM_GAS_FJ } from "./constants";
 import type {
   WizardStep,
   AztecChoice,
@@ -139,7 +140,7 @@ export function useBridgeWizard() {
   } = useAztecWallet();
 
   // ── Iframe / query-param overrides ────────────────────────────────
-  const [{ recipient: queryRecipient, recipients: queryRecipients, isIframe }] = useState(getQueryParams);
+  const [{ recipients: queryRecipients, isIframe, forceEmbedded }] = useState(getQueryParams);
 
   // ── Session restore (computed once) ─────────────────────────────────
   const [initialSession] = useState(() => loadSession(activeNetwork.id));
@@ -169,16 +170,16 @@ export function useBridgeWizard() {
 
   // ── Step 2: Aztec account choice ────────────────────────────────────
   const [aztecChoice, setAztecChoice] = useState<AztecChoice>(
-    hasSession ? (initialSession?.isExternal ? "existing" : "new") : null,
+    forceEmbedded ? "new" : hasSession ? (initialSession?.isExternal ? "existing" : "new") : null,
   );
 
   // ── Step 3: Recipient ───────────────────────────────────────────────
   const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(
-    queryRecipient || queryRecipients ? "other" : (initialSession?.recipientChoice ?? null),
+    queryRecipients ? "other" : (initialSession?.recipientChoice ?? null),
   );
   // Unified recipients list: addresses collected in Step 3, amounts in Step 4
   const [recipients, setRecipients] = useState<Array<{ address: string; amount: string }>>(() => {
-    if (queryRecipient) return [{ address: queryRecipient, amount: "" }];
+    if (queryRecipients) return queryRecipients.map((r) => ({ address: r.address, amount: r.amount ? (Number(r.amount) / 1e18).toString() : "" }));
     if (initialSession?.recipients?.length) return initialSession.recipients;
     return [{ address: "", amount: "" }];
   });
@@ -534,13 +535,15 @@ export function useBridgeWizard() {
       setExpandedStep(4);
       if (faucetLocked && mintAmountValue != null) {
         const faucetAmount = formatUnits(mintAmountValue, 18);
-        setRecipients((prev) => prev.map((r) => ({ ...r, amount: r.amount || faucetAmount })));
+        setRecipients((prev) => prev.map((r) => ({ ...r, amount: faucetAmount })));
       }
     }
   }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
 
+  const recipientPrefilled = !!queryRecipients;
+
   useEffect(() => {
-    if (recipientChoice === "self" && recipientReady && wizardStep === 3)
+    if (wizardStep === 3 && recipientReady && (recipientChoice === "self" || recipientPrefilled))
       advanceFromStep3();
   }, [recipientChoice, recipientReady, wizardStep, advanceFromStep3]);
 
@@ -558,9 +561,10 @@ export function useBridgeWizard() {
       if (!recipients.every((r) => r.amount)) { setError("Please enter an amount for each recipient"); return; }
 
       // Parse all recipients into { address, amount } with bigint amounts
-      const parsedRecipients = queryRecipients
-        ? queryRecipients.map((r) => ({ address: r.address, amount: r.amount }))
-        : recipients.map((r) => ({ address: r.address, amount: parseUnits(r.amount, balance?.decimals ?? 18) }));
+      const parsedRecipients = recipients.map((r) => ({
+        address: r.address,
+        amount: parseUnits(r.amount, balance?.decimals ?? 18),
+      }));
 
       if (parsedRecipients.some((r) => r.amount <= 0n)) { setError("Amounts must be greater than 0"); return; }
 
@@ -585,7 +589,7 @@ export function useBridgeWizard() {
         dispatch({ type: "L1_CONFIRMED", allCredentials: [result] });
       } else if (needsMultiBridge && aztecAddress) {
         // Internal wallet: prepend ephemeral (gas) recipient
-        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits("100", 18);
+        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits(EPHEMERAL_CLAIM_GAS_FJ, 18);
         const totalNeeded = totalAmount + (faucetLocked ? 0n : ephAmount);
         if (!faucetLocked && balance && totalNeeded > balance.balance) {
           setError(`Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)}`);
@@ -724,7 +728,6 @@ export function useBridgeWizard() {
     messageStatus, ephMessageStatus, claimed, isClaiming, needsMultiBridge, isBridging,
     bridgeDone, syncDone, step4Desc, handleBridge, handleReset,
     error, setError,
-    isIframe, recipientPrefilled: !!(queryRecipient || queryRecipients),
-    queryRecipients,
+    isIframe, forceEmbedded, recipientPrefilled,
   };
 }

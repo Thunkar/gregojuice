@@ -3,6 +3,9 @@ import type { BridgeStep } from "./types";
 export const SESSION_KEY = "gregojuice_bridge_session";
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/** Fee Juice reserved for the embedded account to pay L2 claim tx gas (in FJ, not wei) */
+export const EPHEMERAL_CLAIM_GAS_FJ = "100";
+
 export const BRIDGE_STEP_LABELS: Record<BridgeStep, string> = {
   idle: "",
   "fetching-addresses": "Fetching addresses...",

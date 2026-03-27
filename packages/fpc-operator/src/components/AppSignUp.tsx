@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Box,
   Button,
@@ -6,165 +6,815 @@ import {
   Typography,
   CircularProgress,
   Alert,
+  Stepper,
+  Step,
+  StepLabel,
+  StepContent,
+  ToggleButtonGroup,
+  ToggleButton,
+  IconButton,
+  Chip,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
+import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { FunctionSelector } from "@aztec/aztec.js/abi";
-import type { SubscriptionFPCContract as SubscriptionFPC } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
+import { shortAddress } from "@gregojuice/common";
+import { Contract } from "@aztec/aztec.js/contracts";
+import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
+import { Fr } from "@aztec/aztec.js/fields";
+import { parseUnits } from "viem";
+import { FunctionSelector as AztecFunctionSelector, type ContractArtifact, type FunctionAbi } from "@aztec/aztec.js/abi";
+import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
+import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
+import { useWallet } from "../contexts/WalletContext";
 import { signUpApp } from "../services/fpcService";
+import { runCalibration, retryCalibrationSimulation, CalibrationError, type CalibrationResult as CalibrationData } from "../services/calibration";
+import { FeePricingService } from "../services/fee-pricing";
+import {
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS,
+  FPC_TEARDOWN_L2_GAS,
+  FPC_TEARDOWN_DA_GAS,
+  PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF,
+  repricePrivateSideEffects,
+} from "@gregojuice/contracts/fpc-gas-constants";
+import { FunctionType } from "@aztec/aztec.js/abi";
+import { ArtifactUpload } from "./ArtifactUpload";
+import { FunctionSelector } from "./FunctionSelector";
+import { FunctionArgsForm, getDefaultArgs } from "./FunctionArgsForm";
+import { CalibrationResult } from "./CalibrationResult";
+
+const STEPS = [
+  "Contract Artifact & Address",
+  "Select Function",
+  "Calibration",
+  "Review & Sign Up",
+];
 
 interface AppSignUpProps {
-  fpc: SubscriptionFPC;
+  fpc: SubscriptionFPCContract;
   adminAddress: AztecAddress;
+  fpcAddress: string;
   onSignedUp?: () => void;
 }
 
-export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
-  const [appAddress, setAppAddress] = useState("");
-  const [selectorInput, setSelectorInput] = useState("");
-  const [configIndex, setConfigIndex] = useState("0");
+export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSignUpProps) {
+  const { wallet, node, rollupAddress, l1ChainId, l1RpcUrl } = useWallet();
+  const [activeStep, setActiveStep] = useState(0);
+
+  // Step 1: Artifact
+  const [artifact, setArtifact] = useState<ContractArtifact | null>(null);
+
+  // Step 2: Function
+  const [selectedFunction, setSelectedFunction] = useState<FunctionAbi | null>(null);
+
+  // Step 3: Contract instance
+  const [instanceMode, setInstanceMode] = useState<"public" | "compute">("public");
+  const [contractAddress, setContractAddress] = useState("");
+  const [computeSalt, setComputeSalt] = useState("");
+  const [computeDeployer, setComputeDeployer] = useState("");
+  const [contractInstance, setContractInstance] = useState<ContractInstanceWithAddress | null>(null);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
+
+  // Extra contract registrations (for contracts called by the sponsored function)
+  const [extraContracts, setExtraContracts] = useState<Array<{ address: string; name: string }>>([]);
+  const [extraArtifact, setExtraArtifact] = useState<ContractArtifact | null>(null);
+  const [extraAddress, setExtraAddress] = useState("");
+  const [extraRegistering, setExtraRegistering] = useState(false);
+  const [extraError, setExtraError] = useState<string | null>(null);
+
+  // Extra sender registrations (for addresses that need to be known to PXE for tag computation)
+  const [extraSenders, setExtraSenders] = useState<Array<{ address: string; alias: string }>>([]);
+  const [senderAddress, setSenderAddress] = useState("");
+  const [senderAlias, setSenderAlias] = useState("");
+  const [senderRegistering, setSenderRegistering] = useState(false);
+  const [senderError, setSenderError] = useState<string | null>(null);
+
+  // Step 2: Calibration mode
+  const [calibrationMode, setCalibrationMode] = useState<"simulation" | "manual">("simulation");
+  const [manualStandaloneGas, setManualStandaloneGas] = useState({ daGas: "", l2Gas: "" });
+  const [manualNoteHashes, setManualNoteHashes] = useState("0");
+  const [manualNullifiers, setManualNullifiers] = useState("0");
+  const [manualL2ToL1Msgs, setManualL2ToL1Msgs] = useState("0");
+
+  const isPrivateFunction = selectedFunction?.functionType === FunctionType.PRIVATE;
+
+  // Step 2 (simulation): Args
+  const [argValues, setArgValues] = useState<string[]>([]);
+
+  // Step 2 (simulation): Calibration
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrationResult, setCalibrationResult] = useState<CalibrationData | null>(null);
+  const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [calibrationIndex, setCalibrationIndex] = useState<number | null>(null);
+
+  // Step 5: Sign up
+  const [maxFeeFj, setMaxFeeFj] = useState("");
   const [maxUses, setMaxUses] = useState("1");
-  const [maxFee, setMaxFee] = useState("");
   const [maxUsers, setMaxUsers] = useState("16");
+  const [configIndex, setConfigIndex] = useState("0");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const handleSubmit = async () => {
-    setError(null);
-    setSuccess(false);
+  // Pricing for USD display
+  const pricingService = useMemo(() => {
+    const svc = new FeePricingService(l1RpcUrl ?? undefined, l1ChainId ?? undefined);
+    if (rollupAddress) svc.init(rollupAddress);
+    return svc;
+  }, [rollupAddress, l1ChainId, l1RpcUrl]);
 
-    if (!appAddress || !selectorInput || !maxFee) {
-      setError("All fields are required");
-      return;
-    }
+  // ── Step handlers ───────────────────────────────────────────────────
 
-    const maxUsersNum = parseInt(maxUsers);
-    if (maxUsersNum < 1 || maxUsersNum > 16) {
-      setError("Max users must be between 1 and 16");
-      return;
-    }
+  const handleArtifactLoaded = (a: ContractArtifact) => {
+    setArtifact(a);
+    setSelectedFunction(null);
+    setContractInstance(null);
+    setCalibrationResult(null);
+    // Stay on step 0 — user still needs to register the contract address
+  };
 
-    setSubmitting(true);
+  const handleFunctionSelected = (fn: FunctionAbi) => {
+    setSelectedFunction(fn);
+    setArgValues(getDefaultArgs(fn));
+    setCalibrationResult(null);
+    setCalibrationIndex(null);
+    setActiveStep(2);
+  };
+
+  const handleRegisterPublic = async () => {
+    if (!wallet || !node || !artifact) return;
+    setRegistering(true);
+    setRegisterError(null);
     try {
-      // Parse selector: accept either "0xabcd1234" hex or "function_name(type,type)" signature
-      let selector: FunctionSelector;
-      if (selectorInput.startsWith("0x")) {
-        selector = FunctionSelector.fromString(selectorInput);
-      } else {
-        selector = FunctionSelector.fromSignature(selectorInput);
-      }
+      const address = AztecAddress.fromString(contractAddress);
+      const instance = await node.getContract(address);
+      if (!instance) throw new Error("Contract not found on-chain at this address");
+      await wallet.registerContract(instance, artifact);
+      setContractInstance(instance);
+      setActiveStep(1);
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setRegistering(false);
+    }
+  };
 
+  const handleRegisterComputed = async () => {
+    if (!wallet || !artifact) return;
+    setRegistering(true);
+    setRegisterError(null);
+    try {
+      const instance = await getContractInstanceFromInstantiationParams(artifact, {
+        salt: new Fr(BigInt(computeSalt || "0")),
+        deployer: computeDeployer ? AztecAddress.fromString(computeDeployer) : AztecAddress.ZERO,
+      });
+      await wallet.registerContract(instance, artifact);
+      setContractInstance(instance);
+      setContractAddress(instance.address.toString());
+      setActiveStep(1);
+    } catch (err) {
+      setRegisterError(err instanceof Error ? err.message : "Failed to compute instance");
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const handleRegisterExtra = async () => {
+    if (!wallet || !node || !extraArtifact || !extraAddress) return;
+    setExtraRegistering(true);
+    setExtraError(null);
+    try {
+      const address = AztecAddress.fromString(extraAddress);
+      const instance = await node.getContract(address);
+      if (!instance) throw new Error("Contract not found on-chain at this address");
+      await wallet.registerContract(instance, extraArtifact);
+      setExtraContracts((prev) => [...prev, { address: extraAddress, name: extraArtifact.name }]);
+      setExtraArtifact(null);
+      setExtraAddress("");
+    } catch (err) {
+      setExtraError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setExtraRegistering(false);
+    }
+  };
+
+  const removeExtraContract = (index: number) => {
+    setExtraContracts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRegisterSender = async () => {
+    if (!wallet || !senderAddress) return;
+    setSenderRegistering(true);
+    setSenderError(null);
+    try {
+      const address = AztecAddress.fromString(senderAddress);
+      await wallet.registerSender(address, senderAlias || undefined);
+      setExtraSenders((prev) => [...prev, { address: senderAddress, alias: senderAlias || shortAddress(senderAddress) }]);
+      setSenderAddress("");
+      setSenderAlias("");
+    } catch (err) {
+      setSenderError(err instanceof Error ? err.message : "Failed to register sender");
+    } finally {
+      setSenderRegistering(false);
+    }
+  };
+
+  const removeSender = (index: number) => {
+    setExtraSenders((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCalibrate = async () => {
+    if (!wallet || !node || !artifact || !contractInstance || !selectedFunction) return;
+    setCalibrating(true);
+    setCalibrationError(null);
+    try {
+      const baseParams = {
+        adminWallet: wallet,
+        adminAddress,
+        fpcAddress: AztecAddress.fromString(fpcAddress),
+        artifact,
+        contractInstance,
+        selectedFunction,
+        argValues,
+      };
+
+      const result = calibrationIndex !== null
+        ? await retryCalibrationSimulation({ ...baseParams, calibrationIndex })
+        : await runCalibration(baseParams);
+
+      setCalibrationResult(result);
+      setCalibrationIndex(result.calibrationIndex);
+      setActiveStep(3); // Auto-advance to Review & Sign Up
+    } catch (err) {
+      if (err instanceof CalibrationError) {
+        setCalibrationIndex(err.calibrationIndex);
+      }
+      setCalibrationError(err instanceof Error ? err.message : "Calibration failed");
+    } finally {
+      setCalibrating(false);
+    }
+  };
+
+  const handleManualContinue = () => {
+    const standaloneDA = parseInt(manualStandaloneGas.daGas) || 0;
+    const standaloneL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
+
+    let totalDA = standaloneDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
+    let totalL2 = standaloneL2 + FPC_SUBSCRIBE_OVERHEAD_L2_GAS;
+
+    if (isPrivateFunction) {
+      totalL2 += PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF;
+      totalL2 += repricePrivateSideEffects(
+        parseInt(manualNoteHashes) || 0,
+        parseInt(manualNullifiers) || 0,
+        parseInt(manualL2ToL1Msgs) || 0,
+      );
+    }
+
+    const result: CalibrationData = {
+      gasLimits: { daGas: totalDA, l2Gas: totalL2 },
+      teardownGasLimits: { daGas: FPC_TEARDOWN_DA_GAS, l2Gas: FPC_TEARDOWN_L2_GAS },
+      calibrationIndex: -1,
+    };
+    setCalibrationResult(result);
+    setActiveStep(3);
+  };
+
+  const handleSimulationDone = () => {
+    if (calibrationResult) setActiveStep(3);
+  };
+
+  const handleSignUp = async () => {
+    if (!selectedFunction || !contractInstance) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    setSuccess(false);
+    try {
+      const selector = await AztecFunctionSelector.fromNameAndParameters(selectedFunction.name, selectedFunction.parameters);
       await signUpApp(fpc, adminAddress, {
-        appAddress: AztecAddress.fromString(appAddress),
+        appAddress: contractInstance.address,
         selector,
         configIndex: parseInt(configIndex),
         maxUses: parseInt(maxUses),
-        maxFee: BigInt(maxFee),
-        maxUsers: maxUsersNum,
+        maxFee: parseUnits(maxFeeFj, 18),
+        maxUsers: parseInt(maxUsers),
       });
-
       setSuccess(true);
       onSignedUp?.();
+      // Reset wizard after a short delay so the success message is visible
+      setTimeout(() => {
+        setActiveStep(0);
+        setArtifact(null);
+        setSelectedFunction(null);
+        setContractInstance(null);
+        setContractAddress("");
+        setArgValues([]);
+        setCalibrationResult(null);
+        setCalibrationIndex(null);
+        setCalibrationError(null);
+        setMaxFeeFj("");
+        setConfigIndex("0");
+        setMaxUses("1");
+        setMaxUsers("16");
+        setExtraContracts([]);
+        setSuccess(false);
+      }, 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-up failed");
+      setSubmitError(err instanceof Error ? err.message : "Sign-up failed");
     } finally {
       setSubmitting(false);
     }
   };
 
+  // ── Render ──────────────────────────────────────────────────────────
+
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Sign Up New App
-      </Typography>
+      <Stepper activeStep={activeStep} orientation="vertical">
+        {/* Step 0: Contract Artifact & Address */}
+        <Step>
+          <StepLabel
+            onClick={() => activeStep > 0 && setActiveStep(0)}
+            sx={{ cursor: activeStep > 0 ? "pointer" : "default" }}
+            optional={activeStep > 0 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
+          >{STEPS[0]}</StepLabel>
+          <StepContent>
+            {!artifact ? (
+              <ArtifactUpload onArtifactLoaded={handleArtifactLoaded} />
+            ) : (
+              <Box>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+                  <Chip label={`${artifact.name} (${artifact.functions.length} functions)`} size="small" />
+                  <Button size="small" onClick={() => { setArtifact(null); setContractInstance(null); }}>
+                    Change
+                  </Button>
+                </Box>
 
-      <TextField
-        fullWidth
-        label="App Contract Address"
-        placeholder="0x..."
-        value={appAddress}
-        onChange={(e) => setAppAddress(e.target.value)}
-        sx={{ mb: 2 }}
-        size="small"
-      />
+                <ToggleButtonGroup
+                  value={instanceMode}
+                  exclusive
+                  onChange={(_, v) => { if (v) setInstanceMode(v); }}
+                  fullWidth
+                  size="small"
+                  sx={{ mb: 2 }}
+                >
+                  <ToggleButton value="public">Publicly Deployed</ToggleButton>
+                  <ToggleButton value="compute">Compute from Params</ToggleButton>
+                </ToggleButtonGroup>
 
-      <TextField
-        fullWidth
-        label="Function Selector"
-        placeholder='0xabcd1234 or "transfer_in_private(Field,Field)"'
-        value={selectorInput}
-        onChange={(e) => setSelectorInput(e.target.value)}
-        sx={{ mb: 2 }}
-        size="small"
-        helperText="Hex selector or function signature"
-      />
+                {instanceMode === "public" && (
+                  <Box>
+                    <TextField
+                      fullWidth
+                      label="Contract Address"
+                      placeholder="0x..."
+                      value={contractAddress}
+                      onChange={(e) => setContractAddress(e.target.value)}
+                      size="small"
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleRegisterPublic}
+                      disabled={registering || !contractAddress}
+                    >
+                      {registering ? <CircularProgress size={20} /> : "Fetch & Register"}
+                    </Button>
+                  </Box>
+                )}
 
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          label="Config Index"
-          type="number"
-          value={configIndex}
-          onChange={(e) => setConfigIndex(e.target.value)}
-          size="small"
-          sx={{ flex: 1 }}
-        />
-        <TextField
-          label="Max Uses"
-          type="number"
-          value={maxUses}
-          onChange={(e) => setMaxUses(e.target.value)}
-          size="small"
-          sx={{ flex: 1 }}
-          helperText="Per subscription"
-        />
-      </Box>
+                {instanceMode === "compute" && (
+                  <Box>
+                    <TextField
+                      fullWidth
+                      label="Salt"
+                      placeholder="0 or 0x..."
+                      value={computeSalt}
+                      onChange={(e) => setComputeSalt(e.target.value)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Deployer Address"
+                      placeholder="0x... (or leave empty for zero)"
+                      value={computeDeployer}
+                      onChange={(e) => setComputeDeployer(e.target.value)}
+                      size="small"
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      onClick={handleRegisterComputed}
+                      disabled={registering}
+                    >
+                      {registering ? <CircularProgress size={20} /> : "Compute & Register"}
+                    </Button>
+                  </Box>
+                )}
 
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          label="Max Fee (wei)"
-          value={maxFee}
-          onChange={(e) => setMaxFee(e.target.value)}
-          size="small"
-          sx={{ flex: 2 }}
-          helperText="Max fee per sponsored tx"
-        />
-        <TextField
-          label="Max Users"
-          type="number"
-          value={maxUsers}
-          onChange={(e) => setMaxUsers(e.target.value)}
-          size="small"
-          sx={{ flex: 1 }}
-          helperText="1-16"
-        />
-      </Box>
+                {registerError && <Alert severity="error" sx={{ mt: 1 }}>{registerError}</Alert>}
+                {contractInstance && (
+                  <Alert severity="success" sx={{ mt: 1 }}>
+                    Registered: {shortAddress(contractInstance.address.toString())}
+                  </Alert>
+                )}
+              </Box>
+            )}
+          </StepContent>
+        </Step>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          App signed up successfully!
-        </Alert>
-      )}
+        {/* Step 1: Select Function */}
+        <Step>
+          <StepLabel
+            onClick={() => activeStep > 1 && setActiveStep(1)}
+            sx={{ cursor: activeStep > 1 ? "pointer" : "default" }}
+            optional={activeStep > 1 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
+          >{STEPS[1]}</StepLabel>
+          <StepContent>
+            {artifact && (
+              <FunctionSelector
+                artifact={artifact}
+                selectedFunction={selectedFunction}
+                onSelect={handleFunctionSelected}
+              />
+            )}
+          </StepContent>
+        </Step>
 
-      <Button
-        fullWidth
-        variant="contained"
-        onClick={handleSubmit}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <>
-            <CircularProgress size={20} sx={{ mr: 1 }} />
-            Signing up...
-          </>
-        ) : (
-          "Sign Up App"
-        )}
-      </Button>
+        {/* Step 2: Calibration */}
+        <Step>
+          <StepLabel
+            onClick={() => activeStep > 2 && setActiveStep(2)}
+            sx={{ cursor: activeStep > 2 ? "pointer" : "default" }}
+            optional={activeStep > 2 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
+          >{STEPS[2]}</StepLabel>
+          <StepContent>
+            <ToggleButtonGroup
+              value={calibrationMode}
+              exclusive
+              onChange={(_, v) => { if (v) { setCalibrationMode(v); setCalibrationResult(null); } }}
+              fullWidth
+              size="small"
+              sx={{ mb: 2 }}
+            >
+              <ToggleButton value="simulation">Simulation</ToggleButton>
+              <ToggleButton value="manual">Manual Gas Limits</ToggleButton>
+            </ToggleButtonGroup>
+
+            {calibrationMode === "simulation" && (
+              <>
+                {/* Extra contracts */}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Register additional contracts called by the sponsored function.
+                </Typography>
+
+                {extraContracts.map((ec, i) => (
+                  <Chip
+                    key={i}
+                    label={`${ec.name} (${shortAddress(ec.address)})`}
+                    onDelete={() => removeExtraContract(i)}
+                    size="small"
+                    sx={{ mr: 0.5, mb: 0.5 }}
+                  />
+                ))}
+
+                {!extraArtifact ? (
+                  <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
+                ) : (
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
+                    <TextField
+                      fullWidth
+                      label="Contract Address"
+                      placeholder="0x..."
+                      value={extraAddress}
+                      onChange={(e) => setExtraAddress(e.target.value)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleRegisterExtra}
+                        disabled={extraRegistering || !extraAddress}
+                        startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                      >
+                        Register
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => { setExtraArtifact(null); setExtraAddress(""); setExtraError(null); }}
+                      >
+                        Cancel
+                      </Button>
+                    </Box>
+                    {extraError && <Alert severity="error" sx={{ mt: 1 }}>{extraError}</Alert>}
+                  </Box>
+                )}
+
+                {/* Sender registration */}
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+                  Register senders whose notes the admin PXE needs to be aware of.
+                </Typography>
+
+                {extraSenders.map((s, i) => (
+                  <Chip
+                    key={i}
+                    label={`${s.alias} (${shortAddress(s.address)})`}
+                    onDelete={() => removeSender(i)}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    sx={{ mr: 0.5, mb: 0.5 }}
+                  />
+                ))}
+
+                <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center" }}>
+                  <TextField
+                    label="Sender Address"
+                    placeholder="0x..."
+                    value={senderAddress}
+                    onChange={(e) => setSenderAddress(e.target.value)}
+                    size="small"
+                    sx={{ flex: 2 }}
+                  />
+                  <TextField
+                    label="Alias"
+                    placeholder="optional"
+                    value={senderAlias}
+                    onChange={(e) => setSenderAlias(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleRegisterSender}
+                    disabled={senderRegistering || !senderAddress}
+                    startIcon={senderRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                    sx={{ height: 40, whiteSpace: "nowrap" }}
+                  >
+                    Add
+                  </Button>
+                </Box>
+                {senderError && <Alert severity="error" sx={{ mt: 1 }}>{senderError}</Alert>}
+
+                {/* Function args */}
+                {selectedFunction && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Function arguments for gas estimation. Modify and re-run if calibration fails.
+                    </Typography>
+                    <FunctionArgsForm fn={selectedFunction} values={argValues} onChange={setArgValues} adminAddress={adminAddress.toString()} />
+                  </Box>
+                )}
+
+                {calibrationError && <Alert severity="error" sx={{ mt: 1 }}>{calibrationError}</Alert>}
+
+                <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    onClick={handleCalibrate}
+                    disabled={calibrating}
+                    sx={{ flex: 1 }}
+                  >
+                    {calibrating ? (
+                      <>
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                        {calibrationIndex !== null ? "Retrying..." : "Calibrating..."}
+                      </>
+                    ) : calibrationIndex !== null ? (
+                      "Retry Calibration"
+                    ) : (
+                      "Run Calibration"
+                    )}
+                  </Button>
+                  {calibrationResult && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleSimulationDone}
+                      sx={{ flex: 1 }}
+                    >
+                      Continue to Review
+                    </Button>
+                  )}
+                </Box>
+              </>
+            )}
+
+            {calibrationMode === "manual" && selectedFunction && (
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Enter the gas your function uses in a standalone simulation (without the FPC).
+                  The FPC overhead and repricing are added automatically.
+                </Typography>
+
+                <Chip
+                  label={`${selectedFunction.name} (${isPrivateFunction ? "private" : "public"})`}
+                  size="small"
+                  color={isPrivateFunction ? "secondary" : "primary"}
+                  sx={{ mb: 2 }}
+                />
+
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+                  Standalone gas limits (from regular simulation)
+                </Typography>
+                <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                  <TextField
+                    label="DA Gas"
+                    value={manualStandaloneGas.daGas}
+                    onChange={(e) => setManualStandaloneGas(prev => ({ ...prev, daGas: e.target.value }))}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="L2 Gas"
+                    value={manualStandaloneGas.l2Gas}
+                    onChange={(e) => setManualStandaloneGas(prev => ({ ...prev, l2Gas: e.target.value }))}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                </Box>
+
+                {isPrivateFunction && (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+                      Side effects (for L2 gas repricing — private → public rates)
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                      <TextField
+                        label="Note hashes"
+                        type="number"
+                        value={manualNoteHashes}
+                        onChange={(e) => setManualNoteHashes(e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        label="Nullifiers"
+                        type="number"
+                        value={manualNullifiers}
+                        onChange={(e) => setManualNullifiers(e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        label="L2→L1 msgs"
+                        type="number"
+                        value={manualL2ToL1Msgs}
+                        onChange={(e) => setManualL2ToL1Msgs(e.target.value)}
+                        size="small"
+                        sx={{ flex: 1 }}
+                      />
+                    </Box>
+                  </>
+                )}
+
+                {/* Live breakdown */}
+                {(manualStandaloneGas.daGas || manualStandaloneGas.l2Gas) && (
+                  <Box sx={{ p: 1.5, mb: 2, bgcolor: "rgba(212,255,40,0.05)", border: "1px solid", borderColor: "divider", fontFamily: "monospace", fontSize: "0.75rem" }}>
+                    {(() => {
+                      const sDA = parseInt(manualStandaloneGas.daGas) || 0;
+                      const sL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
+                      const reprice = isPrivateFunction
+                        ? repricePrivateSideEffects(parseInt(manualNoteHashes) || 0, parseInt(manualNullifiers) || 0, parseInt(manualL2ToL1Msgs) || 0)
+                        : 0;
+                      const totalDA = sDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
+                      const totalL2 = sL2 + FPC_SUBSCRIBE_OVERHEAD_L2_GAS + (isPrivateFunction ? PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF + reprice : 0);
+                      return (
+                        <>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>Standalone</span>
+                            <span>DA={sDA.toLocaleString()}  L2={sL2.toLocaleString()}</span>
+                          </Box>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>+ FPC overhead</span>
+                            <span>DA=+{FPC_SUBSCRIBE_OVERHEAD_DA_GAS.toLocaleString()}  L2=+{FPC_SUBSCRIBE_OVERHEAD_L2_GAS.toLocaleString()}</span>
+                          </Box>
+                          {isPrivateFunction && (
+                            <>
+                              <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                                <span>+ Overhead diff</span>
+                                <span>L2=+{PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF.toLocaleString()}</span>
+                              </Box>
+                              {reprice > 0 && (
+                                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span>+ Repricing</span>
+                                  <span>L2=+{reprice.toLocaleString()}</span>
+                                </Box>
+                              )}
+                            </>
+                          )}
+                          <Box sx={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid", borderColor: "divider", mt: 0.5, pt: 0.5, fontWeight: 700 }}>
+                            <span>= Total gasLimits</span>
+                            <span>DA={totalDA.toLocaleString()}  L2={totalL2.toLocaleString()}</span>
+                          </Box>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>  Teardown</span>
+                            <span>DA={FPC_TEARDOWN_DA_GAS.toLocaleString()}  L2={FPC_TEARDOWN_L2_GAS.toLocaleString()}</span>
+                          </Box>
+                        </>
+                      );
+                    })()}
+                  </Box>
+                )}
+
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={handleManualContinue}
+                  disabled={!manualStandaloneGas.l2Gas}
+                >
+                  Continue to Review
+                </Button>
+              </>
+            )}
+          </StepContent>
+        </Step>
+
+        {/* Step 3: Review & Sign Up */}
+        <Step>
+          <StepLabel>{STEPS[3]}</StepLabel>
+          <StepContent>
+            {calibrationResult && (
+              <>
+                <CalibrationResult
+                  result={calibrationResult}
+                  maxFeeFj={maxFeeFj}
+                  onMaxFeeChange={setMaxFeeFj}
+                  maxUses={parseInt(maxUses) || 1}
+                  maxUsers={parseInt(maxUsers) || 1}
+                />
+
+                {/* Sign-up parameters */}
+                <Box sx={{ display: "flex", gap: 2, mt: 2, mb: 2 }}>
+                  <TextField
+                    label="Config Index"
+                    type="number"
+                    value={configIndex}
+                    onChange={(e) => setConfigIndex(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="Uses / subscription"
+                    type="number"
+                    value={maxUses}
+                    onChange={(e) => setMaxUses(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="Users (slots)"
+                    type="number"
+                    value={maxUsers}
+                    onChange={(e) => setMaxUsers(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                    helperText="1–16"
+                  />
+                </Box>
+
+                {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}
+                {success && <Alert severity="success" sx={{ mb: 2 }}>App signed up successfully!</Alert>}
+
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setActiveStep(2)}
+                    disabled={submitting}
+                    sx={{ flex: 1 }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={handleSignUp}
+                    disabled={submitting || !maxFeeFj}
+                    sx={{ flex: 1 }}
+                  >
+                    {submitting ? (
+                      <>
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                        Signing up...
+                      </>
+                    ) : (
+                      "Sign Up App"
+                    )}
+                  </Button>
+                </Box>
+              </>
+            )}
+          </StepContent>
+        </Step>
+      </Stepper>
     </Box>
   );
 }

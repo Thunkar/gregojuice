@@ -1,5 +1,6 @@
 import { Box, Paper, LinearProgress, Alert } from "@mui/material";
 import { formatUnits } from "viem";
+import { shortAddress } from "@gregojuice/common";
 import { StepRow } from "./wizard/StepRow";
 import { Step1L1Wallet } from "./wizard/Step1L1Wallet";
 import { Step2AztecAccount } from "./wizard/Step2AztecAccount";
@@ -11,7 +12,7 @@ export function BridgeWizard() {
   const w = useBridgeWizard();
 
   return (
-    <Paper sx={{ p: 3 }}>
+    <Paper sx={{ p: 3, ...(w.isIframe && { border: "none", background: "transparent", backdropFilter: "none" }) }}>
       {/* Progress bar */}
       <Box sx={{ mb: 2 }}>
         <LinearProgress
@@ -55,7 +56,7 @@ export function BridgeWizard() {
         label="Aztec Account"
         description={
           w.aztecAccountReady
-            ? `${w.aztecAddress?.toString().slice(0, 10)}...${w.aztecStatus === "funded" ? " (funded)" : ""}${w.feeJuiceBalance && BigInt(w.feeJuiceBalance) > 0n ? ` — ${formatUnits(BigInt(w.feeJuiceBalance), 18)} FJ` : ""}`
+            ? `${shortAddress(w.aztecAddress?.toString() ?? "")}${w.aztecStatus === "funded" ? " (funded)" : ""}${w.feeJuiceBalance && BigInt(w.feeJuiceBalance) > 0n ? ` — ${formatUnits(BigInt(w.feeJuiceBalance), 18)} FJ` : ""}`
             : "Do you have an Aztec wallet?"
         }
         status={w.stepStatus(2)}
@@ -69,6 +70,7 @@ export function BridgeWizard() {
           aztecStatus={w.aztecStatus}
           aztecError={w.aztecError}
           resetAccount={w.resetAccount}
+          forceEmbedded={w.forceEmbedded}
         />
       </StepRow>
 
@@ -81,7 +83,7 @@ export function BridgeWizard() {
               ? "Bridge to myself"
               : w.recipients.length > 1
                 ? `${w.recipients.length} recipients`
-                : `${w.recipients[0]?.address.slice(0, 10)}...`
+                : `${shortAddress(w.recipients[0]?.address ?? "")}`
             : "Who receives the fee juice?"
         }
         status={w.stepStatus(3)}
@@ -97,7 +99,6 @@ export function BridgeWizard() {
           recipientReady={w.recipientReady}
           advanceFromStep3={w.advanceFromStep3}
           prefilled={w.recipientPrefilled}
-          queryRecipients={w.queryRecipients}
         />
       </StepRow>
 

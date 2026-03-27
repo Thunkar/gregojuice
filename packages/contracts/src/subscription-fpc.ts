@@ -9,12 +9,16 @@ import {
 } from "@aztec/aztec.js/abi";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import type { AuthWitness } from "@aztec/stdlib/auth-witness";
-import type { Gas, GasSettings } from "@aztec/stdlib/gas";
+import { Gas, type GasSettings } from "@aztec/stdlib/gas";
+import {
+  FPC_TEARDOWN_L2_GAS,
+  FPC_TEARDOWN_DA_GAS,
+} from "./fpc-gas-constants.js";
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
 } from "../artifacts/SubscriptionFPC.js";
-import { computeVarArgsHash } from "@aztec/stdlib/hash";
+import { computeVarArgsHash, computeCalldataHash } from "@aztec/stdlib/hash";
 import { HashedValues } from "@aztec/stdlib/tx";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { Fr } from "@aztec/aztec.js/fields";
@@ -26,15 +30,39 @@ const MAX_U128 = 2n ** 128n - 1n;
  * Converts a TS FunctionCall into the Noir FunctionCall struct shape
  * expected by the SubscriptionFPC's `sponsor` method.
  */
+/**
+ * For public calls, the args_hash is computed over [selector, ...args] (the full calldata).
+ * For private calls, it's computed over just args.
+ * See encoding.ts in @aztec/entrypoints for the canonical behavior.
+ */
 export async function buildNoirFunctionCall(call: FunctionCall) {
+  const isPublic = call.type === FunctionType.PUBLIC;
+  // Public calldata = [selector, ...args] hashed with the public calldata domain separator.
+  // Private args are hashed with the function args domain separator.
+  const argsHash = isPublic
+    ? await computeCalldataHash([call.selector.toField(), ...call.args])
+    : await computeVarArgsHash(call.args);
   return {
-    args_hash: await computeVarArgsHash(call.args),
+    args_hash: argsHash,
     function_selector: call.selector.toField(),
     hide_msg_sender: call.hideMsgSender,
     is_static: call.isStatic,
     target_address: call.to,
-    is_public: call.type === FunctionType.PUBLIC,
+    is_public: isPublic,
   };
+}
+
+/**
+ * Builds the HashedValues for the sponsored call's extra hashed args.
+ * Public calls use HashedValues.fromCalldata([selector, ...args]).
+ * Private calls use HashedValues.fromArgs(args).
+ */
+export async function buildExtraHashedArgs(call: FunctionCall): Promise<HashedValues[]> {
+  const isPublic = call.type === FunctionType.PUBLIC;
+  if (isPublic) {
+    return [await HashedValues.fromCalldata([call.selector.toField(), ...call.args])];
+  }
+  return [await HashedValues.fromArgs(call.args)];
 }
 
 export async function calibrateSponsoredApp(params: {
@@ -42,10 +70,6 @@ export async function calibrateSponsoredApp(params: {
   adminWallet: EmbeddedWallet;
   /** Address of the admin account in adminWallet */
   adminAddress: AztecAddress;
-  /** Wallet for the dummy user, must have sponsored app + FPC contracts registered */
-  userWallet: EmbeddedWallet;
-  /** Address of a dummy user account in userWallet */
-  userAddress: AztecAddress;
   /** Aztec node client */
   node: AztecNode;
   /** Address of the already-deployed and funded SubscriptionFPC contract */
@@ -58,8 +82,10 @@ export async function calibrateSponsoredApp(params: {
   maxUsers?: number;
   /** Fee safety multiplier on currentFees (default 10) */
   feeMultiplier?: number;
-  /** Auth witnesses required by the sponsored call (e.g. for transfer_in_private) */
+  /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
+  /** Additional scopes required by the sponsored call  */
+  additionalScopes?: AztecAddress[];
 }): Promise<{
   maxFee: bigint;
   estimatedGas: Pick<GasSettings, "gasLimits" | "teardownGasLimits">;
@@ -67,21 +93,19 @@ export async function calibrateSponsoredApp(params: {
   const {
     adminWallet,
     adminAddress,
-    userWallet,
-    userAddress,
     node,
     fpcAddress,
     sampleCall,
     feeMultiplier = 10,
     authWitnesses = [],
+    additionalScopes = [],
   } = params;
 
   const appAddress = sampleCall.to;
   const selector = sampleCall.selector;
 
-  // Instantiate the FPC for each wallet
+  // Instantiate the FPC
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-  const userFpc = SubscriptionFPCContract.at(fpcAddress, userWallet);
 
   // --- Step 1: Calibration sign_up (unique index per calibration, MAX fee) ---
   // Use a high index unlikely to collide with production indices
@@ -93,21 +117,16 @@ export async function calibrateSponsoredApp(params: {
   // --- Step 2: Simulate subscription to measure gas ---
   const noirCall = await buildNoirFunctionCall(sampleCall);
 
-  const { estimatedGas } = await userFpc.methods
-    .subscribe(noirCall, calibrationIndex, userAddress)
+  const { estimatedGas } = await adminFpc.methods
+    .subscribe(noirCall, calibrationIndex, adminAddress)
     .with({
       authWitnesses,
-      extraHashedArgs: [
-        new HashedValues(
-          sampleCall.args,
-          await computeVarArgsHash(sampleCall.args),
-        ),
-      ],
+      extraHashedArgs: await buildExtraHashedArgs(sampleCall),
     })
     .simulate({
       from: NO_FROM,
       fee: { estimateGas: true, estimatedGasPadding: 0 },
-      additionalScopes: [userAddress, fpcAddress],
+      additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
     });
 
   // --- Step 3: Compute tight max_fee ---
@@ -149,13 +168,12 @@ export async function subscribeAndCall(params: {
     .subscribe(noirCall, configIndex, userAddress)
     .with({
       authWitnesses,
-      extraHashedArgs: [
-        new HashedValues(call.args, await computeVarArgsHash(call.args)),
-      ],
+      extraHashedArgs: await buildExtraHashedArgs(call),
     })
     .send({
       from: NO_FROM,
       additionalScopes: [userAddress, fpc.address],
+      fee: { gasSettings: { teardownGasLimits: new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS) } },
     });
 }
 
@@ -185,13 +203,12 @@ export async function sendSponsoredCall(params: {
     .sponsor(noirCall, configIndex, userAddress)
     .with({
       authWitnesses,
-      extraHashedArgs: [
-        new HashedValues(call.args, await computeVarArgsHash(call.args)),
-      ],
+      extraHashedArgs: await buildExtraHashedArgs(call),
     })
     .send({
       from: NO_FROM,
       additionalScopes: [userAddress, fpc.address],
+      fee: { gasSettings: { teardownGasLimits: new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS) } },
     });
 }
 
@@ -256,14 +273,13 @@ export class SubscriptionFPC {
       calibrate: (params: {
         adminWallet: EmbeddedWallet;
         adminAddress: AztecAddress;
-        userWallet: EmbeddedWallet;
-        userAddress: AztecAddress;
         node: AztecNode;
         sampleCall: FunctionCall;
         maxUses?: number;
         maxUsers?: number;
         feeMultiplier?: number;
         authWitnesses?: AuthWitness[];
+        additionalScopes?: AztecAddress[];
       }): Promise<{
         maxFee: bigint;
         estimatedGas: { gasLimits: Gas; teardownGasLimits: Gas };

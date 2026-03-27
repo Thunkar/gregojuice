@@ -11,7 +11,7 @@ const NETWORKS: NetworkConfig[] = [
     id: 'testnet',
     name: 'Aztec Testnet (Sepolia)',
     aztecNodeUrl: 'https://rpc.testnet.aztec-labs.com',
-    l1RpcUrl: 'https://rpc.sepolia.org',
+    l1RpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
     l1ChainId: 11155111,
   },
 ];

@@ -13,8 +13,17 @@
 
 import {
   collectOffchainEffects,
+  SimulationOverrides,
+  mergeExecutionPayloads,
   type ExecutionPayload,
+  type TxSimulationResult,
+  TxExecutionRequest,
 } from "@aztec/stdlib/tx";
+import { NO_FROM, type NoFrom } from "@aztec/aztec.js/account";
+import { DefaultEntrypoint } from "@aztec/entrypoints/default";
+import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
+import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
+import type { SimulateViaEntrypointOptions } from "@aztec/wallet-sdk/base-wallet";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
@@ -44,7 +53,16 @@ import {
   computeContractSalt,
   serializeSigningKey,
 } from "./initializerless-account";
-import { GasSettings } from "@aztec/stdlib/gas";
+import { Gas, GasSettings } from "@aztec/stdlib/gas";
+import type { AztecAddress } from "@aztec/stdlib/aztec-address";
+import type { FieldsOf } from "@aztec/foundation/types";
+
+import {
+  GAS_ESTIMATION_DA_GAS_LIMIT,
+  GAS_ESTIMATION_L2_GAS_LIMIT,
+  GAS_ESTIMATION_TEARDOWN_DA_GAS_LIMIT,
+  GAS_ESTIMATION_TEARDOWN_L2_GAS_LIMIT,
+} from "@aztec/constants";
 
 /** The initializerless type string — cast to AccountType for WalletDB storage. */
 export const INITIALIZERLESS_TYPE = "schnorr-initializerless" as AccountType;
@@ -182,6 +200,135 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     }
   }
 
+  /**
+   * Builds simulation overrides for all known accounts in the wallet.
+   * This ensures kernelless simulation works for any call that touches
+   * account contracts, including sponsored calls with NO_FROM.
+   */
+  private async buildAccountOverrides(): Promise<
+    Record<string, { instance: any; artifact: any }>
+  > {
+    const accounts = await this.getAccounts();
+    const contracts: Record<string, { instance: any; artifact: any }> = {};
+
+    const stubArtifact =
+      await this.accountContracts.getStubAccountContractArtifact();
+
+    for (const account of accounts) {
+      const address = account.item;
+      try {
+        const originalAccount = await this.getAccountFromAddress(address);
+        const completeAddress = originalAccount.getCompleteAddress();
+        const contractInstance = await this.pxe.getContractInstance(
+          completeAddress.address,
+        );
+        if (!contractInstance) continue;
+
+        const stubInstance = await getContractInstanceFromInstantiationParams(
+          stubArtifact,
+          {
+            salt: Fr.random(),
+          },
+        );
+
+        contracts[address.toString()] = {
+          instance: stubInstance,
+          artifact: stubArtifact,
+        };
+      } catch {
+        // Skip accounts that can't be resolved
+      }
+    }
+
+    return contracts;
+  }
+
+  protected override async completeFeeOptionsForEstimation(
+    from: AztecAddress | NoFrom,
+    feePayer?: AztecAddress,
+    gasSettings?: Partial<FieldsOf<GasSettings>>,
+  ) {
+    const defaultFeeOptions = await this.completeFeeOptions(
+      from,
+      feePayer,
+      gasSettings,
+    );
+    const {
+      gasSettings: { maxFeesPerGas, maxPriorityFeesPerGas },
+    } = defaultFeeOptions;
+    // Use unrealistically high gas limits for estimation to avoid running out of gas,
+    // unless the user has specified otherwise.
+    const gasSettingsForEstimation = GasSettings.default({
+      gasLimits: gasSettings?.gasLimits
+        ? Gas.from(gasSettings.gasLimits)
+        : new Gas(GAS_ESTIMATION_DA_GAS_LIMIT, GAS_ESTIMATION_L2_GAS_LIMIT),
+      teardownGasLimits: gasSettings?.teardownGasLimits
+        ? Gas.from(gasSettings.teardownGasLimits)
+        : new Gas(
+            GAS_ESTIMATION_TEARDOWN_DA_GAS_LIMIT,
+            GAS_ESTIMATION_TEARDOWN_L2_GAS_LIMIT,
+          ),
+      maxFeesPerGas,
+      maxPriorityFeesPerGas,
+    });
+    return { ...defaultFeeOptions, gasSettings: gasSettingsForEstimation };
+  }
+
+  protected override async simulateViaEntrypoint(
+    executionPayload: ExecutionPayload,
+    opts: SimulateViaEntrypointOptions,
+  ): Promise<TxSimulationResult> {
+    const { from, feeOptions, scopes, skipTxValidation, skipFeeEnforcement } =
+      opts;
+
+    const feeExecutionPayload =
+      await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
+    const finalExecutionPayload = feeExecutionPayload
+      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
+      : executionPayload;
+    const chainInfo = await this.getChainInfo();
+
+    // Build overrides for all known accounts
+    const accountOverrides = await this.buildAccountOverrides();
+    const overrides = new SimulationOverrides(
+      Object.keys(accountOverrides).length > 0 ? accountOverrides : undefined,
+    );
+
+    let txRequest: TxExecutionRequest;
+    if (from === NO_FROM) {
+      const entrypoint = new DefaultEntrypoint();
+      txRequest = await entrypoint.createTxExecutionRequest(
+        finalExecutionPayload,
+        feeOptions.gasSettings,
+        chainInfo,
+      );
+    } else {
+      const originalAccount = await this.getAccountFromAddress(from);
+      const completeAddress = originalAccount.getCompleteAddress();
+      const account =
+        await this.accountContracts.createStubAccount(completeAddress);
+      const executionOptions: DefaultAccountEntrypointOptions = {
+        txNonce: Fr.random(),
+        cancellable: false,
+        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
+      };
+      txRequest = await account.createTxExecutionRequest(
+        finalExecutionPayload,
+        feeOptions.gasSettings,
+        chainInfo,
+        executionOptions,
+      );
+    }
+
+    return this.pxe.simulateTx(txRequest, {
+      simulatePublic: true,
+      skipFeeEnforcement,
+      skipTxValidation,
+      overrides,
+      scopes,
+    });
+  }
+
   override async sendTx<W extends InteractionWaitOptions = undefined>(
     executionPayload: ExecutionPayload,
     opts: SendOptions<W>,
@@ -190,17 +337,17 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     const startTime = Date.now();
     const phases: PhaseTiming[] = [];
 
-    const meaningfulCall =
-      executionPayload.calls?.find(
-        (c) =>
-          c.name !== "sponsor_unconditionally" &&
-          c.name !== "claim_and_end_setup",
-      ) ?? executionPayload.calls?.[0];
+    const firstCall = executionPayload.calls?.[0];
+    const isSponsored =
+      firstCall?.name === "subscribe" || firstCall?.name === "sponsor";
+    const meaningfulCall = isSponsored
+      ? executionPayload.calls?.[1] ?? firstCall
+      : firstCall;
     const fnName = meaningfulCall?.name ?? "Transaction";
-    const label =
-      fnName === "constructor"
-        ? "Deploy Account"
-        : fnName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const baseLabel = fnName
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    const label = isSponsored ? `Sponsored ${baseLabel}` : baseLabel;
 
     const emit = (
       phase: TxProgressEvent["phase"],
@@ -231,7 +378,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         {
           from: opts.from,
           feeOptions,
-          scopes: this.scopesFrom(opts.from),
+          scopes: this.scopesFrom(opts.from, opts.additionalScopes),
           skipFeeEnforcement: true,
           skipTxValidation: true,
         },
@@ -329,7 +476,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       );
       const provenTx = await this.pxe.proveTx(
         txRequest,
-        this.scopesFrom(opts.from),
+        this.scopesFrom(opts.from, opts.additionalScopes),
       );
       const provingDuration = Date.now() - provingStart;
       const stats = provenTx.stats;

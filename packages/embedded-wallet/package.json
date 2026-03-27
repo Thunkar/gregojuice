@@ -1,21 +1,32 @@
 {
   "name": "@gregojuice/embedded-wallet",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.0.5",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc -b",
-    "clean": "rm -rf ./dist .tsbuildinfo"
+    "prebuild": "./scripts/prebuild.sh",
+    "build": "yarn prebuild && tsc -p tsconfig.build.json",
+    "clean": "rm -rf ./dist .tsbuildinfo src/artifacts",
+    "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.2.0-nightly.20260323",
-    "@aztec/entrypoints": "v4.2.0-nightly.20260323",
-    "@aztec/foundation": "v4.2.0-nightly.20260323",
-    "@aztec/pxe": "v4.2.0-nightly.20260323",
-    "@aztec/stdlib": "v4.2.0-nightly.20260323",
-    "@aztec/wallet-sdk": "v4.2.0-nightly.20260323",
-    "@aztec/wallets": "v4.2.0-nightly.20260323"
+    "@aztec/aztec.js": "v4.2.0-aztecnr-rc.2",
+    "@aztec/entrypoints": "v4.2.0-aztecnr-rc.2",
+    "@aztec/foundation": "v4.2.0-aztecnr-rc.2",
+    "@aztec/pxe": "v4.2.0-aztecnr-rc.2",
+    "@aztec/stdlib": "v4.2.0-aztecnr-rc.2",
+    "@aztec/wallet-sdk": "v4.2.0-aztecnr-rc.2",
+    "@aztec/wallets": "v4.2.0-aztecnr-rc.2"
   },
   "devDependencies": {
     "typescript": "~5.7.3"

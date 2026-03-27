@@ -1,5 +1,5 @@
 import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { dirname, join, resolve } from "path";
 import { defineConfig, loadEnv, Plugin, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { PolyfillOptions, nodePolyfills } from "vite-plugin-node-polyfills";
@@ -37,6 +37,12 @@ export default defineConfig(({ mode }) => {
       },
       fs: {
         allow: [searchForWorkspaceRoot(process.cwd())],
+      },
+    },
+    resolve: {
+      alias: {
+        "@gregojuice/embedded-wallet": resolve(import.meta.dirname, "../embedded-wallet/src/index.ts"),
+        "@gregojuice/common": resolve(import.meta.dirname, "../common/src/index.ts"),
       },
     },
     optimizeDeps: {

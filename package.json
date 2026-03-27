@@ -10,7 +10,8 @@
     "build": "turbo run build",
     "clean": "turbo run clean",
     "test": "turbo run test",
-    "compile:contracts": "cd packages/contracts && aztec compile && aztec codegen ./target -o ./artifacts"
+    "compile:contracts": "cd packages/contracts && aztec compile && aztec codegen ./target -o ./artifacts",
+    "publish:packages": "./scripts/publish.sh"
   },
   "devDependencies": {
     "turbo": "^2",

@@ -26,11 +26,10 @@ import {
   serializeSigningKey,
   createSigningKeyCapsule,
   type SigningPublicKey,
-} from "../../bridge/src/wallet/initializerless-account.js";
-import {
   deployWithImmutables,
   computeImmutablesAddress,
-} from "../../bridge/src/wallet/immutables.js";
+  createImmutablesInstance,
+} from "@gregojuice/embedded-wallet";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 
@@ -108,7 +107,10 @@ describe("SchnorrInitializerlessAccount", () => {
     expect(salt.toBigInt()).toBe(salt2.toBigInt());
 
     // Different key → different salt
-    const differentSalt = await computeContractSalt(ACTUAL_SALT_1, SIGNING_KEY_2);
+    const differentSalt = await computeContractSalt(
+      ACTUAL_SALT_1,
+      SIGNING_KEY_2,
+    );
     expect(salt.toBigInt()).not.toBe(differentSalt.toBigInt());
 
     // Different actualSalt → different salt
@@ -179,31 +181,39 @@ describe("SchnorrInitializerlessAccount", () => {
   });
 
   it("should fail with wrong capsule data", async () => {
+    // Register the contract WITHOUT persisting the capsule to the store.
+    // This way, only the transient capsule is available — and it has wrong data.
     const secretKey = Fr.random();
     const { signingPublicKey } =
       await createSchnorrInitializerlessAccount(secretKey);
     const serialized = serializeSigningKey(signingPublicKey);
 
-    const result = await deployWithImmutables(
-      wallet,
+    const { instance } = await createImmutablesInstance(
       SchnorrInitializerlessAccountContractArtifact,
       serialized,
       { secretKey },
     );
 
+    // Register contract in PXE but do NOT store the capsule
+    await wallet.registerContract(
+      instance,
+      SchnorrInitializerlessAccountContractArtifact,
+      secretKey,
+    );
+
     const contract = SchnorrInitializerlessAccountContract.at(
-      result.instance.address,
+      instance.address,
       wallet,
     );
 
-    // Wrong signing key in capsule
+    // Wrong signing key — produces a different capsule that won't match the salt
     const wrongKey: SigningPublicKey = {
       x: new Fr(signingPublicKey.x.toBigInt() + 1n),
       y: new Fr(signingPublicKey.y.toBigInt() + 1n),
     };
     const wrongCapsule = createSigningKeyCapsule(
-      result.instance.address,
-      result.capsuleData[0],
+      instance.address,
+      Fr.random(), // wrong actualSalt too — guarantees salt mismatch
       wrongKey,
     );
 
