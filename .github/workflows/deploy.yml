@@ -103,13 +103,12 @@ jobs:
         id: deploy-fpc
         env:
           VERCEL_PROJECT_ID: ${{ secrets.FPC_PROJECT_ID }}
+          VITE_BRIDGE_URL: ${{ vars.VITE_BRIDGE_URL }}
         run: |
           if ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]) || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.production }}" == "true" ]); then
-            echo "VITE_BRIDGE_URL=${{ vars.BRIDGE_URL }}" >> packages/fpc-operator/.env.production.local
             vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
             DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/fpc-operator)
           else
-            echo "VITE_BRIDGE_URL=${{ steps.deploy-bridge.outputs.url }}" >> packages/fpc-operator/.env.local
             vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
             DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/fpc-operator)
           fi
