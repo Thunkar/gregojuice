@@ -1,17 +1,53 @@
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import type { AbiType, ContractArtifact, FunctionAbi } from "@aztec/aztec.js/abi";
+import type {
+  AbiType,
+  ContractArtifact,
+  FunctionAbi,
+} from "@aztec/aztec.js/abi";
 import { Contract } from "@aztec/aztec.js/contracts";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
-import { buildNoirFunctionCall } from "@gregojuice/contracts/subscription-fpc";
 import {
-  SubscriptionFPCContract,
-} from "@gregojuice/contracts/artifacts/SubscriptionFPC";
-import { computeVarArgsHash } from "@aztec/stdlib/hash";
-import { HashedValues } from "@aztec/stdlib/tx";
+  buildNoirFunctionCall,
+  buildExtraHashedArgs,
+} from "@gregojuice/contracts/subscription-fpc";
+import { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 import { NO_FROM } from "@aztec/aztec.js/account";
 
 const MAX_U128 = 2n ** 128n - 1n;
+const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
+
+/** Retrieves a cached calibration index for a contract+selector pair, if one exists. */
+function getCachedCalibrationIndex(
+  contractAddress: string,
+  selector: string,
+): number | null {
+  try {
+    const cache = JSON.parse(
+      localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}",
+    );
+    return cache[`${contractAddress}:${selector}`] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stores a calibration index for a contract+selector pair. */
+function setCachedCalibrationIndex(
+  contractAddress: string,
+  selector: string,
+  index: number,
+) {
+  try {
+    const cache = JSON.parse(
+      localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}",
+    );
+    cache[`${contractAddress}:${selector}`] = index;
+    localStorage.setItem(CALIBRATION_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Converts user-provided string args into the format expected by contract.methods[name]().
@@ -32,7 +68,11 @@ function parseArg(value: string, type: AbiType): unknown {
     case "boolean":
       return value === "true";
     case "struct": {
-      if ("path" in type && typeof type.path === "string" && type.path.includes("AztecAddress"))
+      if (
+        "path" in type &&
+        typeof type.path === "string" &&
+        type.path.includes("AztecAddress")
+      )
         return value || "0x" + "0".repeat(64);
       try {
         return "0x" + BigInt(value || "0").toString(16);
@@ -75,9 +115,17 @@ interface CalibrationBaseParams {
 }
 
 async function buildSampleCall(params: CalibrationBaseParams) {
-  const { adminWallet, artifact, contractInstance, selectedFunction, argValues } = params;
+  const {
+    adminWallet,
+    artifact,
+    contractInstance,
+    selectedFunction,
+    argValues,
+  } = params;
 
-  const adminMeta = await adminWallet.getContractMetadata(contractInstance.address);
+  const adminMeta = await adminWallet.getContractMetadata(
+    contractInstance.address,
+  );
   if (!adminMeta.instance) {
     await adminWallet.registerContract(contractInstance, artifact);
   }
@@ -86,7 +134,9 @@ async function buildSampleCall(params: CalibrationBaseParams) {
   const parsedArgs = selectedFunction.parameters.map((p, i) =>
     parseArg(argValues[i] ?? "0", p.type),
   );
-  return contract.methods[selectedFunction.name](...parsedArgs).getFunctionCall();
+  return contract.methods[selectedFunction.name](
+    ...parsedArgs,
+  ).getFunctionCall();
 }
 
 async function simulateSubscription(params: {
@@ -96,33 +146,51 @@ async function simulateSubscription(params: {
   sampleCall: Awaited<ReturnType<typeof buildSampleCall>>;
   calibrationIndex: number;
 }): Promise<CalibrationResult> {
-  const { adminWallet, adminAddress, fpcAddress, sampleCall, calibrationIndex } = params;
+  const {
+    adminWallet,
+    adminAddress,
+    fpcAddress,
+    sampleCall,
+    calibrationIndex,
+  } = params;
 
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
   const noirCall = await buildNoirFunctionCall(sampleCall);
-
-  const { estimatedGas } = await adminFpc.methods
-    .subscribe(noirCall, calibrationIndex, adminAddress)
-    .with({
-      extraHashedArgs: [
-        new HashedValues(sampleCall.args, await computeVarArgsHash(sampleCall.args)),
-      ],
-    })
-    .simulate({
-      from: NO_FROM,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
-      additionalScopes: [adminAddress, fpcAddress],
-    });
-
-  return {
-    gasLimits: { daGas: Number(estimatedGas.gasLimits.daGas), l2Gas: Number(estimatedGas.gasLimits.l2Gas) },
-    teardownGasLimits: { daGas: Number(estimatedGas.teardownGasLimits.daGas), l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas) },
-    calibrationIndex,
-  };
+  console.log(noirCall);
+  console.log(sampleCall);
+  try {
+    const { estimatedGas } = await adminFpc.methods
+      .subscribe(noirCall, calibrationIndex, adminAddress)
+      .with({
+        extraHashedArgs: await buildExtraHashedArgs(sampleCall),
+      })
+      .simulate({
+        from: NO_FROM,
+        fee: { estimateGas: true, estimatedGasPadding: 0 },
+        additionalScopes: [adminAddress, fpcAddress],
+      });
+    return {
+      gasLimits: {
+        daGas: Number(estimatedGas.gasLimits.daGas),
+        l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+      },
+      teardownGasLimits: {
+        daGas: Number(estimatedGas.teardownGasLimits.daGas),
+        l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas),
+      },
+      calibrationIndex,
+    };
+  } catch (err) {
+    console.error(err);
+    throw err;
+  }
 }
 
 export class CalibrationError extends Error {
-  constructor(message: string, public readonly calibrationIndex: number) {
+  constructor(
+    message: string,
+    public readonly calibrationIndex: number,
+  ) {
     super(message);
   }
 }
@@ -138,13 +206,41 @@ export async function runCalibration(
   const { adminWallet, adminAddress, fpcAddress } = params;
 
   const sampleCall = await buildSampleCall(params);
+  const cacheKey = {
+    contract: sampleCall.to.toString(),
+    selector: sampleCall.selector.toString(),
+  };
 
-  const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-  const calibrationIndex = 1000000 + Math.floor(Math.random() * 1000000);
+  // Check for a cached calibration index (from a prior sign_up for this contract+selector)
+  const cachedIndex = getCachedCalibrationIndex(
+    cacheKey.contract,
+    cacheKey.selector,
+  );
 
-  await adminFpc.methods
-    .sign_up(sampleCall.to, sampleCall.selector, calibrationIndex, 1, MAX_U128, 1)
-    .send({ from: adminAddress });
+  let calibrationIndex: number;
+  if (cachedIndex !== null) {
+    // Reuse the existing slot — skip the expensive sign_up tx
+    calibrationIndex = cachedIndex;
+  } else {
+    // First calibration for this contract+selector — create a new slot
+    calibrationIndex = 1000000 + Math.floor(Math.random() * 1000000);
+    const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
+    await adminFpc.methods
+      .sign_up(
+        sampleCall.to,
+        sampleCall.selector,
+        calibrationIndex,
+        1,
+        MAX_U128,
+        1,
+      )
+      .send({ from: adminAddress });
+    setCachedCalibrationIndex(
+      cacheKey.contract,
+      cacheKey.selector,
+      calibrationIndex,
+    );
+  }
 
   try {
     return await simulateSubscription({

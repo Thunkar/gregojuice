@@ -19,7 +19,7 @@ import {
   type TxSimulationResult,
   TxExecutionRequest,
 } from "@aztec/stdlib/tx";
-import { NO_FROM } from "@aztec/aztec.js/account";
+import { NO_FROM, type NoFrom } from "@aztec/aztec.js/account";
 import { DefaultEntrypoint } from "@aztec/entrypoints/default";
 import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
@@ -53,7 +53,9 @@ import {
   computeContractSalt,
   serializeSigningKey,
 } from "./initializerless-account";
-import { GasSettings } from "@aztec/stdlib/gas";
+import { Gas, GasSettings } from "@aztec/stdlib/gas";
+import type { AztecAddress } from "@aztec/stdlib/aztec-address";
+import type { FieldsOf } from "@aztec/foundation/types";
 
 /** The initializerless type string — cast to AccountType for WalletDB storage. */
 export const INITIALIZERLESS_TYPE = "schnorr-initializerless" as AccountType;
@@ -234,6 +236,37 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     return contracts;
   }
 
+  /**
+   * Override to preserve caller-provided gas limits.
+   * The base implementation replaces ALL gas limits with estimation defaults,
+   * which inflates transaction_fee() in FPC teardown assertions.
+   */
+  protected override async completeFeeOptionsForEstimation(
+    from: AztecAddress | NoFrom,
+    feePayer?: AztecAddress,
+    gasSettings?: Partial<FieldsOf<GasSettings>>,
+  ) {
+    const defaultFeeOptions = await this.completeFeeOptions(
+      from,
+      feePayer,
+      gasSettings,
+    );
+    const {
+      gasSettings: { maxFeesPerGas, maxPriorityFeesPerGas },
+    } = defaultFeeOptions;
+    const gasSettingsForEstimation = GasSettings.default({
+      maxFeesPerGas,
+      maxPriorityFeesPerGas,
+      gasLimits: gasSettings?.gasLimits
+        ? Gas.from(gasSettings.gasLimits)
+        : undefined,
+      teardownGasLimits: gasSettings?.teardownGasLimits
+        ? Gas.from(gasSettings.teardownGasLimits)
+        : undefined,
+    });
+    return { ...defaultFeeOptions, gasSettings: gasSettingsForEstimation };
+  }
+
   protected override async simulateViaEntrypoint(
     executionPayload: ExecutionPayload,
     opts: SimulateViaEntrypointOptions,
@@ -338,7 +371,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         {
           from: opts.from,
           feeOptions,
-          scopes: this.scopesFrom(opts.from),
+          scopes: this.scopesFrom(opts.from, opts.additionalScopes),
           skipFeeEnforcement: true,
           skipTxValidation: true,
         },
@@ -436,7 +469,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       );
       const provenTx = await this.pxe.proveTx(
         txRequest,
-        this.scopesFrom(opts.from),
+        this.scopesFrom(opts.from, opts.additionalScopes),
       );
       const provingDuration = Date.now() - provingStart;
       const stats = provenTx.stats;

@@ -31,6 +31,15 @@ import { useWallet } from "../contexts/WalletContext";
 import { signUpApp } from "../services/fpcService";
 import { runCalibration, retryCalibrationSimulation, CalibrationError, type CalibrationResult as CalibrationData } from "../services/calibration";
 import { FeePricingService } from "../services/fee-pricing";
+import {
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS,
+  FPC_TEARDOWN_L2_GAS,
+  FPC_TEARDOWN_DA_GAS,
+  PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF,
+  repricePrivateSideEffects,
+} from "@gregojuice/contracts/fpc-gas-constants";
+import { FunctionType } from "@aztec/aztec.js/abi";
 import { ArtifactUpload } from "./ArtifactUpload";
 import { FunctionSelector } from "./FunctionSelector";
 import { FunctionArgsForm, getDefaultArgs } from "./FunctionArgsForm";
@@ -39,8 +48,8 @@ import { CalibrationResult } from "./CalibrationResult";
 const STEPS = [
   "Contract Artifact & Address",
   "Select Function",
-  "Additional Contracts",
-  "Calibrate & Sign Up",
+  "Calibration",
+  "Review & Sign Up",
 ];
 
 interface AppSignUpProps {
@@ -76,10 +85,26 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   const [extraRegistering, setExtraRegistering] = useState(false);
   const [extraError, setExtraError] = useState<string | null>(null);
 
-  // Step 4: Args
+  // Extra sender registrations (for addresses that need to be known to PXE for tag computation)
+  const [extraSenders, setExtraSenders] = useState<Array<{ address: string; alias: string }>>([]);
+  const [senderAddress, setSenderAddress] = useState("");
+  const [senderAlias, setSenderAlias] = useState("");
+  const [senderRegistering, setSenderRegistering] = useState(false);
+  const [senderError, setSenderError] = useState<string | null>(null);
+
+  // Step 2: Calibration mode
+  const [calibrationMode, setCalibrationMode] = useState<"simulation" | "manual">("simulation");
+  const [manualStandaloneGas, setManualStandaloneGas] = useState({ daGas: "", l2Gas: "" });
+  const [manualNoteHashes, setManualNoteHashes] = useState("0");
+  const [manualNullifiers, setManualNullifiers] = useState("0");
+  const [manualL2ToL1Msgs, setManualL2ToL1Msgs] = useState("0");
+
+  const isPrivateFunction = selectedFunction?.functionType === FunctionType.PRIVATE;
+
+  // Step 2 (simulation): Args
   const [argValues, setArgValues] = useState<string[]>([]);
 
-  // Step 5: Calibration
+  // Step 2 (simulation): Calibration
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationData | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
@@ -180,6 +205,27 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setExtraContracts((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleRegisterSender = async () => {
+    if (!wallet || !senderAddress) return;
+    setSenderRegistering(true);
+    setSenderError(null);
+    try {
+      const address = AztecAddress.fromString(senderAddress);
+      await wallet.registerSender(address, senderAlias || undefined);
+      setExtraSenders((prev) => [...prev, { address: senderAddress, alias: senderAlias || shortAddress(senderAddress) }]);
+      setSenderAddress("");
+      setSenderAlias("");
+    } catch (err) {
+      setSenderError(err instanceof Error ? err.message : "Failed to register sender");
+    } finally {
+      setSenderRegistering(false);
+    }
+  };
+
+  const removeSender = (index: number) => {
+    setExtraSenders((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleCalibrate = async () => {
     if (!wallet || !node || !artifact || !contractInstance || !selectedFunction) return;
     setCalibrating(true);
@@ -201,6 +247,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
 
       setCalibrationResult(result);
       setCalibrationIndex(result.calibrationIndex);
+      setActiveStep(3); // Auto-advance to Review & Sign Up
     } catch (err) {
       if (err instanceof CalibrationError) {
         setCalibrationIndex(err.calibrationIndex);
@@ -209,6 +256,35 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     } finally {
       setCalibrating(false);
     }
+  };
+
+  const handleManualContinue = () => {
+    const standaloneDA = parseInt(manualStandaloneGas.daGas) || 0;
+    const standaloneL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
+
+    let totalDA = standaloneDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
+    let totalL2 = standaloneL2 + FPC_SUBSCRIBE_OVERHEAD_L2_GAS;
+
+    if (isPrivateFunction) {
+      totalL2 += PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF;
+      totalL2 += repricePrivateSideEffects(
+        parseInt(manualNoteHashes) || 0,
+        parseInt(manualNullifiers) || 0,
+        parseInt(manualL2ToL1Msgs) || 0,
+      );
+    }
+
+    const result: CalibrationData = {
+      gasLimits: { daGas: totalDA, l2Gas: totalL2 },
+      teardownGasLimits: { daGas: FPC_TEARDOWN_DA_GAS, l2Gas: FPC_TEARDOWN_L2_GAS },
+      calibrationIndex: -1,
+    };
+    setCalibrationResult(result);
+    setActiveStep(3);
+  };
+
+  const handleSimulationDone = () => {
+    if (calibrationResult) setActiveStep(3);
   };
 
   const handleSignUp = async () => {
@@ -371,7 +447,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
           </StepContent>
         </Step>
 
-        {/* Step 2: Additional Contracts */}
+        {/* Step 2: Calibration */}
         <Step>
           <StepLabel
             onClick={() => activeStep > 2 && setActiveStep(2)}
@@ -379,97 +455,135 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
             optional={activeStep > 2 ? <EditIcon sx={{ fontSize: 14, color: "text.secondary" }} /> : undefined}
           >{STEPS[2]}</StepLabel>
           <StepContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              If the sponsored function calls other contracts, register them here. Otherwise skip this step.
-            </Typography>
+            <ToggleButtonGroup
+              value={calibrationMode}
+              exclusive
+              onChange={(_, v) => { if (v) { setCalibrationMode(v); setCalibrationResult(null); } }}
+              fullWidth
+              size="small"
+              sx={{ mb: 2 }}
+            >
+              <ToggleButton value="simulation">Simulation</ToggleButton>
+              <ToggleButton value="manual">Manual Gas Limits</ToggleButton>
+            </ToggleButtonGroup>
 
-            {extraContracts.map((ec, i) => (
-              <Chip
-                key={i}
-                label={`${ec.name} (${shortAddress(ec.address)})`}
-                onDelete={() => removeExtraContract(i)}
-                size="small"
-                sx={{ mr: 0.5, mb: 0.5 }}
-              />
-            ))}
+            {calibrationMode === "simulation" && (
+              <>
+                {/* Extra contracts */}
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Register additional contracts called by the sponsored function.
+                </Typography>
 
-            {!extraArtifact ? (
-              <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
-            ) : (
-              <Box sx={{ mt: 1 }}>
-                <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
-                <TextField
-                  fullWidth
-                  label="Contract Address"
-                  placeholder="0x..."
-                  value={extraAddress}
-                  onChange={(e) => setExtraAddress(e.target.value)}
-                  size="small"
-                  sx={{ mb: 1 }}
-                />
-                <Box sx={{ display: "flex", gap: 1 }}>
+                {extraContracts.map((ec, i) => (
+                  <Chip
+                    key={i}
+                    label={`${ec.name} (${shortAddress(ec.address)})`}
+                    onDelete={() => removeExtraContract(i)}
+                    size="small"
+                    sx={{ mr: 0.5, mb: 0.5 }}
+                  />
+                ))}
+
+                {!extraArtifact ? (
+                  <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
+                ) : (
+                  <Box sx={{ mt: 1 }}>
+                    <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
+                    <TextField
+                      fullWidth
+                      label="Contract Address"
+                      placeholder="0x..."
+                      value={extraAddress}
+                      onChange={(e) => setExtraAddress(e.target.value)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleRegisterExtra}
+                        disabled={extraRegistering || !extraAddress}
+                        startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                      >
+                        Register
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => { setExtraArtifact(null); setExtraAddress(""); setExtraError(null); }}
+                      >
+                        Cancel
+                      </Button>
+                    </Box>
+                    {extraError && <Alert severity="error" sx={{ mt: 1 }}>{extraError}</Alert>}
+                  </Box>
+                )}
+
+                {/* Sender registration */}
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+                  Register senders whose notes the admin PXE needs to be aware of.
+                </Typography>
+
+                {extraSenders.map((s, i) => (
+                  <Chip
+                    key={i}
+                    label={`${s.alias} (${shortAddress(s.address)})`}
+                    onDelete={() => removeSender(i)}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    sx={{ mr: 0.5, mb: 0.5 }}
+                  />
+                ))}
+
+                <Box sx={{ display: "flex", gap: 1, mt: 1, alignItems: "center" }}>
+                  <TextField
+                    label="Sender Address"
+                    placeholder="0x..."
+                    value={senderAddress}
+                    onChange={(e) => setSenderAddress(e.target.value)}
+                    size="small"
+                    sx={{ flex: 2 }}
+                  />
+                  <TextField
+                    label="Alias"
+                    placeholder="optional"
+                    value={senderAlias}
+                    onChange={(e) => setSenderAlias(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={handleRegisterExtra}
-                    disabled={extraRegistering || !extraAddress}
-                    startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                    onClick={handleRegisterSender}
+                    disabled={senderRegistering || !senderAddress}
+                    startIcon={senderRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                    sx={{ height: 40, whiteSpace: "nowrap" }}
                   >
-                    Register
-                  </Button>
-                  <Button
-                    size="small"
-                    onClick={() => { setExtraArtifact(null); setExtraAddress(""); setExtraError(null); }}
-                  >
-                    Cancel
+                    Add
                   </Button>
                 </Box>
-                {extraError && <Alert severity="error" sx={{ mt: 1 }}>{extraError}</Alert>}
-              </Box>
-            )}
+                {senderError && <Alert severity="error" sx={{ mt: 1 }}>{senderError}</Alert>}
 
-            <Button
-              fullWidth
-              variant="contained"
-              onClick={() => setActiveStep(3)}
-              sx={{ mt: 2 }}
-            >
-              Continue
-            </Button>
-          </StepContent>
-        </Step>
-
-        {/* Step 3: Calibrate & Sign Up */}
-        <Step>
-          <StepLabel>{STEPS[3]}</StepLabel>
-          <StepContent>
-            {selectedFunction && (
-              <>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  Function arguments for gas estimation. Modify and re-run if calibration fails.
-                </Typography>
-                <FunctionArgsForm fn={selectedFunction} values={argValues} onChange={setArgValues} adminAddress={adminAddress.toString()} />
-
-                {calibrationResult && (
+                {/* Function args */}
+                {selectedFunction && (
                   <Box sx={{ mt: 2 }}>
-                    <CalibrationResult
-                      result={calibrationResult}
-                      maxFeeFj={maxFeeFj}
-                      onMaxFeeChange={setMaxFeeFj}
-                      maxUses={parseInt(maxUses) || 1}
-                      maxUsers={parseInt(maxUsers) || 1}
-                    />
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Function arguments for gas estimation. Modify and re-run if calibration fails.
+                    </Typography>
+                    <FunctionArgsForm fn={selectedFunction} values={argValues} onChange={setArgValues} adminAddress={adminAddress.toString()} />
                   </Box>
                 )}
+
                 {calibrationError && <Alert severity="error" sx={{ mt: 1 }}>{calibrationError}</Alert>}
 
-                {!calibrationResult ? (
+                <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
                   <Button
-                    fullWidth
                     variant="contained"
                     onClick={handleCalibrate}
                     disabled={calibrating}
-                    sx={{ mt: 2 }}
+                    sx={{ flex: 1 }}
                   >
                     {calibrating ? (
                       <>
@@ -482,74 +596,220 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                       "Run Calibration"
                     )}
                   </Button>
-                ) : (
+                  {calibrationResult && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleSimulationDone}
+                      sx={{ flex: 1 }}
+                    >
+                      Continue to Review
+                    </Button>
+                  )}
+                </Box>
+              </>
+            )}
+
+            {calibrationMode === "manual" && selectedFunction && (
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Enter the gas your function uses in a standalone simulation (without the FPC).
+                  The FPC overhead and repricing are added automatically.
+                </Typography>
+
+                <Chip
+                  label={`${selectedFunction.name} (${isPrivateFunction ? "private" : "public"})`}
+                  size="small"
+                  color={isPrivateFunction ? "secondary" : "primary"}
+                  sx={{ mb: 2 }}
+                />
+
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+                  Standalone gas limits (from regular simulation)
+                </Typography>
+                <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+                  <TextField
+                    label="DA Gas"
+                    value={manualStandaloneGas.daGas}
+                    onChange={(e) => setManualStandaloneGas(prev => ({ ...prev, daGas: e.target.value }))}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="L2 Gas"
+                    value={manualStandaloneGas.l2Gas}
+                    onChange={(e) => setManualStandaloneGas(prev => ({ ...prev, l2Gas: e.target.value }))}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                </Box>
+
+                {isPrivateFunction && (
                   <>
-                    {/* Sign-up parameters */}
-                    <Box sx={{ display: "flex", gap: 2, mt: 2, mb: 2 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+                      Side effects (for L2 gas repricing — private → public rates)
+                    </Typography>
+                    <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
                       <TextField
-                        label="Config Index"
+                        label="Note hashes"
                         type="number"
-                        value={configIndex}
-                        onChange={(e) => setConfigIndex(e.target.value)}
+                        value={manualNoteHashes}
+                        onChange={(e) => setManualNoteHashes(e.target.value)}
                         size="small"
                         sx={{ flex: 1 }}
                       />
                       <TextField
-                        label="Uses / subscription"
+                        label="Nullifiers"
                         type="number"
-                        value={maxUses}
-                        onChange={(e) => setMaxUses(e.target.value)}
+                        value={manualNullifiers}
+                        onChange={(e) => setManualNullifiers(e.target.value)}
                         size="small"
                         sx={{ flex: 1 }}
                       />
                       <TextField
-                        label="Users (slots)"
+                        label="L2→L1 msgs"
                         type="number"
-                        value={maxUsers}
-                        onChange={(e) => setMaxUsers(e.target.value)}
+                        value={manualL2ToL1Msgs}
+                        onChange={(e) => setManualL2ToL1Msgs(e.target.value)}
                         size="small"
                         sx={{ flex: 1 }}
-                        helperText="1–16"
                       />
-                    </Box>
-
-                    {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}
-                    {success && <Alert severity="success" sx={{ mb: 2 }}>App signed up successfully!</Alert>}
-
-                    <Box sx={{ display: "flex", gap: 1 }}>
-                      <Button
-                        variant="outlined"
-                        onClick={handleCalibrate}
-                        disabled={calibrating || submitting}
-                        sx={{ flex: 1 }}
-                      >
-                        {calibrating ? (
-                          <>
-                            <CircularProgress size={20} sx={{ mr: 1 }} />
-                            Recalibrating...
-                          </>
-                        ) : (
-                          "Recalibrate"
-                        )}
-                      </Button>
-                      <Button
-                        variant="contained"
-                        onClick={handleSignUp}
-                        disabled={submitting || calibrating || !maxFeeFj}
-                        sx={{ flex: 1 }}
-                      >
-                        {submitting ? (
-                          <>
-                            <CircularProgress size={20} sx={{ mr: 1 }} />
-                            Signing up...
-                          </>
-                        ) : (
-                          "Sign Up App"
-                        )}
-                      </Button>
                     </Box>
                   </>
                 )}
+
+                {/* Live breakdown */}
+                {(manualStandaloneGas.daGas || manualStandaloneGas.l2Gas) && (
+                  <Box sx={{ p: 1.5, mb: 2, bgcolor: "rgba(212,255,40,0.05)", border: "1px solid", borderColor: "divider", fontFamily: "monospace", fontSize: "0.75rem" }}>
+                    {(() => {
+                      const sDA = parseInt(manualStandaloneGas.daGas) || 0;
+                      const sL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
+                      const reprice = isPrivateFunction
+                        ? repricePrivateSideEffects(parseInt(manualNoteHashes) || 0, parseInt(manualNullifiers) || 0, parseInt(manualL2ToL1Msgs) || 0)
+                        : 0;
+                      const totalDA = sDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
+                      const totalL2 = sL2 + FPC_SUBSCRIBE_OVERHEAD_L2_GAS + (isPrivateFunction ? PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF + reprice : 0);
+                      return (
+                        <>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>Standalone</span>
+                            <span>DA={sDA.toLocaleString()}  L2={sL2.toLocaleString()}</span>
+                          </Box>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>+ FPC overhead</span>
+                            <span>DA=+{FPC_SUBSCRIBE_OVERHEAD_DA_GAS.toLocaleString()}  L2=+{FPC_SUBSCRIBE_OVERHEAD_L2_GAS.toLocaleString()}</span>
+                          </Box>
+                          {isPrivateFunction && (
+                            <>
+                              <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                                <span>+ Overhead diff</span>
+                                <span>L2=+{PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF.toLocaleString()}</span>
+                              </Box>
+                              {reprice > 0 && (
+                                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                                  <span>+ Repricing</span>
+                                  <span>L2=+{reprice.toLocaleString()}</span>
+                                </Box>
+                              )}
+                            </>
+                          )}
+                          <Box sx={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid", borderColor: "divider", mt: 0.5, pt: 0.5, fontWeight: 700 }}>
+                            <span>= Total gasLimits</span>
+                            <span>DA={totalDA.toLocaleString()}  L2={totalL2.toLocaleString()}</span>
+                          </Box>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>  Teardown</span>
+                            <span>DA={FPC_TEARDOWN_DA_GAS.toLocaleString()}  L2={FPC_TEARDOWN_L2_GAS.toLocaleString()}</span>
+                          </Box>
+                        </>
+                      );
+                    })()}
+                  </Box>
+                )}
+
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={handleManualContinue}
+                  disabled={!manualStandaloneGas.l2Gas}
+                >
+                  Continue to Review
+                </Button>
+              </>
+            )}
+          </StepContent>
+        </Step>
+
+        {/* Step 3: Review & Sign Up */}
+        <Step>
+          <StepLabel>{STEPS[3]}</StepLabel>
+          <StepContent>
+            {calibrationResult && (
+              <>
+                <CalibrationResult
+                  result={calibrationResult}
+                  maxFeeFj={maxFeeFj}
+                  onMaxFeeChange={setMaxFeeFj}
+                  maxUses={parseInt(maxUses) || 1}
+                  maxUsers={parseInt(maxUsers) || 1}
+                />
+
+                {/* Sign-up parameters */}
+                <Box sx={{ display: "flex", gap: 2, mt: 2, mb: 2 }}>
+                  <TextField
+                    label="Config Index"
+                    type="number"
+                    value={configIndex}
+                    onChange={(e) => setConfigIndex(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="Uses / subscription"
+                    type="number"
+                    value={maxUses}
+                    onChange={(e) => setMaxUses(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    label="Users (slots)"
+                    type="number"
+                    value={maxUsers}
+                    onChange={(e) => setMaxUsers(e.target.value)}
+                    size="small"
+                    sx={{ flex: 1 }}
+                    helperText="1–16"
+                  />
+                </Box>
+
+                {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}
+                {success && <Alert severity="success" sx={{ mb: 2 }}>App signed up successfully!</Alert>}
+
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setActiveStep(2)}
+                    disabled={submitting}
+                    sx={{ flex: 1 }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    variant="contained"
+                    onClick={handleSignUp}
+                    disabled={submitting || !maxFeeFj}
+                    sx={{ flex: 1 }}
+                  >
+                    {submitting ? (
+                      <>
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                        Signing up...
+                      </>
+                    ) : (
+                      "Sign Up App"
+                    )}
+                  </Button>
+                </Box>
               </>
             )}
           </StepContent>

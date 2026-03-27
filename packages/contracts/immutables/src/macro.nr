@@ -48,7 +48,8 @@ pub comptime fn immutables(s: TypeDefinition) -> Quoted {
     let (deserialize_impl, serialized_len) = derive_deserialize_if_not_implemented(s);
 
     // IMMUTABLES_SLOT: 0x1a0e563e6a2087002308173ed42dec43b9543a3684de63d6be9a958c0eaf5c45
-    let IMMUTABLES_SLOT: Field = aztec::protocol::hash::poseidon2_hash_bytes("IMMUTABLES_SLOT".as_bytes());
+    let IMMUTABLES_SLOT: Field =
+        aztec::protocol::hash::poseidon2_hash_bytes("IMMUTABLES_SLOT".as_bytes());
 
     let layout_quoted = generate_immutables_layout(s, serialized_len);
 
@@ -61,7 +62,7 @@ pub comptime fn immutables(s: TypeDefinition) -> Quoted {
 
                 // Safety: capsule_data is verified against salt committed in contract address
                 let capsule_data: [Field; 1 + $serialized_len] = unsafe {
-                    aztec::oracle::capsules::load(address, $IMMUTABLES_SLOT)
+                    aztec::oracle::capsules::load(address, $IMMUTABLES_SLOT, address)
                         .unwrap_or_else(|| panic(f"Immutables not found in capsule for contract {address}"))
                 };
 
@@ -90,7 +91,7 @@ pub comptime fn immutables(s: TypeDefinition) -> Quoted {
             pub unconstrained fn init_unconstrained(context: aztec::context::UtilityContext) -> Immutables {
                 let address = context.this_address();
 
-                let capsule_data: [Field; 1 + $serialized_len] = aztec::oracle::capsules::load(address, $IMMUTABLES_SLOT)
+                let capsule_data: [Field; 1 + $serialized_len] = aztec::oracle::capsules::load(address, $IMMUTABLES_SLOT, address)
                     .unwrap_or_else(|| panic(f"Immutables not found in capsule for contract {address}"));
 
                 // Extract serialized immutables (skip first element which is actual_salt)
@@ -114,7 +115,7 @@ pub comptime fn immutables(s: TypeDefinition) -> Quoted {
                     "Immutables data does not match contract salt, refusing to store",
                 );
 
-                aztec::oracle::capsules::store(address, $IMMUTABLES_SLOT, capsule_data);
+                aztec::oracle::capsules::store(address, $IMMUTABLES_SLOT, capsule_data, address);
             }
         }
 
@@ -131,15 +132,14 @@ comptime fn generate_immutables_layout(s: TypeDefinition, serialized_len: Quoted
 
     let concrete_serialized_len: u32 = std::meta::unquote!(quote { $serialized_len });
 
-    let mut layout_struct_members = &[];
-    let mut layout_constructors = &[];
+    let mut layout_struct_members = @[];
+    let mut layout_constructors = @[];
     let mut field_index: u32 = 0;
     for field in s.fields_as_written() {
         let (name, _, _) = field;
         let index_as_field = field_index as Field;
-        layout_struct_members = layout_struct_members.push_back(
-            quote { pub $name: ImmutableLayoutEntry },
-        );
+        layout_struct_members =
+            layout_struct_members.push_back(quote { pub $name: ImmutableLayoutEntry });
         layout_constructors = layout_constructors.push_back(
             quote { $name: ImmutableLayoutEntry { index: $index_as_field } },
         );
@@ -190,7 +190,7 @@ comptime fn derive_deserialize_if_not_implemented(s: TypeDefinition) -> (Quoted,
     if s.as_type().implements(quote { aztec::protocol::traits::Deserialize }.as_trait_constraint()) {
         (quote {}, n_expr)
     } else {
-        let mut offset_components: [Quoted] = &[];
+        let mut offset_components: [Quoted] = @[];
         let mut field_deserialization = quote {};
         for i in 0..params.len() {
             let (name, param_type, _) = params[i];
@@ -213,9 +213,8 @@ comptime fn derive_deserialize_if_not_implemented(s: TypeDefinition) -> (Quoted,
             field_deserialization = quote { $field_deserialization $new_field };
         }
 
-        let member_names = params
-            .map(|(name, _, _): (Quoted, Type, Quoted)| quote { $name })
-            .join(quote { , });
+        let member_names =
+            params.map(|(name, _, _): (Quoted, Type, Quoted)| quote { $name }).join(quote { , });
 
         let stream_body = params
             .map(|(name, param_type, _): (Quoted, Type, Quoted)| {
@@ -225,7 +224,8 @@ comptime fn derive_deserialize_if_not_implemented(s: TypeDefinition) -> (Quoted,
             })
             .join(quote {});
 
-        (quote {
+        (
+            quote {
             impl aztec::protocol::traits::Deserialize for $typ {
                 let N: u32 = $n_expr;
 
@@ -239,6 +239,8 @@ comptime fn derive_deserialize_if_not_implemented(s: TypeDefinition) -> (Quoted,
                     Self { $member_names }
                 }
             }
-        }, n_expr)
+        },
+            n_expr,
+        )
     }
 }

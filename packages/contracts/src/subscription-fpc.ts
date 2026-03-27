@@ -9,12 +9,16 @@ import {
 } from "@aztec/aztec.js/abi";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import type { AuthWitness } from "@aztec/stdlib/auth-witness";
-import type { Gas, GasSettings } from "@aztec/stdlib/gas";
+import { Gas, type GasSettings } from "@aztec/stdlib/gas";
+import {
+  FPC_TEARDOWN_L2_GAS,
+  FPC_TEARDOWN_DA_GAS,
+} from "./fpc-gas-constants.js";
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
 } from "../artifacts/SubscriptionFPC.js";
-import { computeVarArgsHash } from "@aztec/stdlib/hash";
+import { computeVarArgsHash, computeCalldataHash } from "@aztec/stdlib/hash";
 import { HashedValues } from "@aztec/stdlib/tx";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { Fr } from "@aztec/aztec.js/fields";
@@ -26,15 +30,39 @@ const MAX_U128 = 2n ** 128n - 1n;
  * Converts a TS FunctionCall into the Noir FunctionCall struct shape
  * expected by the SubscriptionFPC's `sponsor` method.
  */
+/**
+ * For public calls, the args_hash is computed over [selector, ...args] (the full calldata).
+ * For private calls, it's computed over just args.
+ * See encoding.ts in @aztec/entrypoints for the canonical behavior.
+ */
 export async function buildNoirFunctionCall(call: FunctionCall) {
+  const isPublic = call.type === FunctionType.PUBLIC;
+  // Public calldata = [selector, ...args] hashed with the public calldata domain separator.
+  // Private args are hashed with the function args domain separator.
+  const argsHash = isPublic
+    ? await computeCalldataHash([call.selector.toField(), ...call.args])
+    : await computeVarArgsHash(call.args);
   return {
-    args_hash: await computeVarArgsHash(call.args),
+    args_hash: argsHash,
     function_selector: call.selector.toField(),
     hide_msg_sender: call.hideMsgSender,
     is_static: call.isStatic,
     target_address: call.to,
-    is_public: call.type === FunctionType.PUBLIC,
+    is_public: isPublic,
   };
+}
+
+/**
+ * Builds the HashedValues for the sponsored call's extra hashed args.
+ * Public calls use HashedValues.fromCalldata([selector, ...args]).
+ * Private calls use HashedValues.fromArgs(args).
+ */
+export async function buildExtraHashedArgs(call: FunctionCall): Promise<HashedValues[]> {
+  const isPublic = call.type === FunctionType.PUBLIC;
+  if (isPublic) {
+    return [await HashedValues.fromCalldata([call.selector.toField(), ...call.args])];
+  }
+  return [await HashedValues.fromArgs(call.args)];
 }
 
 export async function calibrateSponsoredApp(params: {
@@ -93,12 +121,7 @@ export async function calibrateSponsoredApp(params: {
     .subscribe(noirCall, calibrationIndex, adminAddress)
     .with({
       authWitnesses,
-      extraHashedArgs: [
-        new HashedValues(
-          sampleCall.args,
-          await computeVarArgsHash(sampleCall.args),
-        ),
-      ],
+      extraHashedArgs: await buildExtraHashedArgs(sampleCall),
     })
     .simulate({
       from: NO_FROM,
@@ -145,13 +168,12 @@ export async function subscribeAndCall(params: {
     .subscribe(noirCall, configIndex, userAddress)
     .with({
       authWitnesses,
-      extraHashedArgs: [
-        new HashedValues(call.args, await computeVarArgsHash(call.args)),
-      ],
+      extraHashedArgs: await buildExtraHashedArgs(call),
     })
     .send({
       from: NO_FROM,
       additionalScopes: [userAddress, fpc.address],
+      fee: { gasSettings: { teardownGasLimits: new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS) } },
     });
 }
 
@@ -181,13 +203,12 @@ export async function sendSponsoredCall(params: {
     .sponsor(noirCall, configIndex, userAddress)
     .with({
       authWitnesses,
-      extraHashedArgs: [
-        new HashedValues(call.args, await computeVarArgsHash(call.args)),
-      ],
+      extraHashedArgs: await buildExtraHashedArgs(call),
     })
     .send({
       from: NO_FROM,
       additionalScopes: [userAddress, fpc.address],
+      fee: { gasSettings: { teardownGasLimits: new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS) } },
     });
 }
 

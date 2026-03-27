@@ -4,8 +4,10 @@ import {
   EmbeddedWallet,
   type EmbeddedWalletOptions,
 } from "@aztec/wallets/embedded";
-import type { InteractionWaitOptions, SendReturn } from "@aztec/aztec.js/contracts";
-import type { AztecNode } from "@aztec/aztec.js/node";
+import type {
+  InteractionWaitOptions,
+  SendReturn,
+} from "@aztec/aztec.js/contracts";
 import type { SendOptions } from "@aztec/aztec.js/wallet";
 import type { ExecutionPayload } from "@aztec/stdlib/tx";
 import { BaseWallet } from "@aztec/wallet-sdk/base-wallet";
@@ -32,11 +34,7 @@ export interface TestContext {
   feeJuice: FeeJuiceContract;
 }
 
-/**
- * Connects to the sandbox, creates an admin wallet from the first test account,
- * and returns the shared test context.
- */
-export async function setupTestContext(): Promise<TestContext> {
+async function setupBaseContext(): Promise<TestContext> {
   const node = createAztecNodeClient(NODE_URL);
   await waitForNode(node);
   const wallet = await EmbeddedWallet.create(node, { ephemeral: true });
@@ -111,12 +109,6 @@ export async function fundWithFeeJuice(
  * expected-to-revert txs to fail before they ever reach the node.
  * This wallet calls BaseWallet.sendTx directly, bypassing that simulation.
  */
-/**
- * EmbeddedWallet subclass that skips pre-simulation before sending.
- * EmbeddedWallet.sendTx simulates first to estimate gas, which causes
- * expected-to-revert txs to fail before they ever reach the node.
- * This wallet calls BaseWallet.sendTx directly, bypassing that simulation.
- */
 export class GrieferWallet extends EmbeddedWallet {
   static override create<T extends EmbeddedWallet = GrieferWallet>(
     nodeOrUrl: string | AztecNode,
@@ -131,4 +123,71 @@ export class GrieferWallet extends EmbeddedWallet {
   ): Promise<SendReturn<W>> {
     return BaseWallet.prototype.sendTx.call(this, executionPayload, opts);
   }
+}
+
+// ── FPC test context ─────────────────────────────────────────────────
+
+import type { ContractInstanceWithAddress } from "@aztec/aztec.js/contracts";
+import { SubscriptionFPC } from "../src/subscription-fpc.js";
+
+export interface FPCTestContext extends TestContext {
+  fpc: SubscriptionFPC;
+  fpcInstance: ContractInstanceWithAddress;
+  fpcSecretKey: Fr;
+}
+
+/**
+ * Sets up the full test environment: node + admin wallet + deployed & funded SubscriptionFPC.
+ */
+export async function setupTestContext(): Promise<FPCTestContext> {
+  const ctx = await setupBaseContext();
+
+  const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(
+    ctx.wallet,
+    ctx.admin,
+  );
+  const fpcSecretKey = secretKey;
+  const instance = await deployment.getInstance();
+  await ctx.wallet.registerContract(
+    instance,
+    SubscriptionFPC.artifact,
+    secretKey,
+  );
+  const {
+    receipt: { contract: rawFpc },
+  } = await deployment.send({
+    from: ctx.admin,
+    wait: { returnReceipt: true },
+  });
+  const fpc = new SubscriptionFPC(rawFpc);
+
+  await fundWithFeeJuice(ctx, fpc.address);
+
+  return { ...ctx, fpc, fpcInstance: instance, fpcSecretKey };
+}
+
+// ── Gas measurement helpers ──────────────────────────────────────────
+
+export interface GasValues {
+  gasLimits: { daGas: number; l2Gas: number };
+  teardownGasLimits: { daGas: number; l2Gas: number };
+}
+
+export function toGas(estimatedGas: any): GasValues {
+  return {
+    gasLimits: {
+      daGas: Number(estimatedGas.gasLimits.daGas),
+      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+    },
+    teardownGasLimits: {
+      daGas: Number(estimatedGas.teardownGasLimits.daGas),
+      l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas),
+    },
+  };
+}
+
+export function logGas(label: string, gas: GasValues) {
+  console.log(
+    `  ${label}: DA=${gas.gasLimits.daGas}  L2=${gas.gasLimits.l2Gas}  teardown(DA=${gas.teardownGasLimits.daGas} L2=${gas.teardownGasLimits.l2Gas})`,
+  );
 }

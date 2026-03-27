@@ -7,7 +7,9 @@ import {
   Typography,
   Paper,
   Chip,
+  Tooltip,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { shortAddress } from "@gregojuice/common";
 import { theme } from "./theme";
 import { useWallet } from "./contexts/WalletContext";
@@ -88,20 +90,28 @@ export function App() {
           >
             <Chip label={activeNetwork.name} size="small" variant="outlined" />
             {address && (
-              <Chip
-                label={`Admin: ${shortAddress(address.toString())}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-              />
+              <Tooltip title="Copy admin address">
+                <Chip
+                  label={`Admin: ${shortAddress(address.toString())}`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => navigator.clipboard.writeText(address.toString())}
+                />
+              </Tooltip>
             )}
             {fpcAddress && (
-              <Chip
-                label={`FPC: ${shortAddress(fpcAddress)}`}
-                size="small"
-                color="success"
-                variant="outlined"
-              />
+              <Tooltip title="Copy FPC address">
+                <Chip
+                  label={`FPC: ${shortAddress(fpcAddress)}`}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+                  onClick={() => navigator.clipboard.writeText(fpcAddress)}
+                />
+              </Tooltip>
             )}
           </Box>
 
