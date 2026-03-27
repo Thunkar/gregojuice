@@ -8,7 +8,11 @@
     "jsx": "react-jsx",
     "jsxImportSource": "@emotion/react",
     "allowImportingTsExtensions": true,
-    "allowArbitraryExtensions": true
+    "allowArbitraryExtensions": true,
+    "paths": {
+      "@gregojuice/embedded-wallet": ["../embedded-wallet/src/index.ts"],
+      "@gregojuice/common": ["../common/src/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts*", "scripts/**/*.ts", "../contracts/artifacts/**/*.ts"]
+  "include": ["src/**/*.ts*", "scripts/**/*.ts", "../contracts/artifacts/**/*.ts", "../embedded-wallet/src/**/*.ts", "../common/src/**/*.ts"]
 }
