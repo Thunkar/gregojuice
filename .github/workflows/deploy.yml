@@ -17,7 +17,6 @@ on:
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
   VITE_BRIDGE_CONTRACT_ADDRESS: ${{ vars.VITE_BRIDGE_CONTRACT_ADDRESS }}
 
 permissions:
@@ -71,11 +70,16 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      - name: Pull Vercel Environment Information
+      # ── Bridge deployment ──────────────────────────────────────────────
+      - name: Pull Vercel Environment (Bridge)
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.BRIDGE_PROJECT_ID }}
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/bridge
 
-      - name: Build and deploy to Vercel
-        id: deploy
+      - name: Build and deploy Bridge
+        id: deploy-bridge
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.BRIDGE_PROJECT_ID }}
         run: |
           if ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]) || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.production }}" == "true" ]); then
             vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/bridge
@@ -86,7 +90,28 @@ jobs:
           fi
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
-      - name: Comment deployment URL on PR
+      # ── FPC Operator deployment ────────────────────────────────────────
+      - name: Pull Vercel Environment (FPC Operator)
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.FPC_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
+
+      - name: Build and deploy FPC Operator
+        id: deploy-fpc
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.FPC_PROJECT_ID }}
+        run: |
+          if ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]) || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.production }}" == "true" ]); then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
+            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/fpc-operator)
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
+            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/fpc-operator)
+          fi
+          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+
+      # ── PR Comment ─────────────────────────────────────────────────────
+      - name: Comment deployment URLs on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -95,5 +120,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚀 Deployed to Vercel!\n\n**Preview URL:** ${{ steps.deploy.outputs.url }}'
+              body: '🚀 Deployed to Vercel!\n\n**Bridge:** ${{ steps.deploy-bridge.outputs.url }}\n**FPC Operator:** ${{ steps.deploy-fpc.outputs.url }}'
             })

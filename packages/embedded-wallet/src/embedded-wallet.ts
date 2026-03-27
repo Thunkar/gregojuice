@@ -57,6 +57,13 @@ import { Gas, GasSettings } from "@aztec/stdlib/gas";
 import type { AztecAddress } from "@aztec/stdlib/aztec-address";
 import type { FieldsOf } from "@aztec/foundation/types";
 
+import {
+  GAS_ESTIMATION_DA_GAS_LIMIT,
+  GAS_ESTIMATION_L2_GAS_LIMIT,
+  GAS_ESTIMATION_TEARDOWN_DA_GAS_LIMIT,
+  GAS_ESTIMATION_TEARDOWN_L2_GAS_LIMIT,
+} from "@aztec/constants";
+
 /** The initializerless type string — cast to AccountType for WalletDB storage. */
 export const INITIALIZERLESS_TYPE = "schnorr-initializerless" as AccountType;
 
@@ -236,11 +243,6 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     return contracts;
   }
 
-  /**
-   * Override to preserve caller-provided gas limits.
-   * The base implementation replaces ALL gas limits with estimation defaults,
-   * which inflates transaction_fee() in FPC teardown assertions.
-   */
   protected override async completeFeeOptionsForEstimation(
     from: AztecAddress | NoFrom,
     feePayer?: AztecAddress,
@@ -254,15 +256,20 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     const {
       gasSettings: { maxFeesPerGas, maxPriorityFeesPerGas },
     } = defaultFeeOptions;
+    // Use unrealistically high gas limits for estimation to avoid running out of gas,
+    // unless the user has specified otherwise.
     const gasSettingsForEstimation = GasSettings.default({
-      maxFeesPerGas,
-      maxPriorityFeesPerGas,
       gasLimits: gasSettings?.gasLimits
         ? Gas.from(gasSettings.gasLimits)
-        : undefined,
+        : new Gas(GAS_ESTIMATION_DA_GAS_LIMIT, GAS_ESTIMATION_L2_GAS_LIMIT),
       teardownGasLimits: gasSettings?.teardownGasLimits
         ? Gas.from(gasSettings.teardownGasLimits)
-        : undefined,
+        : new Gas(
+            GAS_ESTIMATION_TEARDOWN_DA_GAS_LIMIT,
+            GAS_ESTIMATION_TEARDOWN_L2_GAS_LIMIT,
+          ),
+      maxFeesPerGas,
+      maxPriorityFeesPerGas,
     });
     return { ...defaultFeeOptions, gasSettings: gasSettingsForEstimation };
   }
@@ -330,17 +337,17 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     const startTime = Date.now();
     const phases: PhaseTiming[] = [];
 
-    const meaningfulCall =
-      executionPayload.calls?.find(
-        (c) =>
-          c.name !== "sponsor_unconditionally" &&
-          c.name !== "claim_and_end_setup",
-      ) ?? executionPayload.calls?.[0];
+    const firstCall = executionPayload.calls?.[0];
+    const isSponsored =
+      firstCall?.name === "subscribe" || firstCall?.name === "sponsor";
+    const meaningfulCall = isSponsored
+      ? executionPayload.calls?.[1] ?? firstCall
+      : firstCall;
     const fnName = meaningfulCall?.name ?? "Transaction";
-    const label =
-      fnName === "constructor"
-        ? "Deploy Account"
-        : fnName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const baseLabel = fnName
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    const label = isSponsored ? `Sponsored ${baseLabel}` : baseLabel;
 
     const emit = (
       phase: TxProgressEvent["phase"],
