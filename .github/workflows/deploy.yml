@@ -67,6 +67,9 @@ jobs:
       - name: Compile contracts
         run: yarn compile:contracts
 
+      - name: Prepare embedded-wallet artifacts
+        run: cd packages/embedded-wallet && ./scripts/prebuild.sh
+
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
