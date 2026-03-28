@@ -39,8 +39,7 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
   const { wallet, address } = useAztecWallet();
   const [balances, setBalances] = useState<Record<string, string | null>>({});
 
-  // Filter out ephemeral (first entry if multiple)
-  const displayCredentials = allCredentials.length > 1 ? allCredentials.slice(1) : allCredentials;
+  const displayCredentials = allCredentials;
 
   // Fetch FJ balance for each recipient after claiming
   useEffect(() => {

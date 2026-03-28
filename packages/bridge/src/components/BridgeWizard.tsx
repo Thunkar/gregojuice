@@ -1,4 +1,4 @@
-import { Box, Paper, LinearProgress, Alert } from "@mui/material";
+import { Box, Paper, LinearProgress, Alert, Button } from "@mui/material";
 import { formatUnits } from "viem";
 import { shortAddress } from "@gregojuice/common";
 import { StepRow } from "./wizard/StepRow";
@@ -134,6 +134,13 @@ export function BridgeWizard() {
             severity="error"
             sx={{ mt: 1, borderRadius: 0 }}
             onClose={() => w.setError(null)}
+            action={
+              w.canRetryClaim ? (
+                <Button color="inherit" size="small" onClick={w.retryClaim}>
+                  Retry
+                </Button>
+              ) : undefined
+            }
           >
             {w.error || w.aztecError}
           </Alert>

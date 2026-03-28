@@ -8,6 +8,8 @@ import {
   type Chain,
   type TransactionReceipt,
   parseAbi,
+  parseAbiItem,
+  decodeEventLog,
 } from "viem";
 import { sepolia, mainnet, foundry } from "viem/chains";
 import {
@@ -160,7 +162,6 @@ export function pollMessageReadiness(
   const poll = async () => {
     const node = getAztecNode(aztecNodeUrl);
     const msgHash = Fr.fromHexString(messageHash);
-
     while (!cancelled) {
       try {
         const ready = await isL1ToL2MessageReady(node, msgHash);
@@ -171,7 +172,6 @@ export function pollMessageReadiness(
       } catch {
         // Node may not have seen the message yet - keep polling
       }
-      // Wait 5 seconds between polls
       await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   };
@@ -256,6 +256,10 @@ export async function getMintAmount(
 
 // ── Event extraction ─────────────────────────────────────────────────
 
+const depositEventAbi = parseAbiItem(
+  "event DepositToAztecPublic(bytes32 indexed to, uint256 amount, bytes32 secretHash, bytes32 key, uint256 index)",
+);
+
 type DepositEvent = {
   to: Hex;
   amount: bigint;
@@ -277,17 +281,16 @@ function extractDepositEvent(receipt: TransactionReceipt): DepositEvent {
 function extractAllDepositEvents(receipt: TransactionReceipt): DepositEvent[] {
   const events: DepositEvent[] = [];
   for (const log of receipt.logs) {
-    const topics = (log as unknown as { topics: Hex[] }).topics;
-    if (!topics || topics.length < 2) continue;
-
-    const data = log.data;
-    if (data.length >= 2 + 64 * 4) {
-      const amount = BigInt("0x" + data.slice(2, 66));
-      const secretHash = ("0x" + data.slice(66, 130)) as Hex;
-      const key = ("0x" + data.slice(130, 194)) as Hex;
-      const index = BigInt("0x" + data.slice(194, 258));
-      const to = topics[1] as Hex;
-      events.push({ to, amount, secretHash, key, index });
+    try {
+      const decoded = decodeEventLog({
+        abi: [depositEventAbi],
+        data: log.data,
+        topics: log.topics as [Hex, ...Hex[]],
+      });
+      const args = decoded.args as unknown as DepositEvent;
+      events.push(args);
+    } catch {
+      // Not a DepositToAztecPublic event — skip
     }
   }
   return events;
@@ -735,76 +738,74 @@ export async function connectWallet(): Promise<Hex> {
 // ── L2 Claim Functions ──────────────────────────────────────────────────────
 
 /**
- * Claims fee juice for the caller's own account.
- * Uses FeeJuicePaymentMethodWithClaim to claim and pay for the tx in one go.
+ * Bootstrap claim: the first credential pays for gas via FeeJuicePaymentMethodWithClaim,
+ * the rest are batch-claimed in the same tx. Use when the wallet has no fee juice.
  */
-export async function claimFeeJuice(
+export async function claimWithBootstrap(
   wallet: Wallet,
   callerAddress: AztecAddress,
-  claim: ClaimCredentials,
-) {
-  const fj = FeeJuiceContract.at(wallet);
-  const paymentMethod = new FeeJuicePaymentMethodWithClaim(callerAddress, {
-    claimAmount: BigInt(claim.claimAmount),
-    claimSecret: Fr.fromHexString(claim.claimSecret),
-    messageLeafIndex: BigInt(claim.messageLeafIndex),
-  });
-
-  const executionPayload = await paymentMethod.getExecutionPayload();
-
-  return wallet.sendTx(executionPayload, { from: callerAddress });
-}
-
-/**
- * Claims fee juice for the caller and N other recipients in a single L2 tx.
- * The caller's claim pays for gas via FeeJuicePaymentMethodWithClaim.
- * Other claims are batched as fj.claim() calls.
- */
-export async function claimAllInSingleTx(
-  wallet: Wallet,
-  callerAddress: AztecAddress,
-  callerClaim: ClaimCredentials,
+  bootstrapClaim: ClaimCredentials,
   otherClaims: ClaimCredentials[],
 ) {
   const fj = FeeJuiceContract.at(wallet);
 
   const paymentMethod = new FeeJuicePaymentMethodWithClaim(callerAddress, {
-    claimAmount: BigInt(callerClaim.claimAmount),
-    claimSecret: Fr.fromHexString(callerClaim.claimSecret),
-    messageLeafIndex: BigInt(callerClaim.messageLeafIndex),
+    claimAmount: BigInt(bootstrapClaim.claimAmount),
+    claimSecret: Fr.fromHexString(bootstrapClaim.claimSecret),
+    messageLeafIndex: BigInt(bootstrapClaim.messageLeafIndex),
   });
 
-  if (otherClaims.length === 1) {
-    // Single other recipient — no batch needed
-    const c = otherClaims[0];
-    const target = AztecAddress.fromString(c.recipient);
-    return fj.methods
-      .claim(
-        target,
-        BigInt(c.claimAmount),
-        Fr.fromHexString(c.claimSecret),
-        Fr.fromHexString(
-          `0x${BigInt(c.messageLeafIndex).toString(16).padStart(64, "0")}`,
-        ),
-      )
-      .send({ from: callerAddress, fee: { paymentMethod } });
+  if (otherClaims.length === 0) {
+    // Bootstrap only — just pay for the tx, no additional claims
+    const executionPayload = await paymentMethod.getExecutionPayload();
+    return wallet.sendTx(executionPayload, { from: callerAddress });
   }
 
-  // Multiple other recipients — batch all claim calls
   const calls = otherClaims.map((c) => {
     const target = AztecAddress.fromString(c.recipient);
     return fj.methods.claim(
       target,
       BigInt(c.claimAmount),
       Fr.fromHexString(c.claimSecret),
-      Fr.fromHexString(
-        `0x${BigInt(c.messageLeafIndex).toString(16).padStart(64, "0")}`,
-      ),
+      BigInt(c.messageLeafIndex),
     );
   });
 
+  if (calls.length === 1) {
+    return calls[0].send({ from: callerAddress, fee: { paymentMethod } });
+  }
+
   const batch = new BatchCall(wallet, calls);
   return batch.send({ from: callerAddress, fee: { paymentMethod } });
+}
+
+/**
+ * Batch claim: all credentials are claimed in one tx, gas paid from existing balance.
+ * Use when the wallet already has fee juice.
+ */
+export async function claimBatch(
+  wallet: Wallet,
+  callerAddress: AztecAddress,
+  claims: ClaimCredentials[],
+) {
+  const fj = FeeJuiceContract.at(wallet);
+
+  const calls = claims.map((c) => {
+    const target = AztecAddress.fromString(c.recipient);
+    return fj.methods.claim(
+      target,
+      BigInt(c.claimAmount),
+      Fr.fromHexString(c.claimSecret),
+      BigInt(c.messageLeafIndex),
+    );
+  });
+
+  if (calls.length === 1) {
+    return calls[0].send({ from: callerAddress });
+  }
+
+  const batch = new BatchCall(wallet, calls);
+  return batch.send({ from: callerAddress });
 }
 
 /**

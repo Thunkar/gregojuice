@@ -8,9 +8,8 @@ export type RecipientChoice = "self" | "other" | null;
 // ── Claim path (pure, computed by reducer) ────────────────────────────
 
 export type ClaimPath =
-  | { kind: "self" }
-  | { kind: "multiple"; ephemeral: ClaimCredentials; others: ClaimCredentials[] }
-  | { kind: "for-recipient"; recipient: string };
+  | { kind: "bootstrap"; bootstrapClaim: ClaimCredentials; otherClaims: ClaimCredentials[] }
+  | { kind: "batch"; claims: ClaimCredentials[] };
 
 // ── Tx progress snapshot (for crash recovery) ─────────────────────────
 
@@ -32,16 +31,16 @@ export interface TxProgressSnapshot {
 export type BridgePhase =
   | { type: "idle" }
   | { type: "l1-pending"; pendingBridge: PendingBridge }
-  | { type: "waiting-l2-sync"; allCredentials: ClaimCredentials[]; messagesReady: boolean[] }
+  | { type: "waiting-l2-sync"; allCredentials: ClaimCredentials[]; messagesReady: boolean[]; claimKind?: "bootstrap" | "batch" }
   | { type: "ready-to-claim"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
   | { type: "claiming"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
   | { type: "claim-sent"; allCredentials: ClaimCredentials[]; txHash: string; snapshot: TxProgressSnapshot }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; allCredentials?: ClaimCredentials[]; claimKind?: "bootstrap" | "batch" };
 
 export type BridgeAction =
   | { type: "BRIDGE_STARTED"; pendingBridge: PendingBridge }
-  | { type: "L1_CONFIRMED"; allCredentials: ClaimCredentials[] }
+  | { type: "L1_CONFIRMED"; allCredentials: ClaimCredentials[]; claimKind?: "bootstrap" | "batch" }
   | { type: "MESSAGE_READY"; index: number; recipientChoice: RecipientChoice; feeJuiceBalance: string | null; walletReady: boolean }
   | { type: "WALLET_READY"; recipientChoice: RecipientChoice; feeJuiceBalance: string | null }
   | { type: "WALLET_NOT_READY" }
@@ -49,6 +48,7 @@ export type BridgeAction =
   | { type: "TX_SENT"; txHash: string; snapshot: TxProgressSnapshot }
   | { type: "CLAIM_DONE" }
   | { type: "ERROR"; message: string }
+  | { type: "RETRY_CLAIM"; recipientChoice: RecipientChoice; feeJuiceBalance: string | null }
   | { type: "RESET" };
 
 // ── Session (localStorage) ────────────────────────────────────────────
@@ -56,6 +56,8 @@ export type BridgeAction =
 export interface BridgeSession {
   phase: "l1-pending" | "bridged" | "claiming";
   allCredentials?: ClaimCredentials[];
+  /** Which claim strategy was used: "bootstrap" (first cred pays gas) or "batch" (wallet funded) */
+  claimKind?: "bootstrap" | "batch";
   recipientChoice: "self" | "other";
   isExternal?: boolean;
   /** All recipients with their amounts (address + amount pairs) */

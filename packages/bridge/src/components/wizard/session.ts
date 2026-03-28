@@ -1,6 +1,5 @@
 import type { BridgeSession, BridgePhase } from "./types";
 import { SESSION_KEY, SESSION_TTL_MS } from "./constants";
-import { determineClaimPath } from "./claim-path";
 
 export function saveSession(session: BridgeSession) {
   try {
@@ -45,6 +44,7 @@ export function sessionToPhase(session: BridgeSession): BridgePhase {
       type: "waiting-l2-sync",
       allCredentials: allCreds,
       messagesReady: allCreds.map(() => false),
+      claimKind: session.claimKind,
     };
   }
 
@@ -58,16 +58,13 @@ export function sessionToPhase(session: BridgeSession): BridgePhase {
         snapshot: session.txProgressSnapshot,
       };
     }
-    // Tx not yet sent — try to derive claim path
-    const claimPath = determineClaimPath(session.recipientChoice, allCreds, null);
-    if (claimPath) {
-      return { type: "ready-to-claim", allCredentials: allCreds, claimPath };
-    }
-    // Can't determine path yet — fall back to waiting-l2-sync with messages pre-marked ready
+    // Tx not yet sent — restore to waiting-l2-sync with messages pre-marked ready
+    // The claimKind from the session tells us which path to use once wallet balance is known
     return {
       type: "waiting-l2-sync",
       allCredentials: allCreds,
       messagesReady: allCreds.map(() => true),
+      claimKind: session.claimKind,
     };
   }
 
@@ -96,10 +93,10 @@ export function phaseToSession(
     case "l1-pending":
       return { ...base, phase: "l1-pending", l1BridgeParams: phase.pendingBridge };
     case "waiting-l2-sync":
-      return { ...base, phase: "bridged", allCredentials: phase.allCredentials };
+      return { ...base, phase: "bridged", allCredentials: phase.allCredentials, claimKind: phase.claimKind };
     case "ready-to-claim":
     case "claiming":
-      return { ...base, phase: "claiming", allCredentials: phase.allCredentials };
+      return { ...base, phase: "claiming", allCredentials: phase.allCredentials, claimKind: phase.claimPath.kind };
     case "claim-sent":
       return { ...base, phase: "claiming", allCredentials: phase.allCredentials, txProgressSnapshot: phase.snapshot };
     default:

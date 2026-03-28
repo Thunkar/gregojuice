@@ -33,6 +33,7 @@ import type {
   BridgeAction,
   BridgeStep,
   ClaimCredentials,
+  ClaimPath,
 } from "./types";
 
 // ── Reducer ───────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
         type: "waiting-l2-sync",
         allCredentials: action.allCredentials,
         messagesReady: action.allCredentials.map(() => false),
+        claimKind: action.claimKind,
       };
 
     case "MESSAGE_READY": {
@@ -61,9 +63,14 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
           action.recipientChoice,
           state.allCredentials,
           action.feeJuiceBalance,
+          state.claimKind,
         );
         if (claimPath) {
-          return { type: "ready-to-claim", allCredentials: state.allCredentials, claimPath };
+          return {
+            type: "ready-to-claim",
+            allCredentials: state.allCredentials,
+            claimPath,
+          };
         }
       }
       return { ...state, messagesReady: newReady };
@@ -76,9 +83,14 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
         action.recipientChoice,
         state.allCredentials,
         action.feeJuiceBalance,
+        state.claimKind,
       );
       if (!claimPath) return state;
-      return { type: "ready-to-claim", allCredentials: state.allCredentials, claimPath };
+      return {
+        type: "ready-to-claim",
+        allCredentials: state.allCredentials,
+        claimPath,
+      };
     }
 
     case "WALLET_NOT_READY": {
@@ -87,12 +99,17 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
         type: "waiting-l2-sync",
         allCredentials: state.allCredentials,
         messagesReady: state.allCredentials.map(() => true),
+        claimKind: state.claimPath.kind,
       };
     }
 
     case "CLAIM_STARTED": {
       if (state.type !== "ready-to-claim") return state;
-      return { type: "claiming", allCredentials: state.allCredentials, claimPath: state.claimPath };
+      return {
+        type: "claiming",
+        allCredentials: state.allCredentials,
+        claimPath: state.claimPath,
+      };
     }
 
     case "TX_SENT": {
@@ -106,11 +123,46 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
     }
 
     case "CLAIM_DONE":
-      if (state.type !== "claiming" && state.type !== "claim-sent") return state;
+      if (state.type !== "claiming" && state.type !== "claim-sent")
+        return state;
       return { type: "done" };
 
-    case "ERROR":
+    case "ERROR": {
+      // Preserve credentials and claimKind for retry if we were in a claim-related state
+      const claimStates = ["ready-to-claim", "claiming", "claim-sent"];
+      if (claimStates.includes(state.type)) {
+        const claimKind =
+          "claimPath" in state
+            ? (state as { claimPath: ClaimPath }).claimPath.kind
+            : undefined;
+        return {
+          type: "error",
+          message: action.message,
+          allCredentials: (state as { allCredentials: ClaimCredentials[] })
+            .allCredentials,
+          claimKind,
+        };
+      }
       return { type: "error", message: action.message };
+    }
+
+    case "RETRY_CLAIM": {
+      if (state.type !== "error" || !("allCredentials" in state)) return state;
+      const claimPath = determineClaimPath(
+        action.recipientChoice,
+        state.allCredentials as ClaimCredentials[],
+        action.feeJuiceBalance,
+        state.claimKind,
+      );
+      if (claimPath) {
+        return {
+          type: "ready-to-claim",
+          allCredentials: state.allCredentials as ClaimCredentials[],
+          claimPath,
+        };
+      }
+      return state;
+    }
 
     case "RESET":
       return IDLE;
@@ -130,9 +182,8 @@ export function useBridgeWizard() {
     address: aztecAddress,
     feeJuiceBalance,
     connectAztecWallet,
-    claimSelf,
-    claimForRecipient,
-    claimAll,
+    claimWithBootstrap,
+    claimBatch,
     resetAccount,
     refreshFeeJuiceBalance,
     isExternal,
@@ -140,7 +191,8 @@ export function useBridgeWizard() {
   } = useAztecWallet();
 
   // ── Iframe / query-param overrides ────────────────────────────────
-  const [{ recipients: queryRecipients, isIframe, forceEmbedded }] = useState(getQueryParams);
+  const [{ recipients: queryRecipients, isIframe, forceEmbedded }] =
+    useState(getQueryParams);
 
   // ── Session restore (computed once) ─────────────────────────────────
   const [initialSession] = useState(() => loadSession(activeNetwork.id));
@@ -163,14 +215,26 @@ export function useBridgeWizard() {
   const [error, setError] = useState<string | null>(null);
 
   // ── Step 1: L1 wallet state ─────────────────────────────────────────
-  const [l1Addresses, setL1Addresses] = useState<(L1Addresses & { l1ChainId: number }) | null>(null);
-  const [balance, setBalance] = useState<{ balance: bigint; formatted: string; decimals: number } | null>(null);
+  const [l1Addresses, setL1Addresses] = useState<
+    (L1Addresses & { l1ChainId: number }) | null
+  >(null);
+  const [balance, setBalance] = useState<{
+    balance: bigint;
+    formatted: string;
+    decimals: number;
+  } | null>(null);
   const [mintAmountValue, setMintAmountValue] = useState<bigint | null>(null);
   const [isLoadingInfo, setIsLoadingInfo] = useState(false);
 
   // ── Step 2: Aztec account choice ────────────────────────────────────
   const [aztecChoice, setAztecChoice] = useState<AztecChoice>(
-    forceEmbedded ? "new" : hasSession ? (initialSession?.isExternal ? "existing" : "new") : null,
+    forceEmbedded
+      ? "new"
+      : hasSession
+        ? initialSession?.isExternal
+          ? "existing"
+          : "new"
+        : null,
   );
 
   // ── Step 3: Recipient ───────────────────────────────────────────────
@@ -178,15 +242,20 @@ export function useBridgeWizard() {
     queryRecipients ? "other" : (initialSession?.recipientChoice ?? null),
   );
   // Unified recipients list: addresses collected in Step 3, amounts in Step 4
-  const [recipients, setRecipients] = useState<Array<{ address: string; amount: string }>>(() => {
-    if (queryRecipients) return queryRecipients.map((r) => ({ address: r.address, amount: r.amount ? (Number(r.amount) / 1e18).toString() : "" }));
+  const [recipients, setRecipients] = useState<
+    Array<{ address: string; amount: string }>
+  >(() => {
+    if (queryRecipients)
+      return queryRecipients.map((r) => ({
+        address: r.address,
+        amount: r.amount ? (Number(r.amount) / 1e18).toString() : "",
+      }));
     if (initialSession?.recipients?.length) return initialSession.recipients;
     return [{ address: "", amount: "" }];
   });
 
   // ── Step 4: Amount + UI state ───────────────────────────────────────
   // Primary amount reads/writes recipients[0].amount
-  const amount = recipients[0]?.amount ?? "";
   const setAmount = useCallback((val: string) => {
     setRecipients((prev) => {
       const updated = [...prev];
@@ -195,7 +264,9 @@ export function useBridgeWizard() {
     });
   }, []);
   const [bridgeStepLabel, setBridgeStepLabel] = useState(
-    bridge.type === "l1-pending" ? "Resuming — waiting for L1 confirmation..." : "",
+    bridge.type === "l1-pending"
+      ? "Resuming — waiting for L1 confirmation..."
+      : "",
   );
 
   // ── Derived values ──────────────────────────────────────────────────
@@ -209,15 +280,11 @@ export function useBridgeWizard() {
       ? aztecStatus === "funded"
       : aztecStatus === "ready" || aztecStatus === "funded";
 
-  const effectiveRecipient =
-    recipientChoice === "self"
-      ? (aztecAddress?.toString() ?? "")
-      : (recipients[0]?.address ?? "");
-
   const recipientReady =
     recipientChoice === "self"
       ? !!aztecAddress
-      : recipients.length > 0 && recipients.every((r) => r.address.length >= 10);
+      : recipients.length > 0 &&
+        recipients.every((r) => r.address.length >= 10);
 
   const needsMultiBridge =
     aztecChoice === "new" &&
@@ -276,7 +343,12 @@ export function useBridgeWizard() {
             dispatch({ type: "L1_CONFIRMED", allCredentials });
           })
           .catch((err) => {
-            if (!cancelled) dispatch({ type: "ERROR", message: err instanceof Error ? err.message : "L1 resume failed" });
+            if (!cancelled)
+              dispatch({
+                type: "ERROR",
+                message:
+                  err instanceof Error ? err.message : "L1 resume failed",
+              });
           });
         break;
       }
@@ -317,7 +389,7 @@ export function useBridgeWizard() {
       }
 
       case "claiming": {
-        const { allCredentials, claimPath } = bridge;
+        const { claimPath } = bridge;
 
         let capturedTxHash: string | null = null;
         const unsub = txProgress.subscribe((event) => {
@@ -339,12 +411,13 @@ export function useBridgeWizard() {
 
         const claimPromise = (async () => {
           switch (claimPath.kind) {
-            case "self":
-              return claimSelf(allCredentials[0]);
-            case "multiple":
-              return claimAll(claimPath.ephemeral, claimPath.others);
-            case "for-recipient":
-              return claimForRecipient(allCredentials[0], allCredentials[0].recipient);
+            case "bootstrap":
+              return claimWithBootstrap(
+                claimPath.bootstrapClaim,
+                claimPath.otherClaims,
+              );
+            case "batch":
+              return claimBatch(claimPath.claims);
           }
         })();
 
@@ -355,7 +428,11 @@ export function useBridgeWizard() {
             }
           })
           .catch((err) => {
-            if (!cancelled) dispatch({ type: "ERROR", message: err instanceof Error ? err.message : "Claim failed" });
+            if (!cancelled)
+              dispatch({
+                type: "ERROR",
+                message: err instanceof Error ? err.message : "Claim failed",
+              });
           });
 
         cleanup = unsub;
@@ -388,20 +465,37 @@ export function useBridgeWizard() {
               phase: "complete",
               startTime: snapshot.startTime,
               phaseStartTime: Date.now(),
-              phases: [...snapshot.phases, { name: "Mining", duration: Date.now() - miningStart, color: "#4caf50" }],
+              phases: [
+                ...snapshot.phases,
+                {
+                  name: "Mining",
+                  duration: Date.now() - miningStart,
+                  color: "#4caf50",
+                },
+              ],
               aztecTxHash: txHash,
             });
           })
           .catch((err) => {
             if (cancelled) return;
-            dispatch({ type: "ERROR", message: err instanceof Error ? err.message : "Claim tx failed" });
+            dispatch({
+              type: "ERROR",
+              message: err instanceof Error ? err.message : "Claim tx failed",
+            });
             txProgress.emit({
               txId: snapshot.txId,
               label: snapshot.label,
               phase: "error",
               startTime: snapshot.startTime,
               phaseStartTime: Date.now(),
-              phases: [...snapshot.phases, { name: "Mining", duration: Date.now() - miningStart, color: "#4caf50" }],
+              phases: [
+                ...snapshot.phases,
+                {
+                  name: "Mining",
+                  duration: Date.now() - miningStart,
+                  color: "#4caf50",
+                },
+              ],
               error: err instanceof Error ? err.message : "Claim tx failed",
             });
           });
@@ -411,13 +505,19 @@ export function useBridgeWizard() {
       }
     }
 
-    return () => { cancelled = true; cleanup?.(); };
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
   }, [bridge.type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Effect: Persistence ─────────────────────────────────────────────
 
   useEffect(() => {
-    if (bridge.type === "done") { clearSession(); return; }
+    if (bridge.type === "done") {
+      clearSession();
+      return;
+    }
     if (bridge.type === "idle" || bridge.type === "error") return;
 
     const session = phaseToSession(bridge, {
@@ -431,7 +531,10 @@ export function useBridgeWizard() {
 
   // ── Effect: Propagate reducer errors ────────────────────────────────
   useEffect(() => {
-    if (bridge.type === "error") setError(bridge.message);
+    if (bridge.type === "error") {
+      setError(bridge.message);
+      clearSession();
+    }
   }, [bridge]);
 
   // ── Effect: Refresh balance after claim ─────────────────────────────
@@ -476,29 +579,50 @@ export function useBridgeWizard() {
         if (cancelled) return;
         setL1Addresses(addresses);
         if (addresses.feeAssetHandler)
-          getMintAmount(activeNetwork.l1RpcUrl, addresses.l1ChainId, addresses.feeAssetHandler)
-            .then((amt) => { if (!cancelled) setMintAmountValue(amt); })
+          getMintAmount(
+            activeNetwork.l1RpcUrl,
+            addresses.l1ChainId,
+            addresses.feeAssetHandler,
+          )
+            .then((amt) => {
+              if (!cancelled) setMintAmountValue(amt);
+            })
             .catch(() => {});
       })
       .catch((err) => {
-        if (!cancelled) setError(`Failed to fetch L1 addresses: ${err.message}`);
+        if (!cancelled)
+          setError(`Failed to fetch L1 addresses: ${err.message}`);
       })
       .finally(() => {
         if (!cancelled) setIsLoadingInfo(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeNetwork]);
 
   const refreshBalance = useCallback(async () => {
-    if (!account || !l1Addresses) { setBalance(null); return; }
+    if (!account || !l1Addresses) {
+      setBalance(null);
+      return;
+    }
     try {
-      setBalance(await getFeeJuiceBalance(activeNetwork.l1RpcUrl, l1Addresses.l1ChainId, l1Addresses.feeJuice, account));
+      setBalance(
+        await getFeeJuiceBalance(
+          activeNetwork.l1RpcUrl,
+          l1Addresses.l1ChainId,
+          l1Addresses.feeJuice,
+          account,
+        ),
+      );
     } catch {
       setBalance({ balance: 0n, formatted: "0", decimals: 18 });
     }
   }, [account, l1Addresses, activeNetwork]);
 
-  useEffect(() => { refreshBalance(); }, [refreshBalance]);
+  useEffect(() => {
+    refreshBalance();
+  }, [refreshBalance]);
 
   // Auto-advance from step 1
   useEffect(() => {
@@ -535,7 +659,9 @@ export function useBridgeWizard() {
       setExpandedStep(4);
       if (faucetLocked && mintAmountValue != null) {
         const faucetAmount = formatUnits(mintAmountValue, 18);
-        setRecipients((prev) => prev.map((r) => ({ ...r, amount: faucetAmount })));
+        setRecipients((prev) =>
+          prev.map((r) => ({ ...r, amount: faucetAmount })),
+        );
       }
     }
   }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
@@ -543,7 +669,11 @@ export function useBridgeWizard() {
   const recipientPrefilled = !!queryRecipients;
 
   useEffect(() => {
-    if (wizardStep === 3 && recipientReady && (recipientChoice === "self" || recipientPrefilled))
+    if (
+      wizardStep === 3 &&
+      recipientReady &&
+      (recipientChoice === "self" || recipientPrefilled)
+    )
       advanceFromStep3();
   }, [recipientChoice, recipientReady, wizardStep, advanceFromStep3]);
 
@@ -557,8 +687,14 @@ export function useBridgeWizard() {
     if (!account || !l1Addresses) return;
     setError(null);
     try {
-      if (!recipients.every((r) => r.address.length >= 10)) { setError("Invalid recipient address"); return; }
-      if (!recipients.every((r) => r.amount)) { setError("Please enter an amount for each recipient"); return; }
+      if (!recipients.every((r) => r.address.length >= 10)) {
+        setError("Invalid recipient address");
+        return;
+      }
+      if (!recipients.every((r) => r.amount)) {
+        setError("Please enter an amount for each recipient");
+        return;
+      }
 
       // Parse all recipients into { address, amount } with bigint amounts
       const parsedRecipients = recipients.map((r) => ({
@@ -566,9 +702,15 @@ export function useBridgeWizard() {
         amount: parseUnits(r.amount, balance?.decimals ?? 18),
       }));
 
-      if (parsedRecipients.some((r) => r.amount <= 0n)) { setError("Amounts must be greater than 0"); return; }
+      if (parsedRecipients.some((r) => r.amount <= 0n)) {
+        setError("Amounts must be greater than 0");
+        return;
+      }
 
-      const totalAmount = parsedRecipients.reduce((sum, r) => sum + r.amount, 0n);
+      const totalAmount = parsedRecipients.reduce(
+        (sum, r) => sum + r.amount,
+        0n,
+      );
 
       if (parsedRecipients.length === 1 && recipientChoice === "self") {
         // Self-claim: single bridge to self
@@ -584,15 +726,25 @@ export function useBridgeWizard() {
           amount: parsedRecipients[0].amount,
           mint: faucetLocked,
           onStep: onBridgeStep,
-          onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+          onPending: (pending) =>
+            dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
         });
-        dispatch({ type: "L1_CONFIRMED", allCredentials: [result] });
+        dispatch({
+          type: "L1_CONFIRMED",
+          allCredentials: [result],
+          claimKind: "bootstrap",
+        });
       } else if (needsMultiBridge && aztecAddress) {
         // Internal wallet: prepend ephemeral (gas) recipient
-        const ephAmount = faucetLocked && mintAmountValue ? mintAmountValue : parseUnits(EPHEMERAL_CLAIM_GAS_FJ, 18);
+        const ephAmount =
+          faucetLocked && mintAmountValue
+            ? mintAmountValue
+            : parseUnits(EPHEMERAL_CLAIM_GAS_FJ, 18);
         const totalNeeded = totalAmount + (faucetLocked ? 0n : ephAmount);
         if (!faucetLocked && balance && totalNeeded > balance.balance) {
-          setError(`Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)}`);
+          setError(
+            `Insufficient balance. Need ${formatUnits(totalNeeded, balance.decimals)}`,
+          );
           return;
         }
         const allCredentials = await bridgeMultiple({
@@ -605,9 +757,14 @@ export function useBridgeWizard() {
           ],
           mint: faucetLocked,
           onStep: onBridgeStep,
-          onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+          onPending: (pending) =>
+            dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
         });
-        dispatch({ type: "L1_CONFIRMED", allCredentials });
+        dispatch({
+          type: "L1_CONFIRMED",
+          allCredentials,
+          claimKind: "bootstrap",
+        });
       } else {
         // External wallet or single non-self recipient: bridge directly
         if (!faucetLocked && balance && totalAmount > balance.balance) {
@@ -623,9 +780,14 @@ export function useBridgeWizard() {
             amount: parsedRecipients[0].amount,
             mint: faucetLocked,
             onStep: onBridgeStep,
-            onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+            onPending: (pending) =>
+              dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
           });
-          dispatch({ type: "L1_CONFIRMED", allCredentials: [result] });
+          dispatch({
+            type: "L1_CONFIRMED",
+            allCredentials: [result],
+            claimKind: "batch",
+          });
         } else {
           const allCredentials = await bridgeMultiple({
             l1RpcUrl: activeNetwork.l1RpcUrl,
@@ -634,14 +796,22 @@ export function useBridgeWizard() {
             recipients: parsedRecipients,
             mint: faucetLocked,
             onStep: onBridgeStep,
-            onPending: (pending) => dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
+            onPending: (pending) =>
+              dispatch({ type: "BRIDGE_STARTED", pendingBridge: pending }),
           });
-          dispatch({ type: "L1_CONFIRMED", allCredentials });
+          dispatch({
+            type: "L1_CONFIRMED",
+            allCredentials,
+            claimKind: "batch",
+          });
         }
       }
       await refreshBalance();
     } catch (err: unknown) {
-      dispatch({ type: "ERROR", message: err instanceof Error ? err.message : "Bridge failed" });
+      dispatch({
+        type: "ERROR",
+        message: err instanceof Error ? err.message : "Bridge failed",
+      });
     }
   };
 
@@ -674,35 +844,47 @@ export function useBridgeWizard() {
 
   // Keep credentials available even after "done" for the claim summary display
   const liveCredentials =
-    bridge.type === "waiting-l2-sync" || bridge.type === "ready-to-claim" ||
-    bridge.type === "claiming" || bridge.type === "claim-sent"
-      ? bridge.allCredentials : null;
+    bridge.type === "waiting-l2-sync" ||
+    bridge.type === "ready-to-claim" ||
+    bridge.type === "claiming" ||
+    bridge.type === "claim-sent"
+      ? bridge.allCredentials
+      : null;
   if (liveCredentials) lastCredentialsRef.current = liveCredentials;
   const allCredentials = liveCredentials ?? lastCredentialsRef.current;
 
-  // For display: the "main" credentials (excluding ephemeral if multi)
+  // For display: the last credential (used for message status indicator)
   const credentials = allCredentials
-    ? (allCredentials.length > 1 ? allCredentials[allCredentials.length - 1] : allCredentials[0])
+    ? allCredentials[allCredentials.length - 1]
     : null;
 
   const messageStatus: "ready" | "pending" | "error" =
     bridge.type === "waiting-l2-sync"
-      ? (bridge.messagesReady.every(Boolean) ? "ready" : "pending")
-      : bridgeDone ? "ready" : "pending";
+      ? bridge.messagesReady.every(Boolean)
+        ? "ready"
+        : "pending"
+      : bridgeDone
+        ? "ready"
+        : "pending";
 
   const ephMessageStatus: "ready" | "pending" | "error" =
     bridge.type === "waiting-l2-sync" && bridge.allCredentials.length > 1
-      ? (bridge.messagesReady[0] ? "ready" : "pending")
+      ? bridge.messagesReady[0]
+        ? "ready"
+        : "pending"
       : "ready";
 
   const ephemeralCredentials =
     allCredentials && allCredentials.length > 1 ? allCredentials[0] : null;
 
   const bridgeStep: BridgeStep =
-    bridge.type === "l1-pending" ? "waiting-confirmation"
-      : bridge.type === "error" ? "error"
-      : bridge.type === "idle" ? "idle"
-      : "done";
+    bridge.type === "l1-pending"
+      ? "waiting-confirmation"
+      : bridge.type === "error"
+        ? "error"
+        : bridge.type === "idle"
+          ? "idle"
+          : "done";
 
   const step4Desc = claimed
     ? "Complete!"
@@ -717,17 +899,59 @@ export function useBridgeWizard() {
     (bridgeDone ? (syncDone ? (claimed ? 25 : 18) : 10) : 0);
 
   return {
-    account, connect, activeNetwork, aztecStatus, aztecAddress, feeJuiceBalance,
-    aztecError, isExternal, resetAccount,
-    wizardStep, expandedStep, toggle, stepStatus, progress,
-    l1Addresses, balance, isLoadingInfo, hasFaucet, hasBalance, faucetLocked, mintAmountValue,
-    aztecChoice, setAztecChoice, aztecAccountReady,
-    recipientChoice, setRecipientChoice, recipients, setRecipients,
-    recipientReady, advanceFromStep3,
-    bridgeStep, bridgeStepLabel, allCredentials, credentials, ephemeralCredentials,
-    messageStatus, ephMessageStatus, claimed, isClaiming, needsMultiBridge, isBridging,
-    bridgeDone, syncDone, step4Desc, handleBridge, handleReset,
-    error, setError,
-    isIframe, forceEmbedded, recipientPrefilled,
+    account,
+    connect,
+    activeNetwork,
+    aztecStatus,
+    aztecAddress,
+    feeJuiceBalance,
+    aztecError,
+    isExternal,
+    resetAccount,
+    wizardStep,
+    expandedStep,
+    toggle,
+    stepStatus,
+    progress,
+    l1Addresses,
+    balance,
+    isLoadingInfo,
+    hasFaucet,
+    hasBalance,
+    faucetLocked,
+    mintAmountValue,
+    aztecChoice,
+    setAztecChoice,
+    aztecAccountReady,
+    recipientChoice,
+    setRecipientChoice,
+    recipients,
+    setRecipients,
+    recipientReady,
+    advanceFromStep3,
+    bridgeStep,
+    bridgeStepLabel,
+    allCredentials,
+    credentials,
+    ephemeralCredentials,
+    messageStatus,
+    ephMessageStatus,
+    claimed,
+    isClaiming,
+    needsMultiBridge,
+    isBridging,
+    bridgeDone,
+    syncDone,
+    step4Desc,
+    handleBridge,
+    handleReset,
+    canRetryClaim: bridge.type === "error" && "allCredentials" in bridge,
+    retryClaim: () =>
+      dispatch({ type: "RETRY_CLAIM", recipientChoice, feeJuiceBalance }),
+    error,
+    setError,
+    isIframe,
+    forceEmbedded,
+    recipientPrefilled,
   };
 }
