@@ -587,7 +587,9 @@ export function useBridgeWizard() {
             .then((amt) => {
               if (!cancelled) setMintAmountValue(amt);
             })
-            .catch(() => {});
+            .catch((err) => {
+              if (!cancelled) setError(`Failed to fetch mint amount: ${err instanceof Error ? err.message : 'unknown error'}`);
+            });
       })
       .catch((err) => {
         if (!cancelled)
@@ -665,6 +667,18 @@ export function useBridgeWizard() {
       }
     }
   }, [recipientReady, wizardStep, faucetLocked, mintAmountValue]);
+
+  // Fill amounts when mintAmountValue loads late (after already on step 4)
+  useEffect(() => {
+    if (faucetLocked && mintAmountValue != null && wizardStep >= 4) {
+      setRecipients((prev) => {
+        const anyEmpty = prev.some((r) => !r.amount);
+        if (!anyEmpty) return prev;
+        const faucetAmount = formatUnits(mintAmountValue, 18);
+        return prev.map((r) => r.amount ? r : { ...r, amount: faucetAmount });
+      });
+    }
+  }, [faucetLocked, mintAmountValue, wizardStep]);
 
   const recipientPrefilled = !!queryRecipients;
 
