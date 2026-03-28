@@ -246,58 +246,28 @@ contract SubscriptionFPC {
 
     #[external("utility")]
     unconstrained fn count_available_slots(config_id: Field) -> u32 {
-        count_slots_with_offset(self.storage.slots.at(self.address), config_id, 0)
+        let options = NoteViewerOptions::new()
+            .select(SlotNote::properties().config_id, Comparator.EQ, config_id)
+            .set_limit(1);
+        let notes = self.storage.slots.at(self.address).view_notes(options);
+        if notes.len() > 0 {
+            notes.get_unchecked(0).users
+        } else {
+            0
+        }
     }
 
     #[external("utility")]
     unconstrained fn get_subscription_info(user: AztecAddress, config_id: Field) -> (bool, u32) {
-        find_subscription_with_offset(self.storage.subscriptions.at(user), config_id, 0)
-    }
-
-    #[contract_library_method]
-    unconstrained fn count_slots_with_offset(
-        set: PrivateSet<SlotNote, aztec::context::UtilityContext>,
-        config_id: Field,
-        offset: u32,
-    ) -> u32 {
-        let options = NoteViewerOptions::new()
-            .select(SlotNote::properties().config_id, Comparator.EQ, config_id)
-            .set_offset(offset);
-        let notes = set.view_notes(options);
-        let mut count: u32 = notes.len();
-        if notes.len() == options.limit {
-            count += count_slots_with_offset(set, config_id, offset + options.limit);
-        }
-        count
-    }
-
-    #[contract_library_method]
-    unconstrained fn find_subscription_with_offset(
-        set: PrivateSet<SubscriptionNote, aztec::context::UtilityContext>,
-        config_id: Field,
-        offset: u32,
-    ) -> (bool, u32) {
         let options = NoteViewerOptions::new()
             .select(SubscriptionNote::properties().config_id, Comparator.EQ, config_id)
-            .set_offset(offset);
-        let notes = set.view_notes(options);
-        let mut found = false;
-        let mut uses: u32 = 0;
-        for i in 0..options.limit {
-            if (i < notes.len()) & (!found) {
-                let note = notes.get_unchecked(i);
-                if note.config_id == config_id {
-                    found = true;
-                    uses = note.uses;
-                }
-            }
+            .set_limit(1);
+        let notes = self.storage.subscriptions.at(user).view_notes(options);
+        if notes.len() > 0 {
+            (true, notes.get_unchecked(0).uses)
+        } else {
+            (false, 0)
         }
-        if (!found) & (notes.len() == options.limit) {
-            let (f, u) = find_subscription_with_offset(set, config_id, offset + options.limit);
-            found = f;
-            uses = u;
-        }
-        (found, uses)
     }
 
 }
