@@ -61,8 +61,8 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
       const fees = await node.getCurrentMinFees();
       if (!cancelled) {
         setCurrentMinFees({
-          feePerDaGas: fees.feePerDaGas.toBigInt(),
-          feePerL2Gas: fees.feePerL2Gas.toBigInt(),
+          feePerDaGas: BigInt(fees.feePerDaGas),
+          feePerL2Gas: BigInt(fees.feePerL2Gas),
         });
       }
     })();
