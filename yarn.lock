@@ -1744,7 +1744,6 @@ __metadata:
     "@aztec/noir-contracts.js": "npm:v4.2.0-aztecnr-rc.2"
     "@aztec/stdlib": "npm:v4.2.0-aztecnr-rc.2"
     "@aztec/wallets": "npm:v4.2.0-aztecnr-rc.2"
-    "@gregojuice/embedded-wallet": "workspace:*"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"
   languageName: unknown
@@ -1754,6 +1753,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@gregojuice/embedded-wallet@workspace:packages/embedded-wallet"
   dependencies:
+    "@aztec/accounts": "npm:v4.2.0-aztecnr-rc.2"
     "@aztec/aztec.js": "npm:v4.2.0-aztecnr-rc.2"
     "@aztec/entrypoints": "npm:v4.2.0-aztecnr-rc.2"
     "@aztec/foundation": "npm:v4.2.0-aztecnr-rc.2"
@@ -1762,6 +1762,7 @@ __metadata:
     "@aztec/wallet-sdk": "npm:v4.2.0-aztecnr-rc.2"
     "@aztec/wallets": "npm:v4.2.0-aztecnr-rc.2"
     typescript: "npm:~5.7.3"
+    vitest: "npm:^3"
   languageName: unknown
   linkType: soft
 

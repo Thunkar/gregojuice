@@ -19,7 +19,7 @@ import { Fr } from "@aztec/aztec.js/fields";
 import {
   SchnorrInitializerlessAccountContract,
   SchnorrInitializerlessAccountContractArtifact,
-} from "../artifacts/SchnorrInitializerlessAccount.js";
+} from "../src/artifacts/SchnorrInitializerlessAccount.js";
 import {
   computeContractSalt,
   createSchnorrInitializerlessAccount,
@@ -29,7 +29,7 @@ import {
   deployWithImmutables,
   computeImmutablesAddress,
   createImmutablesInstance,
-} from "@gregojuice/embedded-wallet";
+} from "../src/index.js";
 
 const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 

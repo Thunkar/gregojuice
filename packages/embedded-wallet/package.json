@@ -1,6 +1,6 @@
 {
   "name": "@gregojuice/embedded-wallet",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,6 +17,7 @@
     "prebuild": "./scripts/prebuild.sh",
     "build": "yarn prebuild && tsc -p tsconfig.build.json",
     "clean": "rm -rf ./dist .tsbuildinfo src/artifacts",
+    "test": "vitest run",
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
@@ -29,6 +30,8 @@
     "@aztec/wallets": "v4.2.0-aztecnr-rc.2"
   },
   "devDependencies": {
-    "typescript": "~5.7.3"
+    "@aztec/accounts": "v4.2.0-aztecnr-rc.2",
+    "typescript": "~5.7.3",
+    "vitest": "^3"
   }
 }

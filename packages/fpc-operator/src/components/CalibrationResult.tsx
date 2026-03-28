@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { Box, Typography, Paper, TextField, Slider } from "@mui/material";
+import { Box, Typography, Paper, TextField, Slider, ToggleButtonGroup, ToggleButton } from "@mui/material";
 import { formatUnits, parseUnits } from "viem";
 import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
@@ -26,20 +26,20 @@ function computeMaxFee(
 }
 
 export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, maxUsers }: CalibrationResultProps) {
-  const { rollupAddress, l1ChainId, l1RpcUrl } = useWallet();
+  const { rollupAddress, l1ChainId, l1RpcUrl, node } = useWallet();
   const { activeNetwork } = useNetwork();
 
+  const [feeSource, setFeeSource] = useState<"p75" | "current">("p75");
   const [stats, setStats] = useState<FeeStats | null>(null);
+  const [currentMinFees, setCurrentMinFees] = useState<{ feePerDaGas: bigint; feePerL2Gas: bigint } | null>(null);
   const [feeMultiplier, setFeeMultiplier] = useState(2);
   const [blockRangeInput, setBlockRangeInput] = useState("100");
   const blockRange = parseInt(blockRangeInput) || 0;
   const [perTxUsd, setPerTxUsd] = useState<number | null>(null);
 
   const pricingService = useMemo(() => {
-    console.debug("FeePricingService init:", { rollupAddress, l1ChainId, l1RpcUrl });
     const svc = new FeePricingService(l1RpcUrl ?? undefined, l1ChainId ?? undefined);
     if (rollupAddress) svc.init(rollupAddress);
-    console.debug("FeePricingService enabled:", svc.enabled);
     return svc;
   }, [rollupAddress, l1ChainId, l1RpcUrl]);
 
@@ -53,23 +53,43 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
 
   useEffect(() => { loadFeeStats(); }, [loadFeeStats]);
 
-  // P75 fee-per-gas values from the network
-  const p75FeePerDaGas = stats?.maxFeePerDaGas?.p75 != null ? BigInt(Math.round(Number(stats.maxFeePerDaGas.p75))) : 0n;
-  const p75FeePerL2Gas = stats?.maxFeePerL2Gas?.p75 != null ? BigInt(Math.round(Number(stats.maxFeePerL2Gas.p75))) : null;
-
-  // Compute max fee from calibrated gas limits × P75 fee-per-gas × multiplier
+  // Fetch current min fees from node
   useEffect(() => {
-    if (p75FeePerDaGas === null || p75FeePerL2Gas === null) return;
+    if (!node || feeSource !== "current") return;
+    let cancelled = false;
+    (async () => {
+      const fees = await node.getCurrentMinFees();
+      if (!cancelled) {
+        setCurrentMinFees({
+          feePerDaGas: fees.feePerDaGas.toBigInt(),
+          feePerL2Gas: fees.feePerL2Gas.toBigInt(),
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [node, feeSource]);
+
+  // Resolved fee-per-gas based on selected source
+  const resolvedFeePerDaGas = feeSource === "current"
+    ? (currentMinFees?.feePerDaGas ?? null)
+    : (stats?.maxFeePerDaGas?.p75 != null ? BigInt(Math.round(Number(stats.maxFeePerDaGas.p75))) : null);
+  const resolvedFeePerL2Gas = feeSource === "current"
+    ? (currentMinFees?.feePerL2Gas ?? null)
+    : (stats?.maxFeePerL2Gas?.p75 != null ? BigInt(Math.round(Number(stats.maxFeePerL2Gas.p75))) : null);
+
+  // Compute max fee from calibrated gas limits × fee-per-gas × multiplier
+  useEffect(() => {
+    if (resolvedFeePerDaGas === null || resolvedFeePerL2Gas === null) return;
     const multiplierBp = BigInt(Math.round(feeMultiplier * 100));
     const baseFee = computeMaxFee(
       result.gasLimits,
       result.teardownGasLimits,
-      p75FeePerDaGas,
-      p75FeePerL2Gas,
+      resolvedFeePerDaGas,
+      resolvedFeePerL2Gas,
     );
     const maxFeeRaw = baseFee * multiplierBp / 100n;
     onMaxFeeChange(formatUnits(maxFeeRaw, 18));
-  }, [p75FeePerDaGas, p75FeePerL2Gas, feeMultiplier, result, onMaxFeeChange]);
+  }, [resolvedFeePerDaGas, resolvedFeePerL2Gas, feeMultiplier, result, onMaxFeeChange]);
 
   // USD estimate per tx
   useEffect(() => {
@@ -117,25 +137,30 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
       </Box>
 
       <Typography variant="subtitle2" sx={{ mb: 1 }}>
-        Fee per Gas (network P75, last {blockRange} blocks)
+        Fee per Gas
       </Typography>
 
-      {stats && (
-        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
-          <Typography variant="caption" color="text.secondary">DA fee/gas (P75)</Typography>
-          <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
-            {stats.maxFeePerDaGas?.p75 != null ? Number(stats.maxFeePerDaGas.p75).toLocaleString() : "—"}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">L2 fee/gas (P75)</Typography>
-          <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
-            {stats.maxFeePerL2Gas?.p75 != null ? Number(stats.maxFeePerL2Gas.p75).toLocaleString() : "—"}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">Base fee L2</Typography>
-          <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
-            {stats.baseFee?.l2 != null ? Number(stats.baseFee.l2).toLocaleString() : "—"}
-          </Typography>
-        </Box>
-      )}
+      <ToggleButtonGroup
+        value={feeSource}
+        exclusive
+        onChange={(_, v) => { if (v) setFeeSource(v); }}
+        size="small"
+        sx={{ mb: 1.5 }}
+      >
+        <ToggleButton value="p75">P75 (last {blockRange} blocks)</ToggleButton>
+        <ToggleButton value="current">Current Min Fee</ToggleButton>
+      </ToggleButtonGroup>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
+        <Typography variant="caption" color="text.secondary">DA fee/gas</Typography>
+        <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+          {resolvedFeePerDaGas != null ? Number(resolvedFeePerDaGas).toLocaleString() : "—"}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">L2 fee/gas</Typography>
+        <Typography variant="caption" sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}>
+          {resolvedFeePerL2Gas != null ? Number(resolvedFeePerL2Gas).toLocaleString() : "—"}
+        </Typography>
+      </Box>
 
       <Typography variant="subtitle2" sx={{ mb: 1 }}>
         Max Fee
@@ -143,7 +168,7 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
 
       <Box sx={{ display: "flex", gap: 2, mb: 1 }}>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="caption" color="text.secondary">Safety multiplier on P75 fee/gas</Typography>
+          <Typography variant="caption" color="text.secondary">Safety multiplier on fee/gas</Typography>
           <Slider
             value={feeMultiplier}
             onChange={(_, v) => setFeeMultiplier(v as number)}
@@ -156,14 +181,16 @@ export function CalibrationResult({ result, maxFeeFj, onMaxFeeChange, maxUses, m
             size="small"
           />
         </Box>
-        <TextField
-          label="Blocks"
-          type="number"
-          value={blockRangeInput}
-          onChange={(e) => setBlockRangeInput(e.target.value)}
-          size="small"
-          sx={{ width: 120 }}
-        />
+        {feeSource === "p75" && (
+          <TextField
+            label="Blocks"
+            type="number"
+            value={blockRangeInput}
+            onChange={(e) => setBlockRangeInput(e.target.value)}
+            size="small"
+            sx={{ width: 120 }}
+          />
+        )}
       </Box>
 
       <TextField

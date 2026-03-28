@@ -64,11 +64,11 @@ export const PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF =
 // Measured as: fpc_public_gas - standalone_public_gas (no repricing needed).
 // If the test fails with a mismatch, update these values from the test output.
 
-/** Subscribe overhead on L2 gas (first call — pops slot, creates subscription) */
-export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS = 109878;
+/** Subscribe overhead on L2 gas (first call — pops slot, re-inserts, creates subscription) */
+export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS = 131653;
 
 /** Subscribe overhead on DA gas */
-export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS = 640;
+export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS = 1216;
 
 /** Sponsor overhead on L2 gas (subsequent calls — pops subscription, re-inserts) */
 export const FPC_SPONSOR_OVERHEAD_L2_GAS = 109878;

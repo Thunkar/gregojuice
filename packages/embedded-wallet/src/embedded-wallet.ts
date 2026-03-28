@@ -18,6 +18,7 @@ import {
   type ExecutionPayload,
   type TxSimulationResult,
   TxExecutionRequest,
+  TxStatus,
 } from "@aztec/stdlib/tx";
 import { NO_FROM, type NoFrom } from "@aztec/aztec.js/account";
 import { DefaultEntrypoint } from "@aztec/entrypoints/default";
@@ -544,7 +545,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       emit("mining");
       const miningStart = Date.now();
       const waitOpts = typeof opts.wait === "object" ? opts.wait : undefined;
-      const receipt = await waitForTx(this.aztecNode, txHash, waitOpts);
+      const receipt = await waitForTx(this.aztecNode, txHash, {
+        ...waitOpts,
+        waitForStatus: TxStatus.PROPOSED,
+      });
       phases.push({
         name: "Mining",
         duration: Date.now() - miningStart,

@@ -3,7 +3,6 @@ import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { Fr } from "@aztec/aztec.js/fields";
 import { randomBytes } from "@aztec/foundation/crypto/random";
-import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 import {
   TokenContract,
   TokenContractArtifact,
@@ -36,7 +35,13 @@ describe("Token transfer subscription (multi-use)", () => {
   beforeAll(async () => {
     const {
       receipt: { contract: rawToken, instance: tokenInstance },
-    } = await TokenContract.deploy(ctx.wallet, ctx.admin, "TestToken", "TT", 18).send({
+    } = await TokenContract.deploy(
+      ctx.wallet,
+      ctx.admin,
+      "TestToken",
+      "TT",
+      18,
+    ).send({
       from: ctx.admin,
       wait: { returnReceipt: true },
     });
@@ -70,13 +75,22 @@ describe("Token transfer subscription (multi-use)", () => {
       SIGNING_PRIVATE_KEY,
     );
     recipientAddress = recipientAccountManager.address;
-    const recipientDeployMethod = await recipientAccountManager.getDeployMethod();
+    const recipientDeployMethod =
+      await recipientAccountManager.getDeployMethod();
     await recipientDeployMethod.send({ from: ctx.admin });
 
-    await userWallet.createECDSARAccount(recipientSecret, SALT, SIGNING_PRIVATE_KEY);
+    await userWallet.createECDSARAccount(
+      recipientSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
 
-    await token.methods.mint_to_private(ctx.admin, 1000n).send({ from: ctx.admin });
-    await token.methods.mint_to_private(userAddress, 1000n).send({ from: ctx.admin });
+    await token.methods
+      .mint_to_private(ctx.admin, 1000n)
+      .send({ from: ctx.admin });
+    await token.methods
+      .mint_to_private(userAddress, 1000n)
+      .send({ from: ctx.admin });
 
     await userWallet.registerSender(ctx.admin, "admin");
   });
@@ -180,19 +194,32 @@ describe("Public token transfer subscription", () => {
   beforeAll(async () => {
     const {
       receipt: { contract: rawToken },
-    } = await TokenContract.deploy(ctx.wallet, ctx.admin, "PublicToken", "PT", 18).send({
+    } = await TokenContract.deploy(
+      ctx.wallet,
+      ctx.admin,
+      "PublicToken",
+      "PT",
+      18,
+    ).send({
       from: ctx.admin,
       wait: { returnReceipt: true },
     });
     token = rawToken;
 
     // Mint public tokens to admin
-    await token.methods.mint_to_public(ctx.admin, 100000n).send({ from: ctx.admin });
+    await token.methods
+      .mint_to_public(ctx.admin, 100000n)
+      .send({ from: ctx.admin });
   });
 
   it("calibrates and sets up transfer_in_public as a sponsored app", async () => {
     const authwitNonce = Fr.random();
-    const action = token.methods.transfer_in_public(ctx.admin, ctx.admin, 10n, authwitNonce);
+    const action = token.methods.transfer_in_public(
+      ctx.admin,
+      ctx.admin,
+      10n,
+      authwitNonce,
+    );
 
     // Set public authwit for calibration (FPC is the caller)
     const setAuthwit = await SetPublicAuthwitContractInteraction.create(
@@ -216,20 +243,18 @@ describe("Public token transfer subscription", () => {
     expect(maxFee).toBeGreaterThan(0n);
 
     await ctx.fpc.methods
-      .sign_up(
-        sampleCall.to,
-        sampleCall.selector,
-        PUBLIC_INDEX,
-        2,
-        maxFee,
-        1,
-      )
+      .sign_up(sampleCall.to, sampleCall.selector, PUBLIC_INDEX, 2, maxFee, 1)
       .send({ from: ctx.admin });
   });
 
   it("subscribes and makes a sponsored transfer_in_public", async () => {
     const authwitNonce = Fr.random();
-    const action = token.methods.transfer_in_public(ctx.admin, ctx.admin, 10n, authwitNonce);
+    const action = token.methods.transfer_in_public(
+      ctx.admin,
+      ctx.admin,
+      10n,
+      authwitNonce,
+    );
 
     const setAuthwit = await SetPublicAuthwitContractInteraction.create(
       ctx.wallet,
@@ -251,7 +276,12 @@ describe("Public token transfer subscription", () => {
 
   it("uses the subscription for a sponsored transfer_in_public", async () => {
     const authwitNonce = Fr.random();
-    const action = token.methods.transfer_in_public(ctx.admin, ctx.admin, 5n, authwitNonce);
+    const action = token.methods.transfer_in_public(
+      ctx.admin,
+      ctx.admin,
+      5n,
+      authwitNonce,
+    );
 
     const setAuthwit = await SetPublicAuthwitContractInteraction.create(
       ctx.wallet,

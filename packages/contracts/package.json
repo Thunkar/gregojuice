@@ -1,6 +1,6 @@
 {
   "name": "@gregojuice/contracts",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "main": "dist/src/subscription-fpc.js",
   "types": "dist/src/subscription-fpc.d.ts",
@@ -46,7 +46,6 @@
     "@aztec/entrypoints": "v4.2.0-aztecnr-rc.2",
     "@aztec/ethereum": "v4.2.0-aztecnr-rc.2",
     "@aztec/noir-contracts.js": "v4.2.0-aztecnr-rc.2",
-    "@gregojuice/embedded-wallet": "workspace:*",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }

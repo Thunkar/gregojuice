@@ -41,6 +41,7 @@ contract SubscriptionFPC {
         config_id: Field,
         max_fee: u128,
         max_uses: u32,
+        users: u32,
     }
     #[storage]
     struct Storage<Context> {
@@ -89,16 +90,13 @@ contract SubscriptionFPC {
         unsafe {
             set_sender_for_tags(self.address);
         }
-        for i in 0..MAX_NOTE_HASHES_PER_CALL {
-            if i < max_users {
-                self
-                    .storage
-                    .slots
-                    .at(self.address)
-                    .insert(SlotNote { config_id, max_uses, max_fee })
-                    .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
-            }
-        }
+
+        self
+            .storage
+            .slots
+            .at(self.address)
+            .insert(SlotNote { config_id, max_uses, max_fee, users: max_users })
+            .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
     }
 
     #[external("private")]
@@ -199,6 +197,13 @@ contract SubscriptionFPC {
             current_index.to_field(),
         ]);
 
+        // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
+        // Since this value is only used for unconstrained tagging and not for any constrained logic,
+        // it is safe to set from a constrained context.
+        unsafe {
+            set_sender_for_tags(self.address);
+        }
+
         let options = NoteGetterOptions::new().set_limit(1).select(
             SlotNote::properties().config_id,
             Comparator.EQ,
@@ -206,6 +211,21 @@ contract SubscriptionFPC {
         );
         let slots = self.storage.slots.at(self.address).pop_notes(options);
         let slot = slots.get(0);
+        if slot.users > 0 {
+            self
+                .storage
+                .slots
+                .at(self.address)
+                .insert(
+                    SlotNote {
+                        users: slot.users - 1,
+                        max_uses: slot.max_uses,
+                        max_fee: slot.max_fee,
+                        config_id,
+                    },
+                )
+                .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
+        }
 
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
