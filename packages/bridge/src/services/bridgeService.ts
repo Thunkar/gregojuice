@@ -8,7 +8,6 @@ import {
   type Chain,
   type TransactionReceipt,
   parseAbi,
-  parseAbiItem,
   decodeEventLog,
 } from "viem";
 import { sepolia, mainnet, foundry } from "viem/chains";
@@ -256,9 +255,9 @@ export async function getMintAmount(
 
 // ── Event extraction ─────────────────────────────────────────────────
 
-const depositEventAbi = parseAbiItem(
+const depositEventAbi = parseAbi([
   "event DepositToAztecPublic(bytes32 indexed to, uint256 amount, bytes32 secretHash, bytes32 key, uint256 index)",
-);
+]);
 
 type DepositEvent = {
   to: Hex;
@@ -282,13 +281,13 @@ function extractAllDepositEvents(receipt: TransactionReceipt): DepositEvent[] {
   const events: DepositEvent[] = [];
   for (const log of receipt.logs) {
     try {
+      const raw = log as unknown as { data: Hex; topics: [Hex, ...Hex[]] };
       const decoded = decodeEventLog({
-        abi: [depositEventAbi],
-        data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
-      });
-      const args = decoded.args as unknown as DepositEvent;
-      events.push(args);
+        abi: depositEventAbi,
+        data: raw.data,
+        topics: raw.topics,
+      }) as { args: DepositEvent };
+      events.push(decoded.args);
     } catch {
       // Not a DepositToAztecPublic event — skip
     }
