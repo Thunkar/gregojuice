@@ -778,7 +778,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onChange={(e) => setMaxUsers(e.target.value)}
                     size="small"
                     sx={{ flex: 1 }}
-                    helperText="1–16"
+                    helperText="≥ 1"
                   />
                 </Box>
 

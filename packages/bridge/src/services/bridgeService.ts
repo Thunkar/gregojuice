@@ -20,7 +20,7 @@ import { isL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { TxHash } from "@aztec/stdlib/tx";
+import { TxHash, TxStatus } from "@aztec/stdlib/tx";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { FeeJuicePaymentMethodWithClaim } from "@aztec/aztec.js/fee";
 import { BatchCall } from "@aztec/aztec.js/contracts";
@@ -814,5 +814,5 @@ export async function claimAllInSingleTx(
 export async function waitForAztecTx(aztecNodeUrl: string, txHashStr: string) {
   const node = getAztecNode(aztecNodeUrl);
   const txHash = TxHash.fromString(txHashStr);
-  return waitForTx(node, txHash);
+  return waitForTx(node, txHash, { waitForStatus: TxStatus.PROPOSED });
 }
