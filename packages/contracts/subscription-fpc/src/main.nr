@@ -18,7 +18,6 @@ contract SubscriptionFPC {
         protocol::{
             abis::function_selector::FunctionSelector,
             address::AztecAddress,
-            constants::MAX_NOTE_HASHES_PER_CALL,
             hash::poseidon2_hash,
             traits::{Packable, ToField},
         },
@@ -80,10 +79,6 @@ contract SubscriptionFPC {
             selector.to_field(),
             current_index.to_field(),
         ]);
-        assert(
-            max_users <= MAX_NOTE_HASHES_PER_CALL,
-            "Cannot sign up more than 16 users at a time",
-        );
         // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
         // Since this value is only used for unconstrained tagging and not for any constrained logic,
         // it is safe to set from a constrained context.
