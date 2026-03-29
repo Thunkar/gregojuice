@@ -17,8 +17,8 @@ import {
   handleWaitingSync,
   handleClaiming,
   handleClaimSent,
-} from "./orchestrator";
-import { handleBridge as executeBridgeAction } from "./actions";
+} from "./phase-handlers";
+import { handleBridge as executeBridgeAction } from "./bridge-tx";
 import {
   loadSession,
   clearSession,
@@ -99,9 +99,13 @@ export function useBridgeWizard() {
           : "new"
         : null,
   );
+  // For external wallets: user can choose "self" or "other"
+  // For embedded wallets: always "other" (recipients are explicit addresses)
   const [recipientChoice, setRecipientChoice] = useState<RecipientChoice>(
     queryRecipients ? "other" : (initialSession?.recipientChoice ?? null),
   );
+  // Force "other" for embedded wallets (they can't bridge to "self" — they need explicit addresses)
+  const effectiveRecipientChoice: RecipientChoice = isExternal ? recipientChoice : "other";
   const [recipients, setRecipients] = useState<
     Array<{ address: string; amount: string }>
   >(() => {
@@ -132,12 +136,18 @@ export function useBridgeWizard() {
 
   // Recipient readiness
   const recipientReady =
-    recipientChoice === "self"
+    effectiveRecipientChoice === "self"
       ? !!aztecAddress
       : recipients.length > 0 &&
         recipients.every((r) => r.address.length >= 10);
-  const needsMultiBridge =
-    aztecChoice === "new" && recipientChoice === "other" && !aztecAccountReady;
+
+  // Claim strategy — the single source of truth for how the L2 claim works
+  const claimKind =
+    isExternal && effectiveRecipientChoice === "self"
+      ? "self" as const
+      : aztecStatus === "funded"
+        ? "batch" as const
+        : "bootstrap" as const;
 
   // Bridge phase flags (ordered: idle → l1-pending → waiting-l2-sync → ready/claiming/sent → done)
   const phase = bridge.type;
@@ -213,7 +223,7 @@ export function useBridgeWizard() {
     }
     if (bridge.type === "idle" || bridge.type === "error") return;
     const session = phaseToSession(bridge, {
-      recipientChoice: recipientChoice ?? "self",
+      recipientChoice: effectiveRecipientChoice ?? "self",
       isExternal,
       recipients,
       networkId: activeNetwork.id,
@@ -339,10 +349,6 @@ export function useBridgeWizard() {
     }
   }, [wizardStep, aztecAccountReady]);
 
-  useEffect(() => {
-    if (!isExternal && recipientChoice !== "other") setRecipientChoice("other");
-  }, [isExternal, recipientChoice]);
-
   const advanceFromStep3 = useCallback(() => {
     if (recipientReady && wizardStep === 3) {
       setWizardStep(4);
@@ -373,10 +379,10 @@ export function useBridgeWizard() {
     if (
       wizardStep === 3 &&
       recipientReady &&
-      (recipientChoice === "self" || recipientPrefilled)
+      (effectiveRecipientChoice === "self" || recipientPrefilled)
     )
       advanceFromStep3();
-  }, [recipientChoice, recipientReady, wizardStep, advanceFromStep3]);
+  }, [effectiveRecipientChoice, recipientReady, wizardStep, advanceFromStep3]);
 
   // ── Bridge action ─────────────────────────────────────────────────
   const onBridgeStep = useCallback((_step: BridgeStep, label?: string) => {
@@ -386,14 +392,12 @@ export function useBridgeWizard() {
   const handleBridge = async () => {
     if (!account || !l1Addresses) return;
     await executeBridgeAction({
-      account,
       l1Addresses,
       recipients,
-      recipientChoice,
       balance,
       faucetLocked,
-      needsMultiBridge,
-      aztecAddress,
+      claimKind,
+      claimerAddress: aztecAddress,
       mintAmountValue,
       activeNetwork,
       onStep: onBridgeStep,
@@ -468,7 +472,7 @@ export function useBridgeWizard() {
     : "Do you have an Aztec wallet?";
 
   const step3Desc = recipientReady
-    ? recipientChoice === "self"
+    ? effectiveRecipientChoice === "self"
       ? "Bridge to myself"
       : recipients.length > 1
         ? `${recipients.length} recipients`
@@ -494,7 +498,9 @@ export function useBridgeWizard() {
   };
 
   const step3Props = {
-    isExternal, recipientChoice, setRecipientChoice,
+    canBridgeToSelf: isExternal,
+    recipientChoice: effectiveRecipientChoice,
+    setRecipientChoice,
     recipients, setRecipients, recipientReady,
     advanceFromStep3, prefilled: recipientPrefilled,
   };

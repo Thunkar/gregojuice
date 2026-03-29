@@ -12,7 +12,8 @@ import type { Recipient, RecipientChoice } from "../types";
 import { MAX_RECIPIENTS } from "../constants";
 
 interface Step3RecipientProps {
-  isExternal: boolean;
+  /** Whether to show the "Bridge to Myself" toggle (only for external wallets) */
+  canBridgeToSelf: boolean;
   recipientChoice: RecipientChoice;
   setRecipientChoice: (choice: RecipientChoice) => void;
   recipients: Recipient[];
@@ -78,7 +79,7 @@ function RecipientRows({
 }
 
 export function Step3Recipient({
-  isExternal,
+  canBridgeToSelf,
   recipientChoice,
   setRecipientChoice,
   recipients,
@@ -100,7 +101,7 @@ export function Step3Recipient({
     );
   }
 
-  if (isExternal) {
+  if (canBridgeToSelf) {
     return (
       <>
         <ToggleButtonGroup

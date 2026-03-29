@@ -117,7 +117,7 @@ export function phaseToSession(
     case "claiming":
       return { ...base, phase: "claiming", allCredentials: phase.allCredentials, claimKind: phase.claimPath.kind };
     case "claim-sent":
-      return { ...base, phase: "claiming", allCredentials: phase.allCredentials, txProgressSnapshot: phase.snapshot };
+      return { ...base, phase: "claiming", allCredentials: phase.allCredentials, txProgressSnapshot: phase.snapshot, claimKind: phase.claimKind };
     case "idle":
     case "done":
     case "error":

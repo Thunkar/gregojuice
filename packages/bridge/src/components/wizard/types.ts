@@ -9,7 +9,13 @@ export interface Recipient {
 export type WizardStep = 1 | 2 | 3 | 4;
 export type AztecChoice = "existing" | "new" | null;
 export type RecipientChoice = "self" | "other" | null;
-export type ClaimKind = "bootstrap" | "batch";
+/**
+ * Claim strategy for the L2 side:
+ * - "self":      external wallet bridges to itself — single credential, wallet pays gas
+ * - "bootstrap": embedded wallet has no gas — first credential is the gas payer
+ * - "batch":     wallet already funded — all credentials claimed normally
+ */
+export type ClaimKind = "self" | "bootstrap" | "batch";
 
 // ── Claim path (pure, computed by reducer) ────────────────────────────
 
@@ -40,7 +46,7 @@ export type BridgePhase =
   | { type: "waiting-l2-sync"; allCredentials: ClaimCredentials[]; messagesReady: boolean[]; claimKind?: ClaimKind }
   | { type: "ready-to-claim"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
   | { type: "claiming"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
-  | { type: "claim-sent"; allCredentials: ClaimCredentials[]; txHash: string; snapshot: TxProgressSnapshot }
+  | { type: "claim-sent"; allCredentials: ClaimCredentials[]; txHash: string; snapshot: TxProgressSnapshot; claimKind?: ClaimKind }
   | { type: "done" }
   | { type: "error"; message: string; allCredentials?: ClaimCredentials[]; claimKind?: ClaimKind };
 

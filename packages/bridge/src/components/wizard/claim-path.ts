@@ -1,12 +1,12 @@
 import type { ClaimCredentials, ClaimPath, ClaimKind } from "./types";
 
 /**
- * Determines the claim strategy based on credentials and wallet state.
+ * Determines the claim execution strategy based on credentials and wallet state.
  *
- * Two paths:
- * - "bootstrap": wallet has no gas. The first credential pays for the tx via
- *   FeeJuicePaymentMethodWithClaim, the rest are batch-claimed in the same tx.
- * - "batch": wallet already has gas. All credentials are batch-claimed normally.
+ * Three paths:
+ * - "self":      single credential, wallet pays gas (external wallet self-bridge)
+ * - "bootstrap": wallet has no gas — first credential pays via FeeJuicePaymentMethodWithClaim
+ * - "batch":     wallet already has gas — all credentials batch-claimed normally
  *
  * If `knownClaimKind` is provided (from a persisted session), it overrides the
  * balance-based heuristic to avoid misclassifying credentials on restore.
@@ -27,7 +27,8 @@ export function determineClaimPath(
     }
   }
 
-  if (kind === "batch") {
+  // "self" and "batch" both use the same batch claim path — wallet pays gas
+  if (kind === "batch" || kind === "self") {
     return { kind: "batch", claims: allCredentials };
   }
 

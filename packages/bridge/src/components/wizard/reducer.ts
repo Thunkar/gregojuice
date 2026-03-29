@@ -8,13 +8,15 @@ export function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgeP
     case "BRIDGE_STARTED":
       return { type: "l1-pending", pendingBridge: action.pendingBridge };
 
-    case "L1_CONFIRMED":
+    case "L1_CONFIRMED": {
+      if (state.type !== "l1-pending" && state.type !== "idle") return state;
       return {
         type: "waiting-l2-sync",
         allCredentials: action.allCredentials,
         messagesReady: action.allCredentials.map(() => false),
         claimKind: action.claimKind,
       };
+    }
 
     case "MESSAGE_READY": {
       if (state.type !== "waiting-l2-sync") return state;
@@ -80,6 +82,7 @@ export function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgeP
         allCredentials: state.allCredentials,
         txHash: action.txHash,
         snapshot: action.snapshot,
+        claimKind: state.claimPath.kind,
       };
     }
 
