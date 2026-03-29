@@ -8,8 +8,8 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-import type { Recipient, RecipientChoice } from "./types";
-import { MAX_RECIPIENTS } from "./constants";
+import type { Recipient, RecipientChoice } from "../types";
+import { MAX_RECIPIENTS } from "../constants";
 
 interface Step3RecipientProps {
   isExternal: boolean;

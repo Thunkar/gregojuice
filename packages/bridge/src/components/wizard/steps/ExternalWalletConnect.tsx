@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Box, Typography, LinearProgress, Alert, Button } from "@mui/material";
-import { useNetwork } from "../../contexts/NetworkContext";
-import { useAztecWallet } from "../../contexts/AztecWalletContext";
-import { getAztecNode } from "../../services/bridgeService";
+import { useNetwork } from "../../../contexts/NetworkContext";
+import { useAztecWallet } from "../../../contexts/AztecWalletContext";
+import { getAztecNode } from "../../../services";
 import { WalletManager } from "@aztec/wallet-sdk/manager";
 import { Fr } from "@aztec/foundation/curves/bn254";
 

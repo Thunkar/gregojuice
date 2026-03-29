@@ -1,4 +1,4 @@
-import type { ClaimCredentials, BridgeStep, PendingBridge, MessageStatus } from "../../services/bridgeService";
+import type { ClaimCredentials, BridgeStep, PendingBridge, MessageStatus } from "../../services";
 import type { PhaseTiming } from "@gregojuice/embedded-wallet";
 
 export interface Recipient {

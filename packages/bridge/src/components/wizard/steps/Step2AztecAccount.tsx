@@ -8,7 +8,7 @@ import {
   Button,
 } from "@mui/material";
 import { ExternalWalletConnect } from "./ExternalWalletConnect";
-import type { AztecChoice, AztecWalletStatus } from "./types";
+import type { AztecChoice, AztecWalletStatus } from "../types";
 
 interface Step2AztecAccountProps {
   aztecAccountReady: boolean;

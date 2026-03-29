@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { type Hex } from 'viem';
-import { connectWallet, getConnectedAccount, switchChain } from '../services/bridgeService';
+import { connectWallet, getConnectedAccount, switchChain } from '../services';
 import { useNetwork } from './NetworkContext';
 
 interface WalletContextType {

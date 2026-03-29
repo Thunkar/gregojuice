@@ -4,7 +4,7 @@ import type { Wallet } from '@aztec/aztec.js/wallet';
 import { FeeJuiceContract } from '@aztec/aztec.js/protocol';
 import { EmbeddedWallet } from '@gregojuice/embedded-wallet';
 import { useNetwork } from './NetworkContext';
-import { getAztecNode, type ClaimCredentials, claimWithBootstrap as claimWithBootstrapSvc, claimBatch as claimBatchSvc } from '../services/bridgeService';
+import { getAztecNode, type ClaimCredentials, claimWithBootstrap as claimWithBootstrapSvc, claimBatch as claimBatchSvc } from '../services';
 
 export type AztecWalletStatus =
   | 'disconnected'
