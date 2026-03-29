@@ -60,10 +60,19 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
     return () => { cancelled = true; };
   }, [wallet, address, allCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Detect the auto-inserted gas payer: first credential matches the embedded wallet
+  // and there are additional user-provided recipients
+  const gasPayerIndex =
+    address && allCredentials.length > 1 &&
+    allCredentials[0].recipient === address.toString()
+      ? 0
+      : -1;
+
   return (
     <Box sx={{ mt: 1 }}>
       {allCredentials.map((cred, i) => {
         const bal = balances[cred.recipient];
+        const isGasPayer = i === gasPayerIndex;
         return (
           <Box
             key={i}
@@ -74,13 +83,21 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
               py: 0.5,
               borderBottom: i < allCredentials.length - 1 ? "1px solid" : "none",
               borderColor: "divider",
+              ...(isGasPayer && { opacity: 0.6 }),
             }}
           >
-            <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
-              {shortAddress(cred.recipient)}
-            </Typography>
+            <Box>
+              <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
+                {shortAddress(cred.recipient)}
+              </Typography>
+              {isGasPayer && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                  Gas payer (auto)
+                </Typography>
+              )}
+            </Box>
             <Box sx={{ textAlign: "right" }}>
-              <Typography variant="body2" fontWeight={600} color="primary">
+              <Typography variant="body2" fontWeight={600} color={isGasPayer ? "text.secondary" : "primary"}>
                 +{formatUnits(BigInt(cred.claimAmount), 18)} FJ
               </Typography>
               {bal !== undefined ? (
