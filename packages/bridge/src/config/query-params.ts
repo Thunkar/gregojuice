@@ -27,6 +27,8 @@ export interface QueryParams {
   isIframe: boolean;
   /** Force embedded wallet mode (no external wallet option) */
   forceEmbedded: boolean;
+  /** Parent origin for postMessage (derived from document.referrer when in iframe) */
+  parentOrigin: string | null;
 }
 
 let cached: QueryParams | null = null;
@@ -68,11 +70,20 @@ export function getQueryParams(): QueryParams {
     recipients = [{ address: recipientParam.trim(), amount: 0n }];
   }
 
+  const isIframe = window.self !== window.top;
+  let parentOrigin: string | null = null;
+  if (isIframe && document.referrer) {
+    try {
+      parentOrigin = new URL(document.referrer).origin;
+    } catch { /* invalid referrer */ }
+  }
+
   cached = {
     recipients,
     network: params.get("network"),
-    isIframe: window.self !== window.top,
+    isIframe,
     forceEmbedded: params.get("embedded") === "true",
+    parentOrigin,
   };
   return cached;
 }

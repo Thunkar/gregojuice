@@ -1,11 +1,9 @@
 import { Box, Paper, LinearProgress, Alert, Button } from "@mui/material";
-import { formatUnits } from "viem";
-import { shortAddress } from "@gregojuice/common";
-import { StepRow } from "./wizard/StepRow";
-import { Step1L1Wallet } from "./wizard/Step1L1Wallet";
-import { Step2AztecAccount } from "./wizard/Step2AztecAccount";
-import { Step3Recipient } from "./wizard/Step3Recipient";
-import { Step4BridgeClaim } from "./wizard/Step4BridgeClaim";
+import { StepRow } from "./wizard/steps/StepRow";
+import { Step1L1Wallet } from "./wizard/steps/Step1L1Wallet";
+import { Step2AztecAccount } from "./wizard/steps/Step2AztecAccount";
+import { Step3Recipient } from "./wizard/steps/Step3Recipient";
+import { Step4BridgeClaim } from "./wizard/steps/Step4BridgeClaim";
 import { useBridgeWizard } from "./wizard/useBridgeWizard";
 
 export function BridgeWizard() {
@@ -33,73 +31,34 @@ export function BridgeWizard() {
       {/* Step 1: Connect L1 Wallet */}
       <StepRow
         label="Connect L1 Wallet"
-        description={
-          w.account
-            ? `${(w.account as string).slice(0, 6)}...${(w.account as string).slice(-4)}${w.balance ? ` — FJ: ${w.balance.formatted}` : ""}`
-            : "Connect your Ethereum wallet"
-        }
+        description={w.step1Desc}
         status={w.stepStatus(1)}
         expanded={w.expandedStep === 1}
         onToggle={() => w.toggle(1)}
       >
-        <Step1L1Wallet
-          account={w.account}
-          isLoadingInfo={w.isLoadingInfo}
-          balance={w.balance}
-          hasFaucet={w.hasFaucet}
-          connect={w.connect}
-        />
+        <Step1L1Wallet {...w.step1Props} />
       </StepRow>
 
       {/* Step 2: Aztec Account */}
       <StepRow
         label="Aztec Account"
-        description={
-          w.aztecAccountReady
-            ? `${shortAddress(w.aztecAddress?.toString() ?? "")}${w.aztecStatus === "funded" ? " (funded)" : ""}${w.feeJuiceBalance && BigInt(w.feeJuiceBalance) > 0n ? ` — ${formatUnits(BigInt(w.feeJuiceBalance), 18)} FJ` : ""}`
-            : "Do you have an Aztec wallet?"
-        }
+        description={w.step2Desc}
         status={w.stepStatus(2)}
         expanded={w.expandedStep === 2}
         onToggle={() => w.toggle(2)}
       >
-        <Step2AztecAccount
-          aztecAccountReady={w.aztecAccountReady}
-          aztecChoice={w.aztecChoice}
-          setAztecChoice={w.setAztecChoice}
-          aztecStatus={w.aztecStatus}
-          aztecError={w.aztecError}
-          resetAccount={w.resetAccount}
-          forceEmbedded={w.forceEmbedded}
-        />
+        <Step2AztecAccount {...w.step2Props} />
       </StepRow>
 
       {/* Step 3: Recipient */}
       <StepRow
         label="Recipient"
-        description={
-          w.recipientReady
-            ? w.recipientChoice === "self"
-              ? "Bridge to myself"
-              : w.recipients.length > 1
-                ? `${w.recipients.length} recipients`
-                : `${shortAddress(w.recipients[0]?.address ?? "")}`
-            : "Who receives the fee juice?"
-        }
+        description={w.step3Desc}
         status={w.stepStatus(3)}
         expanded={w.expandedStep === 3}
         onToggle={() => w.toggle(3)}
       >
-        <Step3Recipient
-          isExternal={w.isExternal}
-          recipientChoice={w.recipientChoice}
-          setRecipientChoice={w.setRecipientChoice}
-          recipients={w.recipients}
-          setRecipients={w.setRecipients}
-          recipientReady={w.recipientReady}
-          advanceFromStep3={w.advanceFromStep3}
-          prefilled={w.recipientPrefilled}
-        />
+        <Step3Recipient {...w.step3Props} />
       </StepRow>
 
       {/* Step 4: Bridge & Claim */}
@@ -110,30 +69,14 @@ export function BridgeWizard() {
         expanded={w.expandedStep === 4}
         onToggle={() => w.toggle(4)}
       >
-        <Step4BridgeClaim
-          recipients={w.recipients}
-          setRecipients={w.setRecipients}
-          allCredentials={w.allCredentials}
-          balance={w.balance}
-          faucetLocked={w.faucetLocked}
-          hasBalance={w.hasBalance}
-          bridgeStep={w.bridgeStep}
-          bridgeStepLabel={w.bridgeStepLabel}
-          isBridging={w.isBridging}
-          bridgeDone={w.bridgeDone}
-          handleBridge={w.handleBridge}
-          syncDone={w.syncDone}
-          messageStatus={w.messageStatus}
-          claimed={w.claimed}
-          isClaiming={w.isClaiming}
-        />
+        <Step4BridgeClaim {...w.step4Props} />
 
         {/* Error */}
-        {(w.error || w.aztecError) && (
+        {w.error && (
           <Alert
             severity="error"
             sx={{ mt: 1, borderRadius: 0 }}
-            onClose={() => w.setError(null)}
+            onClose={w.clearError}
             action={
               w.canRetryClaim ? (
                 <Button color="inherit" size="small" onClick={w.retryClaim}>
@@ -142,7 +85,7 @@ export function BridgeWizard() {
               ) : undefined
             }
           >
-            {w.error || w.aztecError}
+            {w.error}
           </Alert>
         )}
       </StepRow>

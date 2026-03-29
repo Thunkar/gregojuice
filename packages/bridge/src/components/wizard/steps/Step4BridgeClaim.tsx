@@ -6,14 +6,9 @@ import { formatUnits } from "viem";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { shortAddress } from "@gregojuice/common";
-import { BRIDGE_STEP_LABELS } from "./constants";
-import { useAztecWallet } from "../../contexts/AztecWalletContext";
-import type { BridgeStep, ClaimCredentials, MessageStatus } from "./types";
-
-interface Recipient {
-  address: string;
-  amount: string;
-}
+import { BRIDGE_STEP_LABELS } from "../constants";
+import { useAztecWallet } from "../../../contexts/AztecWalletContext";
+import type { Recipient, BridgeStep, ClaimCredentials, MessageStatus } from "../types";
 
 interface Step4BridgeClaimProps {
   recipients: Recipient[];
@@ -39,8 +34,6 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
   const { wallet, address } = useAztecWallet();
   const [balances, setBalances] = useState<Record<string, string | null>>({});
 
-  const displayCredentials = allCredentials;
-
   // Fetch FJ balance for each recipient after claiming
   useEffect(() => {
     if (!wallet || !address) return;
@@ -51,7 +44,7 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
 
       const results: Record<string, string | null> = {};
       await Promise.all(
-        displayCredentials.map(async (cred) => {
+        allCredentials.map(async (cred) => {
           try {
             const target = AztecAddress.fromString(cred.recipient);
             const { result } = await fj.methods.balance_of_public(target).simulate({ from: address });
@@ -65,12 +58,21 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
     })();
 
     return () => { cancelled = true; };
-  }, [wallet, address, displayCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wallet, address, allCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Detect the auto-inserted gas payer: first credential matches the embedded wallet
+  // and there are additional user-provided recipients
+  const gasPayerIndex =
+    address && allCredentials.length > 1 &&
+    allCredentials[0].recipient === address.toString()
+      ? 0
+      : -1;
 
   return (
     <Box sx={{ mt: 1 }}>
-      {displayCredentials.map((cred, i) => {
+      {allCredentials.map((cred, i) => {
         const bal = balances[cred.recipient];
+        const isGasPayer = i === gasPayerIndex;
         return (
           <Box
             key={i}
@@ -79,15 +81,23 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
               justifyContent: "space-between",
               alignItems: "center",
               py: 0.5,
-              borderBottom: i < displayCredentials.length - 1 ? "1px solid" : "none",
+              borderBottom: i < allCredentials.length - 1 ? "1px solid" : "none",
               borderColor: "divider",
+              ...(isGasPayer && { opacity: 0.6 }),
             }}
           >
-            <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
-              {shortAddress(cred.recipient)}
-            </Typography>
+            <Box>
+              <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
+                {shortAddress(cred.recipient)}
+              </Typography>
+              {isGasPayer && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                  Gas payer (auto)
+                </Typography>
+              )}
+            </Box>
             <Box sx={{ textAlign: "right" }}>
-              <Typography variant="body2" fontWeight={600} color="primary">
+              <Typography variant="body2" fontWeight={600} color={isGasPayer ? "text.secondary" : "primary"}>
                 +{formatUnits(BigInt(cred.claimAmount), 18)} FJ
               </Typography>
               {bal !== undefined ? (

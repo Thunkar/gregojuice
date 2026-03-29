@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { Box, Typography, LinearProgress, Alert, Button } from "@mui/material";
-import { useNetwork } from "../../contexts/NetworkContext";
-import { useAztecWallet } from "../../contexts/AztecWalletContext";
-import { getAztecNode } from "../../services/bridgeService";
+import { useNetwork } from "../../../contexts/NetworkContext";
+import { useAztecWallet } from "../../../contexts/AztecWalletContext";
+import { getAztecNode } from "../../../services";
 import { WalletManager } from "@aztec/wallet-sdk/manager";
 import { Fr } from "@aztec/foundation/curves/bn254";
 
@@ -40,8 +40,8 @@ export function ExternalWalletConnect() {
           wallets.push({ id: provider.id, name: provider.name, provider });
           setDiscovered([...wallets]);
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : "Wallet discovery failed");
       } finally {
         if (!cancelled) setIsDiscovering(false);
       }
