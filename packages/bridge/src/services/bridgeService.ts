@@ -9,6 +9,7 @@ import {
   type TransactionReceipt,
   parseAbi,
   decodeEventLog,
+  zeroAddress,
 } from "viem";
 import { sepolia, mainnet, foundry } from "viem/chains";
 import {
@@ -52,8 +53,12 @@ import {
   BRIDGE_CONTRACT_ABI,
   BRIDGE_CONTRACT_BYTECODE,
 } from "./bridge-contract-artifacts";
+import { BRIDGE_CONTRACT_STORAGE_KEY, MESSAGE_POLL_INTERVAL_MS } from "../components/wizard/constants";
 
-const BRIDGE_CONTRACT_STORAGE_KEY = "gregojuice_bridge_contract_v2";
+/** Converts a bigint to a 0x-prefixed, 64-char hex string. */
+function toHex64(value: bigint): Hex {
+  return `0x${value.toString(16).padStart(64, "0")}` as Hex;
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -76,9 +81,9 @@ export interface L1Addresses {
 }
 
 export interface ClaimCredentials {
-  claimSecret: string;
-  claimSecretHash: string;
-  messageHash: string;
+  claimSecret: Hex;
+  claimSecretHash: Hex;
+  messageHash: Hex;
   messageLeafIndex: string;
   claimAmount: string;
   recipient: string;
@@ -125,15 +130,16 @@ export async function fetchL1Addresses(
   const nodeInfo = await node.getNodeInfo();
   const addrs = nodeInfo.l1ContractAddresses;
 
-  const rawHandler = (addrs as Record<string, unknown>).feeAssetHandlerAddress;
-  const handlerStr =
-    rawHandler && typeof rawHandler === "object" && "toString" in rawHandler
-      ? (rawHandler as { toString(): string }).toString()
-      : typeof rawHandler === "string"
-        ? rawHandler
-        : null;
-  const isZero =
-    !handlerStr || handlerStr === "0x0000000000000000000000000000000000000000";
+  let handlerStr: string | null = null;
+  if ("feeAssetHandlerAddress" in addrs) {
+    const rawHandler = (addrs as Record<string, unknown>).feeAssetHandlerAddress;
+    if (rawHandler && typeof rawHandler === "object" && "toString" in rawHandler) {
+      handlerStr = (rawHandler as { toString(): string }).toString();
+    } else if (typeof rawHandler === "string") {
+      handlerStr = rawHandler;
+    }
+  }
+  const isZero = !handlerStr || handlerStr === zeroAddress;
 
   return {
     feeJuicePortal: addrs.feeJuicePortalAddress.toString() as Hex,
@@ -171,7 +177,7 @@ export function pollMessageReadiness(
       } catch {
         // Node may not have seen the message yet - keep polling
       }
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, MESSAGE_POLL_INTERVAL_MS));
     }
   };
 
@@ -215,6 +221,20 @@ function getL1PublicClient(l1RpcUrl: string, chainId: number) {
     return createPublicClient({ chain, transport: custom(window.ethereum) });
   }
   return createPublicClient({ chain, transport: http(l1RpcUrl) });
+}
+
+/**
+ * Returns a { publicClient, walletClient, account } triplet for L1 operations.
+ * Throws if no EVM wallet is available or no account is connected.
+ */
+async function getL1Clients(chainId: number) {
+  if (!window.ethereum) throw new Error("No EVM wallet found");
+  const chain = getChain(chainId);
+  const publicClient = createPublicClient({ chain, transport: custom(window.ethereum) });
+  const walletClient = createWalletClient({ chain, transport: custom(window.ethereum) });
+  const [account] = await walletClient.requestAddresses();
+  if (!account) throw new Error("No account connected");
+  return { publicClient, walletClient, account, chain };
 }
 
 export async function getFeeJuiceBalance(
@@ -282,6 +302,7 @@ function extractAllDepositEvents(receipt: TransactionReceipt): DepositEvent[] {
   for (const log of receipt.logs) {
     try {
       const raw = log as unknown as { data: Hex; topics: [Hex, ...Hex[]] };
+      if (!raw.topics?.[0]) continue;
       const decoded = decodeEventLog({
         abi: depositEventAbi,
         data: raw.data,
@@ -296,6 +317,9 @@ function extractAllDepositEvents(receipt: TransactionReceipt): DepositEvent[] {
 }
 
 // ── Bridge contract deployment ───────────────────────────────────────
+
+/** In-flight deployment promise to prevent double-deploy from concurrent calls. */
+let deploymentInFlight: Promise<Hex> | null = null;
 
 /**
  * Returns the GregoJuiceBridge contract address.
@@ -319,27 +343,36 @@ async function deployOrGetBridgeContract(
     return envAddr as Hex;
   }
 
-  // 2. Check localStorage cache
+  // 2. Check localStorage cache (and clean up orphaned v1 key)
   const storageKey = `${BRIDGE_CONTRACT_STORAGE_KEY}_${chain.id}`;
+  try { localStorage.removeItem(`gregojuice_bridge_contract_${chain.id}`); } catch { /* v1 cleanup */ }
   const cached = localStorage.getItem(storageKey);
   if (cached) {
     const code = await publicClient.getCode({ address: cached as Hex });
     if (code && code !== "0x") return cached as Hex;
   }
 
-  // 3. Auto-deploy
-  const hash = await walletClient.deployContract({
-    abi: BRIDGE_CONTRACT_ABI,
-    bytecode: BRIDGE_CONTRACT_BYTECODE,
-    account,
-    chain,
-  });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  if (!receipt.contractAddress)
-    throw new Error("Bridge contract deployment failed");
+  // 3. Auto-deploy (with concurrency guard)
+  if (deploymentInFlight) return deploymentInFlight;
 
-  localStorage.setItem(storageKey, receipt.contractAddress);
-  return receipt.contractAddress;
+  deploymentInFlight = (async () => {
+    const hash = await walletClient.deployContract({
+      abi: BRIDGE_CONTRACT_ABI,
+      bytecode: BRIDGE_CONTRACT_BYTECODE,
+      account,
+      chain,
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (!receipt.contractAddress)
+      throw new Error("Bridge contract deployment failed");
+
+    localStorage.setItem(storageKey, receipt.contractAddress);
+    return receipt.contractAddress as Hex;
+  })().finally(() => {
+    deploymentInFlight = null;
+  });
+
+  return deploymentInFlight;
 }
 
 // ── Bridge ───────────────────────────────────────────────────────────
@@ -370,22 +403,11 @@ export async function bridgeFeeJuice(params: {
     onStep,
     onPending,
   } = params;
-  const chain = getChain(chainId);
 
-  if (!window.ethereum) throw new Error("No EVM wallet found");
-  const publicClient = createPublicClient({
-    chain,
-    transport: custom(window.ethereum),
-  });
-  const walletClient = createWalletClient({
-    chain,
-    transport: custom(window.ethereum),
-  });
-  const [account] = await walletClient.requestAddresses();
-  if (!account) throw new Error("No account connected");
+  const { publicClient, walletClient, account, chain } = await getL1Clients(chainId);
 
   const { secret, secretHash } = await generateClaimSecret();
-  const secretHashHex = `0x${secretHash.toString(16).padStart(64, "0")}` as Hex;
+  const secretHashHex = toHex64(secretHash);
   const recipientHex = (
     aztecRecipient.startsWith("0x") ? aztecRecipient : `0x${aztecRecipient}`
   ) as Hex;
@@ -422,7 +444,7 @@ export async function bridgeFeeJuice(params: {
       l1TxHash: hash,
       secrets: [
         {
-          secret: `0x${secret.toString(16).padStart(64, "0")}`,
+          secret: toHex64(secret),
           secretHash: secretHashHex,
         },
       ],
@@ -433,7 +455,7 @@ export async function bridgeFeeJuice(params: {
     const event = extractDepositEvent(receipt);
     onStep("done");
     return {
-      claimSecret: `0x${secret.toString(16).padStart(64, "0")}`,
+      claimSecret: toHex64(secret),
       claimSecretHash: secretHashHex,
       messageHash: event.key,
       messageLeafIndex: event.index.toString(),
@@ -481,7 +503,7 @@ export async function bridgeFeeJuice(params: {
     l1TxHash: hash,
     secrets: [
       {
-        secret: `0x${secret.toString(16).padStart(64, "0")}`,
+        secret: toHex64(secret),
         secretHash: secretHashHex,
       },
     ],
@@ -493,7 +515,7 @@ export async function bridgeFeeJuice(params: {
   onStep("done");
 
   return {
-    claimSecret: `0x${secret.toString(16).padStart(64, "0")}`,
+    claimSecret: toHex64(secret),
     claimSecretHash: secretHashHex,
     messageHash: event.key,
     messageLeafIndex: event.index.toString(),
@@ -518,19 +540,8 @@ export async function bridgeMultiple(params: {
   onPending?: (pending: PendingBridge) => void;
 }): Promise<ClaimCredentials[]> {
   const { chainId, addresses, recipients, mint, onStep, onPending } = params;
-  const chain = getChain(chainId);
 
-  if (!window.ethereum) throw new Error("No EVM wallet found");
-  const publicClient = createPublicClient({
-    chain,
-    transport: custom(window.ethereum),
-  });
-  const walletClient = createWalletClient({
-    chain,
-    transport: custom(window.ethereum),
-  });
-  const [account] = await walletClient.requestAddresses();
-  if (!account) throw new Error("No account connected");
+  const { publicClient, walletClient, account, chain } = await getL1Clients(chainId);
 
   const totalAmount = recipients.reduce((sum, r) => sum + r.amount, 0n);
 
@@ -539,7 +550,7 @@ export async function bridgeMultiple(params: {
     recipients.map(() => generateClaimSecret()),
   );
   const secretHashHexes = secrets.map(
-    (s) => `0x${s.secretHash.toString(16).padStart(64, "0")}` as Hex,
+    (s) => toHex64(s.secretHash),
   );
   const recipientHexes = recipients.map(
     (r) => (r.address.startsWith("0x") ? r.address : `0x${r.address}`) as Hex,
@@ -559,7 +570,7 @@ export async function bridgeMultiple(params: {
   const pendingBridge: PendingBridge = {
     l1TxHash: "", // filled after send
     secrets: secrets.map((s, i) => ({
-      secret: `0x${s.secret.toString(16).padStart(64, "0")}`,
+      secret: toHex64(s.secret),
       secretHash: secretHashHexes[i],
     })),
     recipients: recipients.map((r) => r.address),
@@ -644,7 +655,7 @@ export async function bridgeMultiple(params: {
   onStep("done");
 
   return recipients.map((r, i) => ({
-    claimSecret: `0x${secrets[i].secret.toString(16).padStart(64, "0")}`,
+    claimSecret: toHex64(secrets[i].secret),
     claimSecretHash: secretHashHexes[i],
     messageHash: events[i].key,
     messageLeafIndex: events[i].index.toString(),
@@ -683,8 +694,8 @@ export async function resumePendingBridge(
   }
 
   return pending.secrets.map((s, i) => ({
-    claimSecret: s.secret,
-    claimSecretHash: s.secretHash,
+    claimSecret: s.secret as Hex,
+    claimSecretHash: s.secretHash as Hex,
     messageHash: events[i].key,
     messageLeafIndex: events[i].index.toString(),
     claimAmount: pending.amounts[i],

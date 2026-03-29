@@ -35,7 +35,7 @@ export function Step1L1Wallet({
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
         Fee Juice Balance:{" "}
-        <span style={{ color: "#D4FF28", fontWeight: 600 }}>
+        <span style={{ fontWeight: 600 }}>
           {balance?.formatted ?? "..."}
         </span>
       </Typography>

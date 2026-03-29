@@ -1,9 +1,15 @@
 import type { ClaimCredentials, BridgeStep, PendingBridge, MessageStatus } from "../../services/bridgeService";
 import type { PhaseTiming } from "@gregojuice/embedded-wallet";
 
+export interface Recipient {
+  address: string;
+  amount: string;
+}
+
 export type WizardStep = 1 | 2 | 3 | 4;
 export type AztecChoice = "existing" | "new" | null;
 export type RecipientChoice = "self" | "other" | null;
+export type ClaimKind = "bootstrap" | "batch";
 
 // ── Claim path (pure, computed by reducer) ────────────────────────────
 
@@ -31,24 +37,24 @@ export interface TxProgressSnapshot {
 export type BridgePhase =
   | { type: "idle" }
   | { type: "l1-pending"; pendingBridge: PendingBridge }
-  | { type: "waiting-l2-sync"; allCredentials: ClaimCredentials[]; messagesReady: boolean[]; claimKind?: "bootstrap" | "batch" }
+  | { type: "waiting-l2-sync"; allCredentials: ClaimCredentials[]; messagesReady: boolean[]; claimKind?: ClaimKind }
   | { type: "ready-to-claim"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
   | { type: "claiming"; allCredentials: ClaimCredentials[]; claimPath: ClaimPath }
   | { type: "claim-sent"; allCredentials: ClaimCredentials[]; txHash: string; snapshot: TxProgressSnapshot }
   | { type: "done" }
-  | { type: "error"; message: string; allCredentials?: ClaimCredentials[]; claimKind?: "bootstrap" | "batch" };
+  | { type: "error"; message: string; allCredentials?: ClaimCredentials[]; claimKind?: ClaimKind };
 
 export type BridgeAction =
   | { type: "BRIDGE_STARTED"; pendingBridge: PendingBridge }
-  | { type: "L1_CONFIRMED"; allCredentials: ClaimCredentials[]; claimKind?: "bootstrap" | "batch" }
-  | { type: "MESSAGE_READY"; index: number; recipientChoice: RecipientChoice; feeJuiceBalance: string | null; walletReady: boolean }
-  | { type: "WALLET_READY"; recipientChoice: RecipientChoice; feeJuiceBalance: string | null }
+  | { type: "L1_CONFIRMED"; allCredentials: ClaimCredentials[]; claimKind?: ClaimKind }
+  | { type: "MESSAGE_READY"; index: number; feeJuiceBalance: string | null; walletReady: boolean }
+  | { type: "WALLET_READY"; feeJuiceBalance: string | null }
   | { type: "WALLET_NOT_READY" }
   | { type: "CLAIM_STARTED" }
   | { type: "TX_SENT"; txHash: string; snapshot: TxProgressSnapshot }
   | { type: "CLAIM_DONE" }
   | { type: "ERROR"; message: string }
-  | { type: "RETRY_CLAIM"; recipientChoice: RecipientChoice; feeJuiceBalance: string | null }
+  | { type: "RETRY_CLAIM"; feeJuiceBalance: string | null }
   | { type: "RESET" };
 
 // ── Session (localStorage) ────────────────────────────────────────────
@@ -57,7 +63,7 @@ export interface BridgeSession {
   phase: "l1-pending" | "bridged" | "claiming";
   allCredentials?: ClaimCredentials[];
   /** Which claim strategy was used: "bootstrap" (first cred pays gas) or "batch" (wallet funded) */
-  claimKind?: "bootstrap" | "batch";
+  claimKind?: ClaimKind;
   recipientChoice: "self" | "other";
   isExternal?: boolean;
   /** All recipients with their amounts (address + amount pairs) */
@@ -69,3 +75,4 @@ export interface BridgeSession {
 }
 
 export type { ClaimCredentials, BridgeStep, MessageStatus, PendingBridge };
+export type { AztecWalletStatus } from "../../contexts/AztecWalletContext";

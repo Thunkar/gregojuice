@@ -1,6 +1,7 @@
 import { Box, Paper, LinearProgress, Alert, Button } from "@mui/material";
 import { formatUnits } from "viem";
 import { shortAddress } from "@gregojuice/common";
+
 import { StepRow } from "./wizard/StepRow";
 import { Step1L1Wallet } from "./wizard/Step1L1Wallet";
 import { Step2AztecAccount } from "./wizard/Step2AztecAccount";
@@ -35,7 +36,7 @@ export function BridgeWizard() {
         label="Connect L1 Wallet"
         description={
           w.account
-            ? `${(w.account as string).slice(0, 6)}...${(w.account as string).slice(-4)}${w.balance ? ` — FJ: ${w.balance.formatted}` : ""}`
+            ? `${shortAddress(w.account)}${w.balance ? ` — FJ: ${w.balance.formatted}` : ""}`
             : "Connect your Ethereum wallet"
         }
         status={w.stepStatus(1)}

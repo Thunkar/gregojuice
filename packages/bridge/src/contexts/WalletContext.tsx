@@ -58,8 +58,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       await switchChain(activeNetwork.l1ChainId);
       const addr = await connectWallet();
       setAccount(addr);
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to connect wallet');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
     } finally {
       setIsConnecting(false);
     }

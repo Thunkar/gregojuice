@@ -4,20 +4,33 @@ import { SESSION_KEY, SESSION_TTL_MS } from "./constants";
 export function saveSession(session: BridgeSession) {
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  } catch {
-    /* ignore */
+  } catch (e) {
+    console.warn("[bridge] Failed to save session:", e);
   }
+}
+
+function isValidSession(obj: unknown): obj is BridgeSession {
+  if (!obj || typeof obj !== "object") return false;
+  const s = obj as Record<string, unknown>;
+  return (
+    (s.phase === "l1-pending" || s.phase === "bridged" || s.phase === "claiming") &&
+    typeof s.networkId === "string" &&
+    typeof s.timestamp === "number" &&
+    (s.recipientChoice === "self" || s.recipientChoice === "other")
+  );
 }
 
 export function loadSession(networkId: string): BridgeSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    const session = JSON.parse(raw) as BridgeSession;
-    if (session.networkId !== networkId) return null;
-    if (Date.now() - session.timestamp > SESSION_TTL_MS) return null;
-    return session;
-  } catch {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isValidSession(parsed)) return null;
+    if (parsed.networkId !== networkId) return null;
+    if (Date.now() - parsed.timestamp > SESSION_TTL_MS) return null;
+    return parsed;
+  } catch (e) {
+    console.warn("[bridge] Failed to load session:", e);
     return null;
   }
 }
@@ -25,50 +38,56 @@ export function loadSession(networkId: string): BridgeSession | null {
 export function clearSession() {
   try {
     localStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
+  } catch (e) {
+    console.warn("[bridge] Failed to clear session:", e);
   }
 }
 
 /** Convert a persisted session into the appropriate BridgePhase for the reducer. */
 export function sessionToPhase(session: BridgeSession): BridgePhase {
-  if (session.phase === "l1-pending" && session.l1BridgeParams) {
-    return { type: "l1-pending", pendingBridge: session.l1BridgeParams };
-  }
-
   const allCreds = session.allCredentials;
-  if (!allCreds || allCreds.length === 0) return { type: "idle" };
 
-  if (session.phase === "bridged") {
-    return {
-      type: "waiting-l2-sync",
-      allCredentials: allCreds,
-      messagesReady: allCreds.map(() => false),
-      claimKind: session.claimKind,
-    };
-  }
+  switch (session.phase) {
+    case "l1-pending":
+      if (session.l1BridgeParams) {
+        return { type: "l1-pending", pendingBridge: session.l1BridgeParams };
+      }
+      return { type: "idle" };
 
-  if (session.phase === "claiming") {
-    // Tx was sent and is mining — resume polling
-    if (session.txProgressSnapshot?.aztecTxHash) {
+    case "bridged":
+      if (!allCreds || allCreds.length === 0) return { type: "idle" };
       return {
-        type: "claim-sent",
+        type: "waiting-l2-sync",
         allCredentials: allCreds,
-        txHash: session.txProgressSnapshot.aztecTxHash,
-        snapshot: session.txProgressSnapshot,
+        messagesReady: allCreds.map(() => false),
+        claimKind: session.claimKind,
       };
-    }
-    // Tx not yet sent — restore to waiting-l2-sync with messages pre-marked ready
-    // The claimKind from the session tells us which path to use once wallet balance is known
-    return {
-      type: "waiting-l2-sync",
-      allCredentials: allCreds,
-      messagesReady: allCreds.map(() => true),
-      claimKind: session.claimKind,
-    };
-  }
 
-  return { type: "idle" };
+    case "claiming":
+      if (!allCreds || allCreds.length === 0) return { type: "idle" };
+      // Tx was sent and is mining — resume polling
+      if (session.txProgressSnapshot?.aztecTxHash) {
+        return {
+          type: "claim-sent",
+          allCredentials: allCreds,
+          txHash: session.txProgressSnapshot.aztecTxHash,
+          snapshot: session.txProgressSnapshot,
+        };
+      }
+      // Tx not yet sent — restore to waiting-l2-sync with messages pre-marked ready
+      return {
+        type: "waiting-l2-sync",
+        allCredentials: allCreds,
+        messagesReady: allCreds.map(() => true),
+        claimKind: session.claimKind,
+      };
+
+    default: {
+      const _exhaustive: never = session.phase;
+      console.warn("[bridge] Unknown session phase:", _exhaustive);
+      return { type: "idle" };
+    }
+  }
 }
 
 /** Convert current BridgePhase into a persistable session. */
@@ -99,7 +118,14 @@ export function phaseToSession(
       return { ...base, phase: "claiming", allCredentials: phase.allCredentials, claimKind: phase.claimPath.kind };
     case "claim-sent":
       return { ...base, phase: "claiming", allCredentials: phase.allCredentials, txProgressSnapshot: phase.snapshot };
-    default:
+    case "idle":
+    case "done":
+    case "error":
       return null;
+    default: {
+      const _exhaustive: never = phase;
+      console.warn("[bridge] Unknown bridge phase:", _exhaustive);
+      return null;
+    }
   }
 }

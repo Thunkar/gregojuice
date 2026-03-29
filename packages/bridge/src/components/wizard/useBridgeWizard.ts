@@ -24,7 +24,7 @@ import {
   sessionToPhase,
   phaseToSession,
 } from "./session";
-import { EPHEMERAL_CLAIM_GAS_FJ } from "./constants";
+import { EPHEMERAL_CLAIM_GAS_FJ, PHASE_COLOR_MINING } from "./constants";
 import type {
   WizardStep,
   AztecChoice,
@@ -33,7 +33,6 @@ import type {
   BridgeAction,
   BridgeStep,
   ClaimCredentials,
-  ClaimPath,
 } from "./types";
 
 // ── Reducer ───────────────────────────────────────────────────────────
@@ -60,7 +59,6 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
       const allReady = newReady.every(Boolean);
       if (allReady && action.walletReady) {
         const claimPath = determineClaimPath(
-          action.recipientChoice,
           state.allCredentials,
           action.feeJuiceBalance,
           state.claimKind,
@@ -80,7 +78,6 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
       if (state.type !== "waiting-l2-sync") return state;
       if (!state.messagesReady.every(Boolean)) return state;
       const claimPath = determineClaimPath(
-        action.recipientChoice,
         state.allCredentials,
         action.feeJuiceBalance,
         state.claimKind,
@@ -129,18 +126,27 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
 
     case "ERROR": {
       // Preserve credentials and claimKind for retry if we were in a claim-related state
-      const claimStates = ["ready-to-claim", "claiming", "claim-sent"];
-      if (claimStates.includes(state.type)) {
-        const claimKind =
-          "claimPath" in state
-            ? (state as { claimPath: ClaimPath }).claimPath.kind
-            : undefined;
+      if (state.type === "ready-to-claim" || state.type === "claiming") {
         return {
           type: "error",
           message: action.message,
-          allCredentials: (state as { allCredentials: ClaimCredentials[] })
-            .allCredentials,
-          claimKind,
+          allCredentials: state.allCredentials,
+          claimKind: state.claimPath.kind,
+        };
+      }
+      if (state.type === "claim-sent") {
+        return {
+          type: "error",
+          message: action.message,
+          allCredentials: state.allCredentials,
+        };
+      }
+      if (state.type === "waiting-l2-sync") {
+        return {
+          type: "error",
+          message: action.message,
+          allCredentials: state.allCredentials,
+          claimKind: state.claimKind,
         };
       }
       return { type: "error", message: action.message };
@@ -149,7 +155,6 @@ function bridgeReducer(state: BridgePhase, action: BridgeAction): BridgePhase {
     case "RETRY_CLAIM": {
       if (state.type !== "error" || !("allCredentials" in state)) return state;
       const claimPath = determineClaimPath(
-        action.recipientChoice,
         state.allCredentials as ClaimCredentials[],
         action.feeJuiceBalance,
         state.claimKind,
@@ -191,7 +196,7 @@ export function useBridgeWizard() {
   } = useAztecWallet();
 
   // ── Iframe / query-param overrides ────────────────────────────────
-  const [{ recipients: queryRecipients, isIframe, forceEmbedded }] =
+  const [{ recipients: queryRecipients, isIframe, forceEmbedded, parentOrigin }] =
     useState(getQueryParams);
 
   // ── Session restore (computed once) ─────────────────────────────────
@@ -209,7 +214,7 @@ export function useBridgeWizard() {
   const [wizardStep, setWizardStep] = useState<WizardStep>(
     hasSession ? (initialSession?.isExternal ? 2 : 4) : 1,
   );
-  const [expandedStep, setExpandedStep] = useState<WizardStep>(
+  const [expandedStep, setExpandedStep] = useState<WizardStep | null>(
     hasSession ? (initialSession?.isExternal ? 2 : 4) : 1,
   );
   const [error, setError] = useState<string | null>(null);
@@ -255,14 +260,6 @@ export function useBridgeWizard() {
   });
 
   // ── Step 4: Amount + UI state ───────────────────────────────────────
-  // Primary amount reads/writes recipients[0].amount
-  const setAmount = useCallback((val: string) => {
-    setRecipients((prev) => {
-      const updated = [...prev];
-      updated[0] = { ...updated[0], amount: val };
-      return updated;
-    });
-  }, []);
   const [bridgeStepLabel, setBridgeStepLabel] = useState(
     bridge.type === "l1-pending"
       ? "Resuming — waiting for L1 confirmation..."
@@ -311,22 +308,20 @@ export function useBridgeWizard() {
   const walletReady = aztecStatus === "ready" || aztecStatus === "funded";
 
   const walletReadyRef = useRef(walletReady);
-  const recipientChoiceRef = useRef(recipientChoice);
   const feeJuiceBalanceRef = useRef(feeJuiceBalance);
   const lastCredentialsRef = useRef<ClaimCredentials[] | null>(null);
   walletReadyRef.current = walletReady;
-  recipientChoiceRef.current = recipientChoice;
   feeJuiceBalanceRef.current = feeJuiceBalance;
 
   // ── Effect: Wallet status relay ─────────────────────────────────────
 
   useEffect(() => {
     if (walletReady) {
-      dispatch({ type: "WALLET_READY", recipientChoice, feeJuiceBalance });
+      dispatch({ type: "WALLET_READY", feeJuiceBalance });
     } else {
       dispatch({ type: "WALLET_NOT_READY" });
     }
-  }, [walletReady, recipientChoice, feeJuiceBalance]);
+  }, [walletReady, feeJuiceBalance]);
 
   // ── Effect: Orchestrator ────────────────────────────────────────────
 
@@ -366,7 +361,6 @@ export function useBridgeWizard() {
                 dispatch({
                   type: "MESSAGE_READY",
                   index,
-                  recipientChoice: recipientChoiceRef.current,
                   feeJuiceBalance: feeJuiceBalanceRef.current,
                   walletReady: walletReadyRef.current,
                 });
@@ -377,7 +371,7 @@ export function useBridgeWizard() {
         });
         // If all messages were already ready (restore), re-check wallet
         if (bridge.messagesReady.every(Boolean) && walletReady) {
-          dispatch({ type: "WALLET_READY", recipientChoice, feeJuiceBalance });
+          dispatch({ type: "WALLET_READY", feeJuiceBalance });
         }
         cleanup = () => cancellers.forEach((c) => c());
         break;
@@ -470,7 +464,7 @@ export function useBridgeWizard() {
                 {
                   name: "Mining",
                   duration: Date.now() - miningStart,
-                  color: "#4caf50",
+                  color: PHASE_COLOR_MINING,
                 },
               ],
               aztecTxHash: txHash,
@@ -493,7 +487,7 @@ export function useBridgeWizard() {
                 {
                   name: "Mining",
                   duration: Date.now() - miningStart,
-                  color: "#4caf50",
+                  color: PHASE_COLOR_MINING,
                 },
               ],
               error: err instanceof Error ? err.message : "Claim tx failed",
@@ -563,8 +557,8 @@ export function useBridgeWizard() {
       default:
         return;
     }
-    window.parent.postMessage(msg, "*");
-  }, [bridge.type, isIframe]);
+    window.parent.postMessage(msg, parentOrigin ?? "*");
+  }, [bridge.type, isIframe, parentOrigin]);
 
   // ── Step 1: Fetch L1 info ───────────────────────────────────────────
 
@@ -617,8 +611,9 @@ export function useBridgeWizard() {
           account,
         ),
       );
-    } catch {
-      setBalance({ balance: 0n, formatted: "0", decimals: 18 });
+    } catch (e) {
+      console.warn("[bridge] Failed to refresh L1 balance:", e);
+      setBalance(null);
     }
   }, [account, l1Addresses, activeNetwork]);
 
@@ -838,14 +833,13 @@ export function useBridgeWizard() {
     setAztecChoice(null);
     setRecipientChoice(null);
     setRecipients([{ address: "", amount: "" }]);
-    setAmount("");
     setError(null);
   };
 
   // ── Step status helpers ─────────────────────────────────────────────
 
   const toggle = (s: WizardStep) =>
-    setExpandedStep((prev) => (prev === s ? (0 as unknown as WizardStep) : s));
+    setExpandedStep((prev) => (prev === s ? null : s));
 
   const stepStatus = (s: WizardStep): "completed" | "active" | "pending" => {
     if (s < wizardStep) return "completed";
@@ -867,11 +861,6 @@ export function useBridgeWizard() {
   if (liveCredentials) lastCredentialsRef.current = liveCredentials;
   const allCredentials = liveCredentials ?? lastCredentialsRef.current;
 
-  // For display: the last credential (used for message status indicator)
-  const credentials = allCredentials
-    ? allCredentials[allCredentials.length - 1]
-    : null;
-
   const messageStatus: "ready" | "pending" | "error" =
     bridge.type === "waiting-l2-sync"
       ? bridge.messagesReady.every(Boolean)
@@ -880,16 +869,6 @@ export function useBridgeWizard() {
       : bridgeDone
         ? "ready"
         : "pending";
-
-  const ephMessageStatus: "ready" | "pending" | "error" =
-    bridge.type === "waiting-l2-sync" && bridge.allCredentials.length > 1
-      ? bridge.messagesReady[0]
-        ? "ready"
-        : "pending"
-      : "ready";
-
-  const ephemeralCredentials =
-    allCredentials && allCredentials.length > 1 ? allCredentials[0] : null;
 
   const bridgeStep: BridgeStep =
     bridge.type === "l1-pending"
@@ -915,7 +894,6 @@ export function useBridgeWizard() {
   return {
     account,
     connect,
-    activeNetwork,
     aztecStatus,
     aztecAddress,
     feeJuiceBalance,
@@ -927,13 +905,11 @@ export function useBridgeWizard() {
     toggle,
     stepStatus,
     progress,
-    l1Addresses,
     balance,
     isLoadingInfo,
     hasFaucet,
     hasBalance,
     faucetLocked,
-    mintAmountValue,
     aztecChoice,
     setAztecChoice,
     aztecAccountReady,
@@ -946,13 +922,9 @@ export function useBridgeWizard() {
     bridgeStep,
     bridgeStepLabel,
     allCredentials,
-    credentials,
-    ephemeralCredentials,
     messageStatus,
-    ephMessageStatus,
     claimed,
     isClaiming,
-    needsMultiBridge,
     isBridging,
     bridgeDone,
     syncDone,
@@ -961,7 +933,7 @@ export function useBridgeWizard() {
     handleReset,
     canRetryClaim: bridge.type === "error" && "allCredentials" in bridge,
     retryClaim: () =>
-      dispatch({ type: "RETRY_CLAIM", recipientChoice, feeJuiceBalance }),
+      dispatch({ type: "RETRY_CLAIM", feeJuiceBalance }),
     error,
     setError,
     isIframe,

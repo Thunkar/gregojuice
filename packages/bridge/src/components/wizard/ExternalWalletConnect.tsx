@@ -40,8 +40,8 @@ export function ExternalWalletConnect() {
           wallets.push({ id: provider.id, name: provider.name, provider });
           setDiscovered([...wallets]);
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        if (!cancelled) setErr(e instanceof Error ? e.message : "Wallet discovery failed");
       } finally {
         if (!cancelled) setIsDiscovering(false);
       }

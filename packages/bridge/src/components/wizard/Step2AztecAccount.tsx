@@ -8,13 +8,13 @@ import {
   Button,
 } from "@mui/material";
 import { ExternalWalletConnect } from "./ExternalWalletConnect";
-import type { AztecChoice } from "./types";
+import type { AztecChoice, AztecWalletStatus } from "./types";
 
 interface Step2AztecAccountProps {
   aztecAccountReady: boolean;
   aztecChoice: AztecChoice;
   setAztecChoice: (choice: AztecChoice) => void;
-  aztecStatus: string;
+  aztecStatus: AztecWalletStatus;
   aztecError: string | null;
   resetAccount: () => Promise<void>;
   forceEmbedded?: boolean;

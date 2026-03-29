@@ -8,12 +8,7 @@ import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { shortAddress } from "@gregojuice/common";
 import { BRIDGE_STEP_LABELS } from "./constants";
 import { useAztecWallet } from "../../contexts/AztecWalletContext";
-import type { BridgeStep, ClaimCredentials, MessageStatus } from "./types";
-
-interface Recipient {
-  address: string;
-  amount: string;
-}
+import type { Recipient, BridgeStep, ClaimCredentials, MessageStatus } from "./types";
 
 interface Step4BridgeClaimProps {
   recipients: Recipient[];
@@ -39,8 +34,6 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
   const { wallet, address } = useAztecWallet();
   const [balances, setBalances] = useState<Record<string, string | null>>({});
 
-  const displayCredentials = allCredentials;
-
   // Fetch FJ balance for each recipient after claiming
   useEffect(() => {
     if (!wallet || !address) return;
@@ -51,7 +44,7 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
 
       const results: Record<string, string | null> = {};
       await Promise.all(
-        displayCredentials.map(async (cred) => {
+        allCredentials.map(async (cred) => {
           try {
             const target = AztecAddress.fromString(cred.recipient);
             const { result } = await fj.methods.balance_of_public(target).simulate({ from: address });
@@ -65,11 +58,11 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
     })();
 
     return () => { cancelled = true; };
-  }, [wallet, address, displayCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [wallet, address, allCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Box sx={{ mt: 1 }}>
-      {displayCredentials.map((cred, i) => {
+      {allCredentials.map((cred, i) => {
         const bal = balances[cred.recipient];
         return (
           <Box
@@ -79,7 +72,7 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
               justifyContent: "space-between",
               alignItems: "center",
               py: 0.5,
-              borderBottom: i < displayCredentials.length - 1 ? "1px solid" : "none",
+              borderBottom: i < allCredentials.length - 1 ? "1px solid" : "none",
               borderColor: "divider",
             }}
           >

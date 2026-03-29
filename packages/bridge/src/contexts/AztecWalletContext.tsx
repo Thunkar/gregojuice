@@ -6,7 +6,7 @@ import { EmbeddedWallet } from '@gregojuice/embedded-wallet';
 import { useNetwork } from './NetworkContext';
 import { getAztecNode, type ClaimCredentials, claimWithBootstrap as claimWithBootstrapSvc, claimBatch as claimBatchSvc } from '../services/bridgeService';
 
-type AztecWalletStatus =
+export type AztecWalletStatus =
   | 'disconnected'
   | 'loading'
   | 'creating'
@@ -71,7 +71,8 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
       if (BigInt(bal) > 0n) {
         setStatus(prev => prev === 'ready' ? 'funded' : prev);
       }
-    } catch {
+    } catch (e) {
+      console.warn("[aztec-wallet] Failed to refresh fee juice balance:", e);
       setFeeJuiceBalance(null);
     }
   }, [activeWallet, address]);
@@ -123,13 +124,12 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, []);
 
-  // Bootstrap claim: first credential pays for gas, rest are batch-claimed
-  const claimWithBootstrap = useCallback(async (bootstrapClaim: ClaimCredentials, otherClaims: ClaimCredentials[]) => {
+  const withClaimStatus = useCallback(async (claimFn: () => Promise<unknown>) => {
     if (!activeWallet || !address) throw new Error('No wallet connected');
     setStatus('claiming');
     setError(null);
     try {
-      await claimWithBootstrapSvc(activeWallet, address, bootstrapClaim, otherClaims);
+      await claimFn();
       setStatus('funded');
       refreshFeeJuiceBalance();
     } catch (err: unknown) {
@@ -138,43 +138,35 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
     }
   }, [activeWallet, address, refreshFeeJuiceBalance]);
 
-  // Batch claim: all credentials claimed, gas paid from existing balance
-  const claimBatch = useCallback(async (claims: ClaimCredentials[]) => {
-    if (!activeWallet || !address) throw new Error('No wallet connected');
-    setStatus('claiming');
+  const claimWithBootstrap = useCallback(
+    (bootstrapClaim: ClaimCredentials, otherClaims: ClaimCredentials[]) =>
+      withClaimStatus(() => claimWithBootstrapSvc(activeWallet!, address!, bootstrapClaim, otherClaims)),
+    [activeWallet, address, withClaimStatus],
+  );
+
+  const claimBatch = useCallback(
+    (claims: ClaimCredentials[]) =>
+      withClaimStatus(() => claimBatchSvc(activeWallet!, address!, claims)),
+    [activeWallet, address, withClaimStatus],
+  );
+
+  const clearWalletState = useCallback(() => {
+    setWallet(null);
+    setExternalWallet(null);
+    setAddress(null);
+    setFeeJuiceBalance(null);
+    setStatus('disconnected');
     setError(null);
-    try {
-      await claimBatchSvc(activeWallet, address, claims);
-      setStatus('funded');
-      refreshFeeJuiceBalance();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Claim failed');
-      setStatus('error');
-    }
-  }, [activeWallet, address, refreshFeeJuiceBalance]);
+  }, []);
 
   const resetAccount = useCallback(async () => {
     if (wallet) {
       try { await wallet.deleteStoredAccount(); } catch { /* ignore */ }
     }
-    setWallet(null);
-    setExternalWallet(null);
-    setAddress(null);
+    clearWalletState();
+  }, [wallet, clearWalletState]);
 
-    setFeeJuiceBalance(null);
-    setStatus('disconnected');
-    setError(null);
-  }, [wallet]);
-
-  const disconnect = useCallback(() => {
-    setWallet(null);
-    setExternalWallet(null);
-    setAddress(null);
-
-    setFeeJuiceBalance(null);
-    setStatus('disconnected');
-    setError(null);
-  }, []);
+  const disconnect = clearWalletState;
 
   return (
     <AztecWalletContext.Provider

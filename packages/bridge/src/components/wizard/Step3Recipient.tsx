@@ -8,12 +8,8 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
-import type { RecipientChoice } from "./types";
-
-interface Recipient {
-  address: string;
-  amount: string;
-}
+import type { Recipient, RecipientChoice } from "./types";
+import { MAX_RECIPIENTS } from "./constants";
 
 interface Step3RecipientProps {
   isExternal: boolean;
@@ -67,7 +63,7 @@ function RecipientRows({
           )}
         </Box>
       ))}
-      {!readOnly && recipients.length < 3 && (
+      {!readOnly && recipients.length < MAX_RECIPIENTS && (
         <Button
           size="small"
           startIcon={<AddIcon />}

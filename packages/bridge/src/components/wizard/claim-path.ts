@@ -1,4 +1,4 @@
-import type { ClaimCredentials, ClaimPath, RecipientChoice } from "./types";
+import type { ClaimCredentials, ClaimPath, ClaimKind } from "./types";
 
 /**
  * Determines the claim strategy based on credentials and wallet state.
@@ -12,15 +12,20 @@ import type { ClaimCredentials, ClaimPath, RecipientChoice } from "./types";
  * balance-based heuristic to avoid misclassifying credentials on restore.
  */
 export function determineClaimPath(
-  _recipientChoice: RecipientChoice,
   allCredentials: ClaimCredentials[],
   feeJuiceBalance: string | null,
-  knownClaimKind?: "bootstrap" | "batch",
+  knownClaimKind?: ClaimKind,
 ): ClaimPath | null {
   if (allCredentials.length === 0) return null;
 
-  const kind = knownClaimKind
-    ?? (feeJuiceBalance != null && BigInt(feeJuiceBalance) > 0n ? "batch" : "bootstrap");
+  let kind: ClaimKind = knownClaimKind ?? "bootstrap";
+  if (!knownClaimKind && feeJuiceBalance != null) {
+    try {
+      if (BigInt(feeJuiceBalance) > 0n) kind = "batch";
+    } catch {
+      // Invalid balance string — fall back to bootstrap
+    }
+  }
 
   if (kind === "batch") {
     return { kind: "batch", claims: allCredentials };

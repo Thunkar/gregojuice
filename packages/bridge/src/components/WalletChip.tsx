@@ -1,12 +1,13 @@
 import { Chip, Box } from '@mui/material';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import { shortAddress } from '@gregojuice/common';
 import { useWallet } from '../contexts/WalletContext';
 
 export function WalletChip() {
   const { account, isConnecting, connect, disconnect } = useWallet();
 
   const label = account
-    ? `${account.slice(0, 6)}...${account.slice(-4)}`
+    ? shortAddress(account)
     : isConnecting
       ? 'Connecting...'
       : 'Connect Wallet';
