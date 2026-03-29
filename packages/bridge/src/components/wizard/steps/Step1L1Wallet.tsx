@@ -1,10 +1,11 @@
-import { Box, Typography, LinearProgress, Button } from "@mui/material";
+import { Box, Typography, LinearProgress, Button, Alert } from "@mui/material";
 
 interface Step1L1WalletProps {
   account: string | null;
   isLoadingInfo: boolean;
   balance: { formatted: string } | null;
   hasFaucet: boolean;
+  wrongChain: boolean;
   connect: () => void;
 }
 
@@ -13,6 +14,7 @@ export function Step1L1Wallet({
   isLoadingInfo,
   balance,
   hasFaucet,
+  wrongChain,
   connect,
 }: Step1L1WalletProps) {
   if (!account) {
@@ -27,6 +29,17 @@ export function Step1L1Wallet({
         >
           Connect Wallet
         </Button>
+      </Box>
+    );
+  }
+
+  if (wrongChain) {
+    return (
+      <Box>
+        <Alert severity="warning" sx={{ borderRadius: 0, mb: 1 }}>
+          Wrong network — switching automatically...
+        </Alert>
+        <LinearProgress />
       </Box>
     );
   }

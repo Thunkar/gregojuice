@@ -37,7 +37,7 @@ import type {
 // ── Hook ──────────────────────────────────────────────────────────────
 
 export function useBridgeWizard() {
-  const { account, connect } = useWallet();
+  const { account, connect, wrongChain } = useWallet();
   const { activeNetwork } = useNetwork();
   const {
     status: aztecStatus,
@@ -278,11 +278,9 @@ export function useBridgeWizard() {
             .then((amt) => {
               if (!cancelled) setMintAmountValue(amt);
             })
-            .catch((err) => {
-              if (!cancelled)
-                setError(
-                  `Failed to fetch mint amount: ${err instanceof Error ? err.message : "unknown error"}`,
-                );
+            .catch(() => {
+              // Handler exists but doesn't support mintAmount() — not a faucet,
+              // or wallet is on the wrong chain. Leave mintAmountValue as null.
             });
       })
       .catch((err) => {
@@ -323,11 +321,11 @@ export function useBridgeWizard() {
 
   // ── Auto-advance effects ──────────────────────────────────────────
   useEffect(() => {
-    if (account && l1Addresses && balance && wizardStep === 1) {
+    if (account && !wrongChain && l1Addresses && balance && wizardStep === 1) {
       setWizardStep(2);
       setExpandedStep(2);
     }
-  }, [account, l1Addresses, balance, wizardStep]);
+  }, [account, wrongChain, l1Addresses, balance, wizardStep]);
 
   useEffect(() => {
     if (aztecChoice === "new" && aztecStatus === "disconnected")
@@ -460,7 +458,9 @@ export function useBridgeWizard() {
 
   // ── Step descriptions (computed here so consumers don't need raw state) ──
   const step1Desc = account
-    ? `${shortAddress(account)}${balance ? ` — FJ: ${balance.formatted}` : ""}`
+    ? wrongChain
+      ? `${shortAddress(account)} — Wrong chain, switching...`
+      : `${shortAddress(account)}${balance ? ` — FJ: ${balance.formatted}` : ""}`
     : "Connect your Ethereum wallet";
 
   const step2Desc = aztecAccountReady
@@ -486,7 +486,7 @@ export function useBridgeWizard() {
     (bridgeDone ? (syncDone ? (claimed ? 25 : 18) : 10) : 0);
 
   // ── Per-step prop bundles ─────────────────────────────────────────
-  const step1Props = { account, isLoadingInfo, balance, hasFaucet, connect };
+  const step1Props = { account, isLoadingInfo, balance, hasFaucet, wrongChain, connect };
 
   const step2Props = {
     aztecAccountReady, aztecChoice, setAztecChoice,

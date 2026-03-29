@@ -2,7 +2,7 @@
 export type { L1Addresses, ClaimCredentials, BridgeStep, PendingBridge, MessageStatus } from "./types";
 
 // L1 wallet
-export { switchChain, getConnectedAccount, connectWallet } from "./l1/wallet";
+export { switchChain, getConnectedAccount, connectWallet, getWalletChainId, requestAccountSwitch, revokeWalletPermissions } from "./l1/wallet";
 
 // L1 clients & reads
 export { getFeeJuiceBalance, getMintAmount } from "./l1/clients";
