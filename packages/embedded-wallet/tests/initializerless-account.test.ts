@@ -127,7 +127,7 @@ describe("SchnorrInitializerlessAccount", () => {
     const secretKey = Fr.random();
     const { signingPublicKey } =
       await createSchnorrInitializerlessAccount(secretKey);
-    const serialized = serializeSigningKey(signingPublicKey);
+    const serialized = await serializeSigningKey(signingPublicKey);
 
     const result = await deployWithImmutables(
       wallet,
@@ -165,13 +165,13 @@ describe("SchnorrInitializerlessAccount", () => {
     const result1 = await deployWithImmutables(
       wallet,
       SchnorrInitializerlessAccountContractArtifact,
-      serializeSigningKey(pk1),
+      await serializeSigningKey(pk1),
       { secretKey: sk1 },
     );
     const result2 = await deployWithImmutables(
       wallet,
       SchnorrInitializerlessAccountContractArtifact,
-      serializeSigningKey(pk2),
+      await serializeSigningKey(pk2),
       { secretKey: sk2 },
     );
 
@@ -186,7 +186,7 @@ describe("SchnorrInitializerlessAccount", () => {
     const secretKey = Fr.random();
     const { signingPublicKey } =
       await createSchnorrInitializerlessAccount(secretKey);
-    const serialized = serializeSigningKey(signingPublicKey);
+    const serialized = await serializeSigningKey(signingPublicKey);
 
     const { instance } = await createImmutablesInstance(
       SchnorrInitializerlessAccountContractArtifact,
@@ -211,7 +211,7 @@ describe("SchnorrInitializerlessAccount", () => {
       x: new Fr(signingPublicKey.x.toBigInt() + 1n),
       y: new Fr(signingPublicKey.y.toBigInt() + 1n),
     };
-    const wrongCapsule = createSigningKeyCapsule(
+    const wrongCapsule = await createSigningKeyCapsule(
       instance.address,
       Fr.random(), // wrong actualSalt too — guarantees salt mismatch
       wrongKey,
@@ -234,7 +234,7 @@ async function computeSchnorrAccountAddress(
 ): Promise<AztecAddress> {
   const { address } = await computeImmutablesAddress(
     SchnorrInitializerlessAccountContractArtifact,
-    serializeSigningKey(key),
+    await serializeSigningKey(key),
     { actualSalt },
   );
   return address;

@@ -127,7 +127,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     // Always store/refresh the immutables capsule so the contract can verify the signing key.
     // This is idempotent — store_immutables validates against the salt before persisting.
     const artifact = await accountContract.getContractArtifact();
-    const capsuleData = [actualSalt, ...serializeSigningKey(signingPublicKey)];
+    const capsuleData = [actualSalt, ...(await serializeSigningKey(signingPublicKey))];
     const storeAbi = artifact.functions.find(
       (f) => f.name === "store_immutables",
     );
