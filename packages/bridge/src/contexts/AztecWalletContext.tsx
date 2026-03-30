@@ -18,6 +18,8 @@ export type AztecWalletStatus =
 
 interface AztecWalletContextType {
   status: AztecWalletStatus;
+  /** The currently active wallet (external if connected, otherwise embedded) */
+  activeWallet: Wallet | null;
   wallet: EmbeddedWallet | null;
   externalWallet: Wallet | null;
   address: AztecAddress | null;
@@ -171,7 +173,7 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
   return (
     <AztecWalletContext.Provider
       value={{
-        status, wallet, externalWallet, address, feeJuiceBalance, error, isExternal,
+        status, activeWallet, wallet, externalWallet, address, feeJuiceBalance, error, isExternal,
         connectAztecWallet, connectExternalWallet, claimWithBootstrap, claimBatch,
         resetAccount, disconnect, refreshFeeJuiceBalance,
       }}

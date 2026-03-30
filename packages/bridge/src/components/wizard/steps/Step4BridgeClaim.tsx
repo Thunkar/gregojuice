@@ -31,16 +31,16 @@ interface Step4BridgeClaimProps {
 }
 
 function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }) {
-  const { wallet, address } = useAztecWallet();
+  const { activeWallet, address } = useAztecWallet();
   const [balances, setBalances] = useState<Record<string, string | null>>({});
 
   // Fetch FJ balance for each recipient after claiming
   useEffect(() => {
-    if (!wallet || !address) return;
+    if (!activeWallet || !address) return;
     let cancelled = false;
 
     (async () => {
-      const fj = FeeJuiceContract.at(wallet);
+      const fj = FeeJuiceContract.at(activeWallet);
 
       const results: Record<string, string | null> = {};
       await Promise.all(
@@ -58,7 +58,7 @@ function ClaimSummary({ allCredentials }: { allCredentials: ClaimCredentials[] }
     })();
 
     return () => { cancelled = true; };
-  }, [wallet, address, allCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeWallet, address, allCredentials.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect the auto-inserted gas payer: first credential matches the embedded wallet
   // and there are additional user-provided recipients
