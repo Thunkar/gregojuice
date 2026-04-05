@@ -13,11 +13,19 @@ import {
 import { hashToEmoji } from "@aztec/wallet-sdk/crypto";
 import { Fr } from "@aztec/foundation/curves/bn254";
 
+const WEB_WALLET_URLS: string[] = [
+  import.meta.env.VITE_WEB_WALLET_URL ?? "http://localhost:3001",
+];
+
 // ── Emoji Grid (inline, small enough to not warrant its own file) ────
 
 function EmojiGrid({ emojis }: { emojis: string }) {
   const emojiArray = [...emojis];
-  const rows = [emojiArray.slice(0, 3), emojiArray.slice(3, 6), emojiArray.slice(6, 9)];
+  const rows = [
+    emojiArray.slice(0, 3),
+    emojiArray.slice(3, 6),
+    emojiArray.slice(6, 9),
+  ];
   return (
     <Box sx={{ display: "inline-flex", flexDirection: "column", gap: "2px" }}>
       {rows.map((row, i) => (
@@ -55,8 +63,11 @@ export function ExternalWalletConnect() {
   const [err, setErr] = useState<string | null>(null);
 
   // Emoji verification state
-  const [pendingProvider, setPendingProvider] = useState<WalletProvider | null>(null);
-  const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<WalletProvider | null>(
+    null,
+  );
+  const [pendingConnection, setPendingConnection] =
+    useState<PendingConnection | null>(null);
 
   // ── Discovery ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -72,6 +83,7 @@ export function ExternalWalletConnect() {
         };
         const session = WalletManager.configure({
           extensions: { enabled: true },
+          webWallets: { urls: WEB_WALLET_URLS },
         }).getAvailableWallets({
           chainInfo,
           appId: "gregojuice",
@@ -84,12 +96,15 @@ export function ExternalWalletConnect() {
           setDiscovered([...wallets]);
         }
       } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : "Wallet discovery failed");
+        if (!cancelled)
+          setErr(e instanceof Error ? e.message : "Wallet discovery failed");
       } finally {
         if (!cancelled) setIsDiscovering(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [activeNetwork]);
 
   // ── Step 1: Initiate connection (shows emojis) ─────────────────────
@@ -128,7 +143,11 @@ export function ExternalWalletConnect() {
 
   const handleCancel = () => {
     if (pendingConnection) {
-      try { pendingConnection.cancel(); } catch { /* ignore */ }
+      try {
+        pendingConnection.cancel();
+      } catch {
+        /* ignore */
+      }
     }
     setPendingProvider(null);
     setPendingConnection(null);
@@ -150,9 +169,16 @@ export function ExternalWalletConnect() {
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
             {pendingProvider.icon ? (
-              <Box component="img" src={pendingProvider.icon} alt={pendingProvider.name} sx={{ width: 40, height: 40 }} />
+              <Box
+                component="img"
+                src={pendingProvider.icon}
+                alt={pendingProvider.name}
+                sx={{ width: 40, height: 40 }}
+              />
             ) : (
-              <AccountBalanceWalletIcon sx={{ fontSize: 32, color: "primary.main" }} />
+              <AccountBalanceWalletIcon
+                sx={{ fontSize: 32, color: "primary.main" }}
+              />
             )}
             <Typography variant="body1" fontWeight={600}>
               {pendingProvider.name}
@@ -167,11 +193,20 @@ export function ExternalWalletConnect() {
               justifyContent: "center",
             }}
           >
-            <EmojiGrid emojis={hashToEmoji(pendingConnection.verificationHash)} />
+            <EmojiGrid
+              emojis={hashToEmoji(pendingConnection.verificationHash)}
+            />
           </Box>
         </Box>
 
-        <Box sx={{ p: 1.5, backgroundColor: "rgba(33, 150, 243, 0.08)", border: "1px solid rgba(33, 150, 243, 0.3)", mb: 2 }}>
+        <Box
+          sx={{
+            p: 1.5,
+            backgroundColor: "rgba(33, 150, 243, 0.08)",
+            border: "1px solid rgba(33, 150, 243, 0.3)",
+            mb: 2,
+          }}
+        >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
             <SecurityIcon sx={{ fontSize: 18, color: "info.main" }} />
             <Typography variant="body2" fontWeight={600} color="info.main">
@@ -184,10 +219,21 @@ export function ExternalWalletConnect() {
         </Box>
 
         <Box sx={{ display: "flex", gap: 2 }}>
-          <Button variant="outlined" color="inherit" onClick={handleCancel} sx={{ flex: 1 }}>
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={handleCancel}
+            sx={{ flex: 1 }}
+          >
             Cancel
           </Button>
-          <Button variant="contained" color="primary" onClick={handleConfirm} disabled={isConnecting} sx={{ flex: 1 }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleConfirm}
+            disabled={isConnecting}
+            sx={{ flex: 1 }}
+          >
             {isConnecting ? "Connecting..." : "Emojis Match"}
           </Button>
         </Box>
@@ -232,9 +278,21 @@ export function ExternalWalletConnect() {
           variant="outlined"
           color="primary"
           onClick={() => handleInitiate(w)}
-          sx={{ mb: 1, justifyContent: "flex-start", textTransform: "none", gap: 1 }}
+          sx={{
+            mb: 1,
+            justifyContent: "flex-start",
+            textTransform: "none",
+            gap: 1,
+          }}
         >
-          {w.icon && <Box component="img" src={w.icon} alt="" sx={{ width: 20, height: 20 }} />}
+          {w.icon && (
+            <Box
+              component="img"
+              src={w.icon}
+              alt=""
+              sx={{ width: 20, height: 20 }}
+            />
+          )}
           {w.name}
         </Button>
       ))}
