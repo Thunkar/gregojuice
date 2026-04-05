@@ -22,8 +22,12 @@ import { AuthWitness } from "@aztec/stdlib/auth-witness";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { deriveSigningKey } from "@aztec/stdlib/keys";
 
-import { SchnorrInitializerlessAccountContractArtifact } from "./artifacts/SchnorrInitializerlessAccount";
 import * as immutables from "./immutables";
+
+async function loadArtifact() {
+  const { SchnorrInitializerlessAccountContractArtifact } = await import("./artifacts/SchnorrInitializerlessAccount");
+  return SchnorrInitializerlessAccountContractArtifact;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,9 +42,10 @@ export interface SigningPublicKey {
 // Serialization helpers
 // ---------------------------------------------------------------------------
 
-export function serializeSigningKey(key: SigningPublicKey): Fr[] {
+export async function serializeSigningKey(key: SigningPublicKey): Promise<Fr[]> {
+  const artifact = await loadArtifact();
   return immutables.serializeFromLayout(
-    SchnorrInitializerlessAccountContractArtifact,
+    artifact,
     {
       public_key: [key.x, key.y],
     },
@@ -53,11 +58,11 @@ export async function computeContractSalt(
 ): Promise<Fr> {
   return immutables.computeContractSalt(
     actualSalt,
-    serializeSigningKey(key),
+    await serializeSigningKey(key),
   );
 }
 
-export function createSigningKeyCapsule(
+export async function createSigningKeyCapsule(
   contractAddress: AztecAddress,
   actualSalt: Fr,
   key: SigningPublicKey,
@@ -65,11 +70,9 @@ export function createSigningKeyCapsule(
   return immutables.createImmutablesCapsule(
     contractAddress,
     actualSalt,
-    serializeSigningKey(key),
+    await serializeSigningKey(key),
   );
 }
-
-export { SchnorrInitializerlessAccountContractArtifact };
 
 // ---------------------------------------------------------------------------
 // AccountContract implementation
@@ -86,7 +89,7 @@ export class SchnorrInitializerlessAccount implements AccountContract {
   }
 
   async getContractArtifact(): Promise<ContractArtifact> {
-    return SchnorrInitializerlessAccountContractArtifact;
+    return loadArtifact();
   }
 
   getAuthWitnessProvider(_address: CompleteAddress): AuthWitnessProvider {

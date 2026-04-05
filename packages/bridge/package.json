@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "NODE_OPTIONS=--max_http_header_size=128000 vite",
     "build": "tsc -b && vite build",
     "clean": "rm -rf ./dist .tsbuildinfo",
-    "preview": "vite preview"
+    "preview": "NODE_OPTIONS=--max_http_header_size=128000 vite preview"
   },
   "dependencies": {
     "@aztec/aztec.js": "v4.2.0-aztecnr-rc.2",
