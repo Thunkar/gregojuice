@@ -5,6 +5,7 @@ import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/Su
 import { AppSignUp } from "./AppSignUp";
 import { AppList } from "./AppList";
 import { BridgeFunding } from "./BridgeFunding";
+import { BackupRestore } from "./BackupRestore";
 import { useNetwork } from "../contexts/NetworkContext";
 
 interface DashboardProps {
@@ -29,6 +30,7 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
         <Tab label="Sign Up App" />
         <Tab label="Registered Apps" />
         <Tab label="Fund FPC" />
+        <Tab label="Settings" />
       </Tabs>
 
       {tab === 0 && (
@@ -47,6 +49,7 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
           bridgeUrl={bridgeUrl}
         />
       )}
+      {tab === 3 && <BackupRestore mode="full" />}
     </Box>
   );
 }

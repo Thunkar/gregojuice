@@ -28,6 +28,9 @@ vite.config.ts.*
 packages/contracts/target
 packages/contracts/artifacts
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Turbo
 .turbo
 codegenCache.json

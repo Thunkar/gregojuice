@@ -32,12 +32,13 @@ export function getStoredFPC(): StoredFPC | null {
     const address = localStorage.getItem(FPC_ADDRESS_KEY);
     const secretKey = localStorage.getItem(FPC_SECRET_KEY);
     const salt = localStorage.getItem(FPC_SALT_KEY);
-    if (address && secretKey && salt) return {
-      address,
-      secretKey,
-      salt,
-      deployed: localStorage.getItem(FPC_DEPLOYED_KEY) === "true",
-    };
+    if (address && secretKey && salt)
+      return {
+        address,
+        secretKey,
+        salt,
+        deployed: localStorage.getItem(FPC_DEPLOYED_KEY) === "true",
+      };
   } catch {}
   return null;
 }
@@ -73,7 +74,7 @@ export function getSignedUpApps(): SignedUpApp[] {
   }
 }
 
-function saveSignedUpApps(apps: SignedUpApp[]) {
+export function saveSignedUpApps(apps: SignedUpApp[]) {
   localStorage.setItem(SIGNED_UP_APPS_KEY, JSON.stringify(apps));
 }
 
@@ -81,6 +82,23 @@ export function addSignedUpApp(app: SignedUpApp) {
   const apps = getSignedUpApps();
   apps.push(app);
   saveSignedUpApps(apps);
+}
+
+// ── Restore / clear FPC state ────────────────────────────────────────
+
+export function restoreFPC(data: StoredFPC): void {
+  localStorage.setItem(FPC_ADDRESS_KEY, data.address);
+  localStorage.setItem(FPC_SECRET_KEY, data.secretKey);
+  localStorage.setItem(FPC_SALT_KEY, data.salt);
+  localStorage.setItem(FPC_DEPLOYED_KEY, data.deployed ? "true" : "false");
+}
+
+export function clearFPC(): void {
+  localStorage.removeItem(FPC_ADDRESS_KEY);
+  localStorage.removeItem(FPC_SECRET_KEY);
+  localStorage.removeItem(FPC_SALT_KEY);
+  localStorage.removeItem(FPC_DEPLOYED_KEY);
+  localStorage.removeItem(SIGNED_UP_APPS_KEY);
 }
 
 // ── Config ID computation (matches Noir contract) ────────────────────
@@ -122,8 +140,14 @@ export async function prepareFPC(
         wallet,
         adminAddress,
       );
-      const instance = await deployment.getInstance({ contractAddressSalt: salt });
-      await wallet.registerContract(instance, SubscriptionFPCContractArtifact, secretKey);
+      const instance = await deployment.getInstance({
+        contractAddressSalt: salt,
+      });
+      await wallet.registerContract(
+        instance,
+        SubscriptionFPCContractArtifact,
+        secretKey,
+      );
     }
     return { fpcAddress, secretKey };
   }
@@ -139,7 +163,11 @@ export async function prepareFPC(
   );
   const instance = await deployment.getInstance({ contractAddressSalt: salt });
 
-  await wallet.registerContract(instance, SubscriptionFPCContractArtifact, secretKey);
+  await wallet.registerContract(
+    instance,
+    SubscriptionFPCContractArtifact,
+    secretKey,
+  );
 
   storeFPC(instance.address.toString(), secretKey.toString(), salt.toString());
 
@@ -195,7 +223,11 @@ export async function loadExistingFPC(
         `FPC contract at ${address.toString()} not found on-chain. It may need to be redeployed.`,
       );
     }
-    await wallet.registerContract(instance, SubscriptionFPCContractArtifact, secretKey);
+    await wallet.registerContract(
+      instance,
+      SubscriptionFPCContractArtifact,
+      secretKey,
+    );
   }
 
   return SubscriptionFPCContract.at(address, wallet);

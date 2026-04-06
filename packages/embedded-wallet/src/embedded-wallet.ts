@@ -127,7 +127,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     // Always store/refresh the immutables capsule so the contract can verify the signing key.
     // This is idempotent — store_immutables validates against the salt before persisting.
     const artifact = await accountContract.getContractArtifact();
-    const capsuleData = [actualSalt, ...(await serializeSigningKey(signingPublicKey))];
+    const capsuleData = [
+      actualSalt,
+      ...(await serializeSigningKey(signingPublicKey)),
+    ];
     const storeAbi = artifact.functions.find(
       (f) => f.name === "store_immutables",
     );
@@ -181,6 +184,19 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       await this.walletDB.retrieveAccount(address);
 
     return this.createAccountInternal(type, secretKey, salt, signingKey);
+  }
+
+  /**
+   * Returns the raw account data (secretKey, salt, type) for export/backup purposes.
+   */
+  async getAccountData(address: AztecAddress): Promise<{
+    secretKey: Fr;
+    salt: Fr;
+    type: string;
+  }> {
+    const { secretKey, salt, type } =
+      await this.walletDB.retrieveAccount(address);
+    return { secretKey, salt, type: type as string };
   }
 
   /**
