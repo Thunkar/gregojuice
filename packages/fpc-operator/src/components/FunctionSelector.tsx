@@ -1,5 +1,9 @@
 import { Box, Typography, MenuItem, TextField } from "@mui/material";
-import type { ContractArtifact, FunctionAbi } from "@aztec/aztec.js/abi";
+import type {
+  AbiType,
+  ContractArtifact,
+  FunctionAbi,
+} from "@aztec/aztec.js/abi";
 
 interface FunctionSelectorProps {
   artifact: ContractArtifact;
@@ -11,34 +15,40 @@ function getSponsorableFunctions(artifact: ContractArtifact): FunctionAbi[] {
   return artifact.functions.filter(
     (f) =>
       (f.functionType === "private" || f.functionType === "public") &&
-      !f.isInternal &&
+      !f.isOnlySelf &&
       f.name !== "constructor" &&
       !f.name.startsWith("_"),
   );
 }
 
 function formatParams(fn: FunctionAbi): string {
-  return fn.parameters.map((p) => `${p.name}: ${formatType(p.type)}`).join(", ");
+  return fn.parameters
+    .map((p) => `${p.name}: ${formatType(p.type)}`)
+    .join(", ");
 }
 
-function formatType(type: { kind: string; [key: string]: unknown }): string {
+function formatType(type: AbiType): string {
   switch (type.kind) {
     case "field":
       return "Field";
     case "boolean":
       return "bool";
     case "integer":
-      return `${(type as { sign: string }).sign === "unsigned" ? "u" : "i"}${(type as { width: number }).width}`;
+      return `${type.sign === "unsigned" ? "u" : "i"}${type.width}`;
     case "struct":
-      return (type as { path: string }).path?.split("::").pop() ?? "struct";
+      return type.path?.split("::").pop() ?? "struct";
     case "array":
-      return `[${formatType((type as { type: { kind: string } }).type)}; ${(type as { length: number }).length}]`;
+      return `[${formatType(type.type)}; ${type.length}]`;
     default:
       return type.kind;
   }
 }
 
-export function FunctionSelector({ artifact, selectedFunction, onSelect }: FunctionSelectorProps) {
+export function FunctionSelector({
+  artifact,
+  selectedFunction,
+  onSelect,
+}: FunctionSelectorProps) {
   const functions = getSponsorableFunctions(artifact);
 
   if (functions.length === 0) {

@@ -16,6 +16,7 @@ import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
 import { prepareFPC, deployFPC } from "../services/fpcService";
 import { BridgeFunding } from "./BridgeFunding";
+import { BackupRestore } from "./BackupRestore";
 
 const STEPS = ["Initialize", "Fund Admin & FPC", "Deploy FPC"];
 
@@ -24,7 +25,10 @@ interface SetupWizardProps {
   onFpcAddressComputed?: (fpcAddress: string) => void;
 }
 
-export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardProps) {
+export function SetupWizard({
+  onComplete,
+  onFpcAddressComputed,
+}: SetupWizardProps) {
   const { status, wallet, address, node } = useWallet();
   const { activeNetwork } = useNetwork();
   const [activeStep, setActiveStep] = useState(0);
@@ -180,6 +184,8 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
           </StepContent>
         </Step>
       </Stepper>
+
+      <BackupRestore mode="import-only" />
     </Box>
   );
 }

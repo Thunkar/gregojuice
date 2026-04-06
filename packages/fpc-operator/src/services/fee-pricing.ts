@@ -1,10 +1,19 @@
-import { createPublicClient, http, parseUnits, formatUnits, type PublicClient, type HttpTransport, type Chain } from "viem";
+import {
+  createPublicClient,
+  http,
+  parseUnits,
+  formatUnits,
+  type Chain,
+} from "viem";
 import { sepolia, mainnet } from "viem/chains";
 import { RollupAbi } from "@aztec/l1-artifacts/RollupAbi";
 
 const CHAIN_MAP: Record<number, { chain: Chain; defaultRpc: string }> = {
   1: { chain: mainnet, defaultRpc: "https://eth.llamarpc.com" },
-  11155111: { chain: sepolia, defaultRpc: "https://ethereum-sepolia-rpc.publicnode.com" },
+  11155111: {
+    chain: sepolia,
+    defaultRpc: "https://ethereum-sepolia-rpc.publicnode.com",
+  },
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -14,13 +23,15 @@ interface CachedValue<T> {
   fetchedAt: number;
 }
 
+type L1Client = ReturnType<typeof createPublicClient>;
+
 /**
  * Converts Aztec fee juice amounts to ETH and USD.
  * Reads the ETH/FeeAsset exchange rate from the Rollup L1 contract
  * and the ETH/USD price from CoinGecko.
  */
 export class FeePricingService {
-  private client: PublicClient<HttpTransport, Chain> | null = null;
+  private client: L1Client | null = null;
   private rollupAddress: `0x${string}` | null = null;
   private ethPerFeeAssetCache: CachedValue<bigint> | null = null;
   private ethUsdCache: CachedValue<number> | null = null;
@@ -48,16 +59,22 @@ export class FeePricingService {
 
   private async getEthPerFeeAssetE12(): Promise<bigint | null> {
     if (!this.client || !this.rollupAddress) return null;
-    if (this.ethPerFeeAssetCache && Date.now() - this.ethPerFeeAssetCache.fetchedAt < CACHE_TTL_MS) {
+    if (
+      this.ethPerFeeAssetCache &&
+      Date.now() - this.ethPerFeeAssetCache.fetchedAt < CACHE_TTL_MS
+    ) {
       return this.ethPerFeeAssetCache.value;
     }
     try {
-      const value = await this.client.readContract({
+      const value = await (this.client as any).readContract({
         address: this.rollupAddress,
         abi: RollupAbi,
         functionName: "getEthPerFeeAsset",
       });
-      this.ethPerFeeAssetCache = { value: value as bigint, fetchedAt: Date.now() };
+      this.ethPerFeeAssetCache = {
+        value: value as bigint,
+        fetchedAt: Date.now(),
+      };
       return value as bigint;
     } catch {
       return this.ethPerFeeAssetCache?.value ?? null;
@@ -65,7 +82,10 @@ export class FeePricingService {
   }
 
   private async getEthUsdPrice(): Promise<number | null> {
-    if (this.ethUsdCache && Date.now() - this.ethUsdCache.fetchedAt < CACHE_TTL_MS) {
+    if (
+      this.ethUsdCache &&
+      Date.now() - this.ethUsdCache.fetchedAt < CACHE_TTL_MS
+    ) {
       return this.ethUsdCache.value;
     }
     try {
@@ -128,16 +148,29 @@ export class FeePricingService {
 
 // ── Network fee stats from clustec API ──────────────────────────────
 
+interface StatBucket {
+  min: string;
+  max: string;
+  mean: string;
+  median: string;
+  p75: string;
+}
+
 export interface FeeStats {
   blockRange: { from: number; to: number };
   txCount: number;
-  actualFee: { min: string; max: string; mean: string; median: string; p75: string };
-  gasLimitDa: { min: string; max: string; mean: string; median: string; p75: string };
-  gasLimitL2: { min: string; max: string; mean: string; median: string; p75: string };
+  actualFee: StatBucket;
+  gasLimitDa: StatBucket;
+  gasLimitL2: StatBucket;
+  maxFeePerDaGas: StatBucket;
+  maxFeePerL2Gas: StatBucket;
   baseFee: { da: string; l2: string };
 }
 
-export async function fetchFeeStats(networkId: string, blocks = 100): Promise<FeeStats> {
+export async function fetchFeeStats(
+  networkId: string,
+  blocks = 100,
+): Promise<FeeStats> {
   const res = await fetch(
     `https://api.clustec.xyz/networks/${networkId}/fees/stats?blocks=${blocks}`,
   );

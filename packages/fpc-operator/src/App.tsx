@@ -13,19 +13,19 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { shortAddress } from "@gregojuice/common";
 import { theme } from "./theme";
 import { useWallet } from "./contexts/WalletContext";
-import { useNetwork } from "./contexts/NetworkContext";
 import { getStoredFPC, loadExistingFPC } from "./services/fpcService";
 import { SetupWizard } from "./components/SetupWizard";
 import { Dashboard } from "./components/Dashboard";
 import { TxNotificationCenter } from "./components/TxNotificationCenter";
 import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
+import { NetworkSwitcher } from "./components/NetworkSwitcher";
 import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 
 export function App() {
   const { status, wallet, address, node, error: walletError } = useWallet();
-  const { activeNetwork } = useNetwork();
   const [fpc, setFpc] = useState<SubscriptionFPCContract | null>(null);
   const [fpcAddress, setFpcAddress] = useState<string | null>(null);
+  const storedFpcData = getStoredFPC();
 
   const handleSetupComplete = useCallback(
     async (addr: string) => {
@@ -48,6 +48,7 @@ export function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      <NetworkSwitcher />
       <Box
         sx={{
           minHeight: "100vh",
@@ -86,9 +87,14 @@ export function App() {
 
           {/* Status chips */}
           <Box
-            sx={{ display: "flex", justifyContent: "center", gap: 1, mb: 3 }}
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              gap: 1,
+              mb: 3,
+              flexWrap: "wrap",
+            }}
           >
-            <Chip label={activeNetwork.name} size="small" variant="outlined" />
             {address && (
               <Tooltip title="Copy admin address">
                 <Chip
@@ -97,7 +103,9 @@ export function App() {
                   color="primary"
                   variant="outlined"
                   icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
-                  onClick={() => navigator.clipboard.writeText(address.toString())}
+                  onClick={() =>
+                    navigator.clipboard.writeText(address.toString())
+                  }
                 />
               </Tooltip>
             )}
@@ -110,6 +118,20 @@ export function App() {
                   variant="outlined"
                   icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
                   onClick={() => navigator.clipboard.writeText(fpcAddress)}
+                />
+              </Tooltip>
+            )}
+            {storedFpcData?.secretKey && (
+              <Tooltip title="Copy FPC secret key">
+                <Chip
+                  label={`FPC Secret: ${shortAddress(storedFpcData.secretKey)}`}
+                  size="small"
+                  color="warning"
+                  variant="outlined"
+                  icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+                  onClick={() =>
+                    navigator.clipboard.writeText(storedFpcData.secretKey)
+                  }
                 />
               </Tooltip>
             )}
