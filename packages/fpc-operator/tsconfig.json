@@ -10,6 +10,7 @@
     "allowImportingTsExtensions": true,
     "allowArbitraryExtensions": true,
     "paths": {
+      "@gregojuice/embedded-wallet/ui": ["../embedded-wallet/src/ui.ts"],
       "@gregojuice/embedded-wallet": ["../embedded-wallet/src/index.ts"],
       "@gregojuice/common": ["../common/src/index.ts"],
       "@gregojuice/contracts/*": ["../contracts/src/*"],

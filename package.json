@@ -11,8 +11,7 @@
     "clean": "turbo run clean",
     "test": "turbo run test",
     "compile:contracts": "cd packages/contracts && aztec compile && aztec codegen ./target -o ./artifacts",
-    "publish:packages": "./scripts/publish.sh",
-    "sync:ui": "./scripts/sync-tx-notification.sh"
+    "publish:packages": "./scripts/publish.sh"
   },
   "devDependencies": {
     "turbo": "^2",

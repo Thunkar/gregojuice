@@ -24,7 +24,6 @@ import { NO_FROM, type NoFrom } from "@aztec/aztec.js/account";
 import { DefaultEntrypoint } from "@aztec/entrypoints/default";
 import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
-import type { SimulateViaEntrypointOptions } from "@aztec/wallet-sdk/base-wallet";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
@@ -246,21 +245,15 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       });
 
       emit("simulating");
-      const prepareStart = Date.now();
-      const simTxRequest = await this.createTxExecutionRequestFromPayloadAndFee(
-        executionPayload,
-        opts.from,
+      const simStart = Date.now();
+      const simulationResult = await this.simulateViaEntrypoint(executionPayload, {
+        from: opts.from,
         feeOptions,
-      );
-      const prepareDuration = Date.now() - prepareStart;
-      const pxeStart = Date.now();
-      const simulationResult = await this.pxe.simulateTx(simTxRequest, {
-        simulatePublic: true,
+        scopes: this.scopesFrom(opts.from, opts.additionalScopes),
         skipTxValidation: true,
         skipFeeEnforcement: true,
-        scopes: this.scopesFrom(opts.from, opts.additionalScopes),
       });
-      const pxeSimDuration = Date.now() - pxeStart;
+      const simElapsed = Date.now() - simStart;
       const offchainEffects = collectOffchainEffects(
         simulationResult.privateExecutionResult,
       );
@@ -284,14 +277,15 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       for (const wit of authWitnesses) {
         if (wit) executionPayload.authWitnesses.push(wit);
       }
-      const simulationDuration = prepareDuration + pxeSimDuration + authWitDuration;
+      const simulationDuration = simElapsed + authWitDuration;
       const simStats = simulationResult.stats;
       const breakdown: Array<{ label: string; duration: number }> = [];
       const details: string[] = [];
-      if (prepareDuration > 0)
-        breakdown.push({ label: "Prepare", duration: prepareDuration });
       if (simStats?.timings) {
         const t = simStats.timings;
+        const prepareDuration = simElapsed - t.total;
+        if (prepareDuration > 10)
+          breakdown.push({ label: "Prepare", duration: prepareDuration });
         if (t.sync > 0) breakdown.push({ label: "Sync", duration: t.sync });
         if (t.perFunction.length > 0) {
           const witgenTotal = t.perFunction.reduce(

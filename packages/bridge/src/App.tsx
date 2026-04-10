@@ -4,7 +4,7 @@ import { WalletChip } from './components/WalletChip';
 import { NetworkSwitcher } from './components/NetworkSwitcher';
 import { BridgeWizard } from './components/BridgeWizard';
 import { GregoJuiceLogo } from './components/GregoJuiceLogo';
-import { TxNotificationCenter } from './components/TxNotificationCenter';
+import { TxNotificationCenter } from '@gregojuice/embedded-wallet/ui';
 import { useAztecWallet } from './contexts/AztecWalletContext';
 import { getQueryParams } from './config/query-params';
 

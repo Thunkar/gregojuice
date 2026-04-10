@@ -6,7 +6,7 @@
  * including phase status, elapsed time, and a PhaseTimeline breakdown on completion.
  */
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Box,
   Paper,

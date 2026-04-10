@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
+        "@gregojuice/embedded-wallet/ui": resolve(import.meta.dirname, "../embedded-wallet/src/ui.ts"),
         "@gregojuice/embedded-wallet": resolve(import.meta.dirname, "../embedded-wallet/src/index.ts"),
         "@gregojuice/common": resolve(import.meta.dirname, "../common/src/index.ts"),
       },
