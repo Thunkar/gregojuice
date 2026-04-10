@@ -4,6 +4,7 @@ import type {
   ContractArtifact,
   FunctionAbi,
 } from "@aztec/aztec.js/abi";
+import { getAllFunctionAbis } from "@aztec/aztec.js/abi";
 
 interface FunctionSelectorProps {
   artifact: ContractArtifact;
@@ -12,11 +13,12 @@ interface FunctionSelectorProps {
 }
 
 function getSponsorableFunctions(artifact: ContractArtifact): FunctionAbi[] {
-  return artifact.functions.filter(
+  return getAllFunctionAbis(artifact).filter(
     (f) =>
       (f.functionType === "private" || f.functionType === "public") &&
       !f.isOnlySelf &&
       f.name !== "constructor" &&
+      f.name !== "public_dispatch" &&
       !f.name.startsWith("_"),
   );
 }

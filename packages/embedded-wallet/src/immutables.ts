@@ -285,17 +285,21 @@ export async function deployWithImmutables(
   const storeImmutablesAbi = artifact.functions.find(
     (f) => f.name === "store_immutables",
   );
-  if (storeImmutablesAbi) {
-    const deployerAddress =
-      (await wallet.getAccounts())[0]?.item ?? AztecAddress.ZERO;
-    const storeCall = new ContractFunctionInteraction(
-      wallet,
-      instance.address,
-      storeImmutablesAbi,
-      [capsuleData],
-    );
-    await storeCall.simulate({ from: deployerAddress });
+  if (!storeImmutablesAbi) {
+    throw new Error(`store_immutables function not found in artifact ${artifact.name}`);
   }
+  const accounts = await wallet.getAccounts();
+  const deployerAddress = accounts[0]?.item ?? AztecAddress.ZERO;
+  const storeCall = new ContractFunctionInteraction(
+    wallet,
+    instance.address,
+    storeImmutablesAbi,
+    [capsuleData],
+  );
+  await storeCall.simulate({
+    from: deployerAddress,
+    additionalScopes: [instance.address],
+  });
 
   return { instance, capsuleData };
 }

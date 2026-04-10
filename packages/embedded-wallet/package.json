@@ -14,23 +14,23 @@
     "dist"
   ],
   "scripts": {
-    "prebuild": "./scripts/prebuild.sh",
-    "build": "yarn prebuild && tsc -p tsconfig.build.json",
-    "clean": "rm -rf ./dist .tsbuildinfo src/artifacts",
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf ./dist .tsbuildinfo",
     "test": "vitest run",
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.2.0-aztecnr-rc.2",
-    "@aztec/entrypoints": "v4.2.0-aztecnr-rc.2",
-    "@aztec/foundation": "v4.2.0-aztecnr-rc.2",
-    "@aztec/pxe": "v4.2.0-aztecnr-rc.2",
-    "@aztec/stdlib": "v4.2.0-aztecnr-rc.2",
-    "@aztec/wallet-sdk": "v4.2.0-aztecnr-rc.2",
-    "@aztec/wallets": "v4.2.0-aztecnr-rc.2"
+    "@aztec/aztec.js": "v4.2.0-nightly.20260410",
+    "@aztec/entrypoints": "v4.2.0-nightly.20260410",
+    "@aztec/foundation": "v4.2.0-nightly.20260410",
+    "@aztec/pxe": "v4.2.0-nightly.20260410",
+    "@aztec/stdlib": "v4.2.0-nightly.20260410",
+    "@aztec/wallet-sdk": "v4.2.0-nightly.20260410",
+    "@aztec/wallets": "v4.2.0-nightly.20260410",
+    "@gregojuice/contracts": "workspace:*"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.2.0-aztecnr-rc.2",
+    "@aztec/accounts": "v4.2.0-nightly.20260410",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }

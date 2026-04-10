@@ -19,7 +19,7 @@ import { Fr } from "@aztec/aztec.js/fields";
 import {
   SchnorrInitializerlessAccountContract,
   SchnorrInitializerlessAccountContractArtifact,
-} from "../src/artifacts/SchnorrInitializerlessAccount.js";
+} from "@gregojuice/contracts/artifacts/SchnorrInitializerlessAccount";
 import {
   computeContractSalt,
   createSchnorrInitializerlessAccount,
@@ -147,6 +147,7 @@ describe("SchnorrInitializerlessAccount", () => {
       .get_signing_public_key()
       .simulate({
         from: alice,
+        additionalScopes: [result.instance.address],
       });
 
     expect(readResult[0]).toEqual(signingPublicKey.x.toBigInt());
@@ -221,7 +222,7 @@ describe("SchnorrInitializerlessAccount", () => {
       contract.methods
         .get_signing_public_key()
         .with({ capsules: [wrongCapsule] })
-        .simulate({ from: alice }),
+        .simulate({ from: alice, additionalScopes: [instance.address] }),
     ).rejects.toThrow("Immutables do not match contract salt");
   });
 });

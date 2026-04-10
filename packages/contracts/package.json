@@ -25,7 +25,7 @@
     "clean": "rm -rf ./dist ./artifacts ./*/target",
     "compile": "aztec compile",
     "codegen": "aztec codegen ./target -o artifacts",
-    "build": "yarn compile && yarn codegen && tsc -p tsconfig.build.json",
+    "build": "yarn compile && yarn codegen && tsc -p tsconfig.build.json && mkdir -p dist/target && cp target/*.json dist/target/",
     "build:codegen": "yarn codegen",
     "build:ts": "tsc -p tsconfig.build.json",
     "test": "vitest run",
@@ -35,17 +35,17 @@
     "forge:artifacts": "cd bridge && ./generate-artifacts.sh"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.2.0-aztecnr-rc.2",
-    "@aztec/foundation": "v4.2.0-aztecnr-rc.2",
-    "@aztec/stdlib": "v4.2.0-aztecnr-rc.2",
-    "@aztec/wallets": "v4.2.0-aztecnr-rc.2"
+    "@aztec/aztec.js": "v4.2.0-nightly.20260410",
+    "@aztec/foundation": "v4.2.0-nightly.20260410",
+    "@aztec/stdlib": "v4.2.0-nightly.20260410",
+    "@aztec/wallets": "v4.2.0-nightly.20260410"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.2.0-aztecnr-rc.2",
-    "@aztec/constants": "v4.2.0-aztecnr-rc.2",
-    "@aztec/entrypoints": "v4.2.0-aztecnr-rc.2",
-    "@aztec/ethereum": "v4.2.0-aztecnr-rc.2",
-    "@aztec/noir-contracts.js": "v4.2.0-aztecnr-rc.2",
+    "@aztec/accounts": "v4.2.0-nightly.20260410",
+    "@aztec/constants": "v4.2.0-nightly.20260410",
+    "@aztec/entrypoints": "v4.2.0-nightly.20260410",
+    "@aztec/ethereum": "v4.2.0-nightly.20260410",
+    "@aztec/noir-contracts.js": "v4.2.0-nightly.20260410",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }
