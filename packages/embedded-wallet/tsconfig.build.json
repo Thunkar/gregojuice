@@ -8,7 +8,9 @@
     "moduleDetection": "force",
     "composite": false,
     "noEmit": false,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@emotion/react"
   },
-  "include": ["src/**/*.ts", "src/**/*.json"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.json"]
 }

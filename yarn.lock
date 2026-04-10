@@ -1761,9 +1761,28 @@ __metadata:
     "@aztec/stdlib": "npm:v4.2.0-nightly.20260410"
     "@aztec/wallet-sdk": "npm:v4.2.0-nightly.20260410"
     "@aztec/wallets": "npm:v4.2.0-nightly.20260410"
+    "@emotion/react": "npm:^11.14.0"
     "@gregojuice/contracts": "workspace:*"
+    "@mui/icons-material": "npm:^6.3.1"
+    "@mui/material": "npm:^6.3.1"
+    "@types/react": "npm:^19.0.6"
+    react: "npm:^18.3.1"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"
+  peerDependencies:
+    "@emotion/react": ">=11"
+    "@mui/icons-material": ">=6"
+    "@mui/material": ">=6"
+    react: ">=18"
+  peerDependenciesMeta:
+    "@emotion/react":
+      optional: true
+    "@mui/icons-material":
+      optional: true
+    "@mui/material":
+      optional: true
+    react:
+      optional: true
   languageName: unknown
   linkType: soft
 

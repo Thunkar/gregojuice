@@ -24,7 +24,6 @@ import { NO_FROM, type NoFrom } from "@aztec/aztec.js/account";
 import { DefaultEntrypoint } from "@aztec/entrypoints/default";
 import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
-import type { SimulateViaEntrypointOptions } from "@aztec/wallet-sdk/base-wallet";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
@@ -246,20 +245,19 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       });
 
       emit("simulating");
-      const simulationStart = Date.now();
-      const simulationResult = await this.simulateViaEntrypoint(
-        executionPayload,
-        {
-          from: opts.from,
-          feeOptions,
-          scopes: this.scopesFrom(opts.from, opts.additionalScopes),
-          skipFeeEnforcement: true,
-          skipTxValidation: true,
-        },
-      );
+      const simStart = Date.now();
+      const simulationResult = await this.simulateViaEntrypoint(executionPayload, {
+        from: opts.from,
+        feeOptions,
+        scopes: this.scopesFrom(opts.from, opts.additionalScopes),
+        skipTxValidation: true,
+        skipFeeEnforcement: true,
+      });
+      const simElapsed = Date.now() - simStart;
       const offchainEffects = collectOffchainEffects(
         simulationResult.privateExecutionResult,
       );
+      const authWitStart = Date.now();
       const authWitnesses = await Promise.all(
         offchainEffects.map(async (effect) => {
           try {
@@ -275,15 +273,19 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
           }
         }),
       );
+      const authWitDuration = Date.now() - authWitStart;
       for (const wit of authWitnesses) {
         if (wit) executionPayload.authWitnesses.push(wit);
       }
-      const simulationDuration = Date.now() - simulationStart;
+      const simulationDuration = simElapsed + authWitDuration;
       const simStats = simulationResult.stats;
       const breakdown: Array<{ label: string; duration: number }> = [];
       const details: string[] = [];
       if (simStats?.timings) {
         const t = simStats.timings;
+        const prepareDuration = simElapsed - t.total;
+        if (prepareDuration > 10)
+          breakdown.push({ label: "Prepare", duration: prepareDuration });
         if (t.sync > 0) breakdown.push({ label: "Sync", duration: t.sync });
         if (t.perFunction.length > 0) {
           const witgenTotal = t.perFunction.reduce(
@@ -309,6 +311,8 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         if (t.unaccounted > 0)
           breakdown.push({ label: "Other", duration: t.unaccounted });
       }
+      if (authWitDuration > 0)
+        breakdown.push({ label: "Auth witnesses", duration: authWitDuration });
       if (simStats?.nodeRPCCalls?.roundTrips) {
         const rt = simStats.nodeRPCCalls.roundTrips;
         const fmt = (ms: number) =>

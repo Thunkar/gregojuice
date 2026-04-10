@@ -16,7 +16,7 @@ import { useWallet } from "./contexts/WalletContext";
 import { getStoredFPC, loadExistingFPC } from "./services/fpcService";
 import { SetupWizard } from "./components/SetupWizard";
 import { Dashboard } from "./components/Dashboard";
-import { TxNotificationCenter } from "./components/TxNotificationCenter";
+import { TxNotificationCenter } from "@gregojuice/embedded-wallet/ui";
 import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
 import { NetworkSwitcher } from "./components/NetworkSwitcher";
 import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
