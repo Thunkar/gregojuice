@@ -123,6 +123,7 @@ contract SubscriptionFPC {
             config_id,
         );
         let subscription = self.storage.subscriptions.at(user).pop_notes(options);
+        assert(subscription.len() > 0, "No active subscription found for this user and function");
         let subscription = subscription.get(0);
         if subscription.uses > 0 {
             self
@@ -205,6 +206,7 @@ contract SubscriptionFPC {
             config_id,
         );
         let slots = self.storage.slots.at(self.address).pop_notes(options);
+        assert(slots.len() > 0, "No subscription slots available for this function. The operator must call sign_up first.");
         let slot = slots.get(0);
         if slot.users > 0 {
             self
