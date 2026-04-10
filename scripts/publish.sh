@@ -52,15 +52,17 @@ echo "Building @gregojuice/contracts..."
 cd "$ROOT_DIR/packages/contracts"
 yarn build
 
-# Publish
-echo ""
-echo "Publishing @gregojuice/embedded-wallet..."
-cd "$ROOT_DIR/packages/embedded-wallet"
-npm publish --access public --//registry.npmjs.org/:_authToken="$NPM_TOKEN"
+# Publish (yarn npm publish rewrites workspace:* refs to real versions)
+export YARN_NPM_AUTH_TOKEN="$NPM_TOKEN"
 
+echo ""
 echo "Publishing @gregojuice/contracts..."
 cd "$ROOT_DIR/packages/contracts"
-npm publish --access public --//registry.npmjs.org/:_authToken="$NPM_TOKEN"
+yarn npm publish --access public
+
+echo "Publishing @gregojuice/embedded-wallet..."
+cd "$ROOT_DIR/packages/embedded-wallet"
+yarn npm publish --access public
 
 echo ""
 echo "Done! Both packages published ($BUMP bump)."
