@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "import": "./dist/ui.js"
     }
   },
   "files": [
@@ -29,8 +33,33 @@
     "@aztec/wallets": "v4.2.0-nightly.20260410",
     "@gregojuice/contracts": "workspace:*"
   },
+  "peerDependencies": {
+    "@emotion/react": ">=11",
+    "@mui/icons-material": ">=6",
+    "@mui/material": ">=6",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@emotion/react": {
+      "optional": true
+    },
+    "@mui/icons-material": {
+      "optional": true
+    },
+    "@mui/material": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@aztec/accounts": "v4.2.0-nightly.20260410",
+    "@emotion/react": "^11.14.0",
+    "@mui/icons-material": "^6.3.1",
+    "@mui/material": "^6.3.1",
+    "@types/react": "^19.0.6",
+    "react": "^18.3.1",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }

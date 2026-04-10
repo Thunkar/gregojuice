@@ -246,20 +246,25 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       });
 
       emit("simulating");
-      const simulationStart = Date.now();
-      const simulationResult = await this.simulateViaEntrypoint(
+      const prepareStart = Date.now();
+      const simTxRequest = await this.createTxExecutionRequestFromPayloadAndFee(
         executionPayload,
-        {
-          from: opts.from,
-          feeOptions,
-          scopes: this.scopesFrom(opts.from, opts.additionalScopes),
-          skipFeeEnforcement: true,
-          skipTxValidation: true,
-        },
+        opts.from,
+        feeOptions,
       );
+      const prepareDuration = Date.now() - prepareStart;
+      const pxeStart = Date.now();
+      const simulationResult = await this.pxe.simulateTx(simTxRequest, {
+        simulatePublic: true,
+        skipTxValidation: true,
+        skipFeeEnforcement: true,
+        scopes: this.scopesFrom(opts.from, opts.additionalScopes),
+      });
+      const pxeSimDuration = Date.now() - pxeStart;
       const offchainEffects = collectOffchainEffects(
         simulationResult.privateExecutionResult,
       );
+      const authWitStart = Date.now();
       const authWitnesses = await Promise.all(
         offchainEffects.map(async (effect) => {
           try {
@@ -275,13 +280,16 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
           }
         }),
       );
+      const authWitDuration = Date.now() - authWitStart;
       for (const wit of authWitnesses) {
         if (wit) executionPayload.authWitnesses.push(wit);
       }
-      const simulationDuration = Date.now() - simulationStart;
+      const simulationDuration = prepareDuration + pxeSimDuration + authWitDuration;
       const simStats = simulationResult.stats;
       const breakdown: Array<{ label: string; duration: number }> = [];
       const details: string[] = [];
+      if (prepareDuration > 0)
+        breakdown.push({ label: "Prepare", duration: prepareDuration });
       if (simStats?.timings) {
         const t = simStats.timings;
         if (t.sync > 0) breakdown.push({ label: "Sync", duration: t.sync });
@@ -309,6 +317,8 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         if (t.unaccounted > 0)
           breakdown.push({ label: "Other", duration: t.unaccounted });
       }
+      if (authWitDuration > 0)
+        breakdown.push({ label: "Auth witnesses", duration: authWitDuration });
       if (simStats?.nodeRPCCalls?.roundTrips) {
         const rt = simStats.nodeRPCCalls.roundTrips;
         const fmt = (ms: number) =>

@@ -14,5 +14,5 @@
       "@gregojuice/common": ["../common/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts*", "scripts/**/*.ts", "../contracts/artifacts/**/*.ts", "../embedded-wallet/src/**/*.ts", "../common/src/**/*.ts"]
+  "include": ["src/**/*.ts*", "scripts/**/*.ts", "../contracts/artifacts/**/*.ts", "../embedded-wallet/src/**/*.ts*", "../common/src/**/*.ts"]
 }

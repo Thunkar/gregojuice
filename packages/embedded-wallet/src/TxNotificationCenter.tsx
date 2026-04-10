@@ -29,7 +29,7 @@ import {
   txProgress,
   type TxProgressEvent,
   type PhaseTiming,
-} from "@gregojuice/embedded-wallet";
+} from "./tx-progress.js";
 
 // ─── Live phase support ───────────────────────────────────────────────────────
 

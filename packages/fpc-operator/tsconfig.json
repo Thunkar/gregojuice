@@ -16,5 +16,5 @@
       "@gregojuice/contracts/artifacts/*": ["../contracts/artifacts/*"]
     }
   },
-  "include": ["src/**/*.ts*", "../contracts/artifacts/**/*.ts", "../contracts/src/**/*.ts", "../embedded-wallet/src/**/*.ts", "../common/src/**/*.ts"]
+  "include": ["src/**/*.ts*", "../contracts/artifacts/**/*.ts", "../contracts/src/**/*.ts", "../embedded-wallet/src/**/*.ts*", "../common/src/**/*.ts"]
 }
