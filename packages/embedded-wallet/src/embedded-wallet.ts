@@ -17,13 +17,13 @@ import {
   mergeExecutionPayloads,
   type ExecutionPayload,
   type TxSimulationResult,
-  TxExecutionRequest,
+  type TxExecutionRequest,
   TxStatus,
 } from "@aztec/stdlib/tx";
-import { NO_FROM, type NoFrom } from "@aztec/aztec.js/account";
+import { NO_FROM } from "@aztec/aztec.js/account";
 import { DefaultEntrypoint } from "@aztec/entrypoints/default";
 import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
-import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
+import type { SimulateViaEntrypointOptions } from "@aztec/wallet-sdk/base-wallet";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
@@ -138,6 +138,58 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     return accountManager;
   }
 
+  protected override async simulateViaEntrypoint(
+    executionPayload: ExecutionPayload,
+    opts: SimulateViaEntrypointOptions,
+  ): Promise<TxSimulationResult> {
+    const { from, feeOptions, scopes, skipTxValidation, skipFeeEnforcement } =
+      opts;
+
+    const feeExecutionPayload =
+      await feeOptions.walletFeePaymentMethod?.getExecutionPayload();
+    const finalExecutionPayload = feeExecutionPayload
+      ? mergeExecutionPayloads([feeExecutionPayload, executionPayload])
+      : executionPayload;
+    const chainInfo = await this.getChainInfo();
+
+    const accountOverrides = await this.buildAccountOverrides(scopes ?? []);
+    const overrides = new SimulationOverrides(accountOverrides);
+
+    let txRequest: TxExecutionRequest;
+    if (from === NO_FROM) {
+      const entrypoint = new DefaultEntrypoint();
+      txRequest = await entrypoint.createTxExecutionRequest(
+        finalExecutionPayload,
+        feeOptions.gasSettings,
+        chainInfo,
+      );
+    } else {
+      const originalAccount = await this.getAccountFromAddress(from);
+      const completeAddress = originalAccount.getCompleteAddress();
+      const account =
+        await this.accountContracts.createStubAccount(completeAddress);
+      const executionOptions: DefaultAccountEntrypointOptions = {
+        txNonce: Fr.random(),
+        cancellable: this.cancellableTransactions,
+        feePaymentMethodOptions: feeOptions.accountFeePaymentMethodOptions!,
+      };
+      txRequest = await account.createTxExecutionRequest(
+        finalExecutionPayload,
+        feeOptions.gasSettings,
+        chainInfo,
+        executionOptions,
+      );
+    }
+
+    return this.pxe.simulateTx(txRequest, {
+      simulatePublic: true,
+      skipFeeEnforcement,
+      skipTxValidation,
+      overrides,
+      scopes,
+    });
+  }
+
   /**
    * Creates and stores a new initializerless Schnorr account.
    * Returns the AccountManager — the account is immediately usable (no deployment needed).
@@ -246,13 +298,16 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
       emit("simulating");
       const simStart = Date.now();
-      const simulationResult = await this.simulateViaEntrypoint(executionPayload, {
-        from: opts.from,
-        feeOptions,
-        scopes: this.scopesFrom(opts.from, opts.additionalScopes),
-        skipTxValidation: true,
-        skipFeeEnforcement: true,
-      });
+      const simulationResult = await this.simulateViaEntrypoint(
+        executionPayload,
+        {
+          from: opts.from,
+          feeOptions,
+          scopes: this.scopesFrom(opts.from, opts.additionalScopes),
+          skipTxValidation: true,
+          skipFeeEnforcement: true,
+        },
+      );
       const simElapsed = Date.now() - simStart;
       const offchainEffects = collectOffchainEffects(
         simulationResult.privateExecutionResult,
