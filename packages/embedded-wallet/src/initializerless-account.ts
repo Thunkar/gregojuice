@@ -25,7 +25,7 @@ import { deriveSigningKey } from "@aztec/stdlib/keys";
 import * as immutables from "./immutables";
 
 async function loadArtifact() {
-  const { SchnorrInitializerlessAccountContractArtifact } = await import("./artifacts/SchnorrInitializerlessAccount");
+  const { SchnorrInitializerlessAccountContractArtifact } = await import("@gregojuice/contracts/artifacts/SchnorrInitializerlessAccount");
   return SchnorrInitializerlessAccountContractArtifact;
 }
 

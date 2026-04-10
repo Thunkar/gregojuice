@@ -66,11 +66,8 @@ jobs:
           echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/bin" >> $GITHUB_PATH
           echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/node_modules/.bin" >> $GITHUB_PATH
 
-      - name: Compile contracts
-        run: yarn compile:contracts
-
-      - name: Prepare embedded-wallet artifacts
-        run: cd packages/embedded-wallet && ./scripts/prebuild.sh
+      - name: Build packages
+        run: yarn build
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
