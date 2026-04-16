@@ -956,7 +956,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/pxe@npm:4.3.0-nightly.20260416, @aztec/pxe@npm:v4.3.0-nightly.20260416":
+"@aztec/pxe@npm:4.3.0-nightly.20260416":
   version: 4.3.0-nightly.20260416
   resolution: "@aztec/pxe@npm:4.3.0-nightly.20260416"
   dependencies:
@@ -982,6 +982,35 @@ __metadata:
   bin:
     pxe: dest/bin/index.js
   checksum: 10c0/9616043cd053a6db25e2026100cf2fb06d01cd3f18076b9d6da74f42a3432504ace78efcf0200ed32a69834c24a459af07f8544f3e1e3cd507e96f74e6adc8e0
+  languageName: node
+  linkType: hard
+
+"@aztec/pxe@patch:@aztec/pxe@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-pxe-npm-4.3.0-nightly.20260416-b01dc128ea.patch":
+  version: 4.3.0-nightly.20260416
+  resolution: "@aztec/pxe@patch:@aztec/pxe@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-pxe-npm-4.3.0-nightly.20260416-b01dc128ea.patch::version=4.3.0-nightly.20260416&hash=784cb2"
+  dependencies:
+    "@aztec/bb-prover": "npm:4.3.0-nightly.20260416"
+    "@aztec/bb.js": "npm:4.3.0-nightly.20260416"
+    "@aztec/builder": "npm:4.3.0-nightly.20260416"
+    "@aztec/constants": "npm:4.3.0-nightly.20260416"
+    "@aztec/ethereum": "npm:4.3.0-nightly.20260416"
+    "@aztec/foundation": "npm:4.3.0-nightly.20260416"
+    "@aztec/key-store": "npm:4.3.0-nightly.20260416"
+    "@aztec/kv-store": "npm:4.3.0-nightly.20260416"
+    "@aztec/noir-protocol-circuits-types": "npm:4.3.0-nightly.20260416"
+    "@aztec/noir-types": "npm:4.3.0-nightly.20260416"
+    "@aztec/protocol-contracts": "npm:4.3.0-nightly.20260416"
+    "@aztec/simulator": "npm:4.3.0-nightly.20260416"
+    "@aztec/stdlib": "npm:4.3.0-nightly.20260416"
+    koa: "npm:^2.16.1"
+    koa-router: "npm:^13.1.1"
+    lodash.omit: "npm:^4.5.0"
+    sha3: "npm:^2.1.4"
+    tslib: "npm:^2.4.0"
+    viem: "npm:@aztec/viem@2.38.2"
+  bin:
+    pxe: dest/bin/index.js
+  checksum: 10c0/a7445b6727752bf3059b1de923bebe0d3cd501502c6dbb4cfcfe14885daaf97f37a2ab4d721145be7a689b8c6c9885981832579303d295d2b225d1f9225e85bd
   languageName: node
   linkType: hard
 
@@ -1701,7 +1730,7 @@ __metadata:
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260416"
     "@aztec/entrypoints": "npm:v4.3.0-nightly.20260416"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260416"
-    "@aztec/pxe": "npm:v4.3.0-nightly.20260416"
+    "@aztec/pxe": "patch:@aztec/pxe@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-pxe-npm-4.3.0-nightly.20260416-b01dc128ea.patch"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260416"
     "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260416"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260416"
@@ -1757,7 +1786,7 @@ __metadata:
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260416"
     "@aztec/entrypoints": "npm:v4.3.0-nightly.20260416"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260416"
-    "@aztec/pxe": "npm:v4.3.0-nightly.20260416"
+    "@aztec/pxe": "patch:@aztec/pxe@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-pxe-npm-4.3.0-nightly.20260416-b01dc128ea.patch"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260416"
     "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260416"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260416"
@@ -1794,7 +1823,7 @@ __metadata:
     "@aztec/entrypoints": "npm:v4.3.0-nightly.20260416"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260416"
     "@aztec/l1-artifacts": "npm:v4.3.0-nightly.20260416"
-    "@aztec/pxe": "npm:v4.3.0-nightly.20260416"
+    "@aztec/pxe": "patch:@aztec/pxe@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-pxe-npm-4.3.0-nightly.20260416-b01dc128ea.patch"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260416"
     "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260416"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260416"
