@@ -66,11 +66,8 @@ pub contract SchnorrInitializerlessAccount {
             signature[i] = witness[i] as u8;
         }
 
-        let pub_key = std::embedded_curve_ops::EmbeddedCurvePoint {
-            x: public_key.x,
-            y: public_key.y,
-            is_infinite: false,
-        };
+        let pub_key =
+            std::embedded_curve_ops::EmbeddedCurvePoint { x: public_key.x, y: public_key.y };
 
         schnorr::verify_signature(pub_key, signature, outer_hash.to_be_bytes::<32>())
     }
@@ -93,20 +90,16 @@ pub contract SchnorrInitializerlessAccount {
             signature[i] = witness[i] as u8;
         }
 
-        let pub_key = std::embedded_curve_ops::EmbeddedCurvePoint {
-            x: public_key.x,
-            y: public_key.y,
-            is_infinite: false,
-        };
+        let pub_key =
+            std::embedded_curve_ops::EmbeddedCurvePoint { x: public_key.x, y: public_key.y };
 
         let valid_in_private =
             schnorr::verify_signature(pub_key, signature, message_hash.to_be_bytes::<32>());
-
         let nullifier = compute_authwit_nullifier(self.address, inner_hash);
         let siloed_nullifier = compute_siloed_nullifier(consumer, nullifier);
-        let lower_wit =
+        let (low_leaf_preimage, _witness) =
             get_low_nullifier_membership_witness(self.context.block_header(), siloed_nullifier);
-        let is_spent = lower_wit.leaf_preimage.nullifier == siloed_nullifier;
+        let is_spent = low_leaf_preimage.nullifier == siloed_nullifier;
 
         !is_spent & valid_in_private
     }

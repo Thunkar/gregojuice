@@ -1,6 +1,6 @@
 {
   "name": "@gregojuice/contracts",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "type": "module",
   "main": "dist/src/subscription-fpc.js",
   "types": "dist/src/subscription-fpc.d.ts",
@@ -35,17 +35,17 @@
     "forge:artifacts": "cd bridge && ./generate-artifacts.sh"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.2.0-nightly.20260412",
-    "@aztec/foundation": "v4.2.0-nightly.20260412",
-    "@aztec/stdlib": "v4.2.0-nightly.20260412",
-    "@aztec/wallets": "v4.2.0-nightly.20260412"
+    "@aztec/aztec.js": "v4.3.0-nightly.20260416",
+    "@aztec/foundation": "v4.3.0-nightly.20260416",
+    "@aztec/stdlib": "v4.3.0-nightly.20260416",
+    "@aztec/wallets": "v4.3.0-nightly.20260416"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.2.0-nightly.20260412",
-    "@aztec/constants": "v4.2.0-nightly.20260412",
-    "@aztec/entrypoints": "v4.2.0-nightly.20260412",
-    "@aztec/ethereum": "v4.2.0-nightly.20260412",
-    "@aztec/noir-contracts.js": "v4.2.0-nightly.20260412",
+    "@aztec/accounts": "v4.3.0-nightly.20260416",
+    "@aztec/constants": "v4.3.0-nightly.20260416",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260416",
+    "@aztec/ethereum": "v4.3.0-nightly.20260416",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260416",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }
