@@ -827,6 +827,19 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aztec/key-store@patch:@aztec/key-store@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-key-store-npm-4.3.0-nightly.20260416-13cc8c2d3e.patch":
+  version: 4.3.0-nightly.20260416
+  resolution: "@aztec/key-store@patch:@aztec/key-store@npm%3A4.3.0-nightly.20260416#~/.yarn/patches/@aztec-key-store-npm-4.3.0-nightly.20260416-13cc8c2d3e.patch::version=4.3.0-nightly.20260416&hash=81fdfd"
+  dependencies:
+    "@aztec/constants": "npm:4.3.0-nightly.20260416"
+    "@aztec/foundation": "npm:4.3.0-nightly.20260416"
+    "@aztec/kv-store": "npm:4.3.0-nightly.20260416"
+    "@aztec/stdlib": "npm:4.3.0-nightly.20260416"
+    tslib: "npm:^2.4.0"
+  checksum: 10c0/885cb3ff293eaeefa0f8865e21a20d023fe929f34777255ef741a810174d2af0fa3a406fb4dcbe0e92f44b3c4e48134140babc83f24e56d6b3b2438404dbbb21
+  languageName: node
+  linkType: hard
+
 "@aztec/kv-store@npm:4.3.0-nightly.20260416":
   version: 4.3.0-nightly.20260416
   resolution: "@aztec/kv-store@npm:4.3.0-nightly.20260416"

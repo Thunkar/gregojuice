@@ -35,7 +35,7 @@ export function SetupWizard({
   const [fpcAddress, setFpcAddress] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
-  const bridgeUrl = import.meta.env.VITE_BRIDGE_URL ?? "http://localhost:5175";
+  const bridgeUrl = import.meta.env.VITE_BRIDGE_URL ?? "http://localhost:5173";
   const hasInitRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;

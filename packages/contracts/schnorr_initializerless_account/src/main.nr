@@ -111,4 +111,9 @@ pub contract SchnorrInitializerlessAccount {
         let public_key = immutables.public_key;
         (public_key.x, public_key.y)
     }
+
+    /// Empty override to opt-out of state syncing. This contract does not hold private state,
+    /// so runnning the sync process just results in unnecessary RPC calls
+    #[external("utility")]
+    unconstrained fn sync_state(scope: AztecAddress) {}
 }
