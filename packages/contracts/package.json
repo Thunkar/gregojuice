@@ -35,17 +35,17 @@
     "forge:artifacts": "cd bridge && ./generate-artifacts.sh"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260416",
-    "@aztec/foundation": "v4.3.0-nightly.20260416",
-    "@aztec/stdlib": "v4.3.0-nightly.20260416",
-    "@aztec/wallets": "v4.3.0-nightly.20260416"
+    "@aztec/aztec.js": "v4.3.0-nightly.20260417",
+    "@aztec/foundation": "v4.3.0-nightly.20260417",
+    "@aztec/stdlib": "v4.3.0-nightly.20260417",
+    "@aztec/wallets": "v4.3.0-nightly.20260417"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.3.0-nightly.20260416",
-    "@aztec/constants": "v4.3.0-nightly.20260416",
-    "@aztec/entrypoints": "v4.3.0-nightly.20260416",
-    "@aztec/ethereum": "v4.3.0-nightly.20260416",
-    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260416",
+    "@aztec/accounts": "v4.3.0-nightly.20260417",
+    "@aztec/constants": "v4.3.0-nightly.20260417",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260417",
+    "@aztec/ethereum": "v4.3.0-nightly.20260417",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260417",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }
