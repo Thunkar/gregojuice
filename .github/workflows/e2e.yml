@@ -1,0 +1,68 @@
+name: E2E Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Extract Aztec version
+        id: aztec-version
+        run: |
+          VERSION=$(jq -r '.dependencies["@aztec/aztec.js"]' apps/bridge/package.json)
+          VERSION_NO_V=${VERSION#v}
+          echo "version=$VERSION_NO_V" >> $GITHUB_OUTPUT
+
+      - name: Install Aztec CLI
+        run: |
+          export CI=1
+          export FOUNDRY_DIR="$HOME/.foundry"
+          curl -fsSL "https://install.aztec.network/${{ steps.aztec-version.outputs.version }}/install" | VERSION="${{ steps.aztec-version.outputs.version }}" bash
+
+      - name: Update PATH
+        run: |
+          echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/bin" >> $GITHUB_PATH
+          echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/node_modules/.bin" >> $GITHUB_PATH
+
+      - name: Install Playwright browsers
+        run: yarn workspace @gregojuice/e2e exec playwright install --with-deps chromium
+
+      - name: Build workspace
+        run: yarn build
+
+      - name: Run e2e tests
+        run: yarn workspace @gregojuice/e2e test
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7

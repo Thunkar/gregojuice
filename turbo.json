@@ -3,7 +3,13 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "artifacts/**", "target/**"]
+      "outputs": [
+        "dist/**",
+        "contracts/artifacts/**",
+        "contracts/target/**",
+        "contracts/out/**",
+        "generated/**"
+      ]
     },
     "dev": {
       "cache": false,
@@ -15,6 +21,14 @@
     "test": {
       "dependsOn": ["build"],
       "cache": false
+    },
+    "lint": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
     }
   }
 }

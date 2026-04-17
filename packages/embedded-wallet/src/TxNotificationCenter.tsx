@@ -25,11 +25,7 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
-import {
-  txProgress,
-  type TxProgressEvent,
-  type PhaseTiming,
-} from "./tx-progress.js";
+import { txProgress, type TxProgressEvent, type PhaseTiming } from "./tx-progress.js";
 
 // ─── Live phase support ───────────────────────────────────────────────────────
 
@@ -84,10 +80,7 @@ const pulse = keyframes`
 // ─── PhaseTimeline (inline, simplified from demo-wallet) ─────────────────────
 
 function PhaseTimelineBar({ phases }: { phases: LivePhaseTiming[] }) {
-  const completedPhases = useMemo(
-    () => phases.filter((p) => !p.isLive),
-    [phases],
-  );
+  const completedPhases = useMemo(() => phases.filter((p) => !p.isLive), [phases]);
   const livePhase = useMemo(() => phases.find((p) => p.isLive), [phases]);
 
   const completedDuration = useMemo(
@@ -99,9 +92,7 @@ function PhaseTimelineBar({ phases }: { phases: LivePhaseTiming[] }) {
 
   const miningDuration = useMemo(
     () =>
-      completedPhases
-        .filter((p) => p.name === "Mining")
-        .reduce((sum, p) => sum + p.duration, 0),
+      completedPhases.filter((p) => p.name === "Mining").reduce((sum, p) => sum + p.duration, 0),
     [completedPhases],
   );
 
@@ -189,8 +180,7 @@ function PhaseTimelineBar({ phases }: { phases: LivePhaseTiming[] }) {
                     {phase.name}
                   </Typography>
                   <Typography variant="body2">
-                    {formatDurationLong(phase.duration)} (
-                    {percentage.toFixed(1)}%)
+                    {formatDurationLong(phase.duration)} ({percentage.toFixed(1)}%)
                   </Typography>
                   {phase.breakdown?.map((item, idx) => {
                     const isChild = item.label.startsWith("  ");
@@ -206,8 +196,7 @@ function PhaseTimelineBar({ phases }: { phases: LivePhaseTiming[] }) {
                           color: isChild ? "text.secondary" : "text.primary",
                         }}
                       >
-                        {item.label.trimStart()}:{" "}
-                        {formatDuration(item.duration)}
+                        {item.label.trimStart()}: {formatDuration(item.duration)}
                       </Typography>
                     );
                   })}
@@ -284,10 +273,7 @@ function PhaseTimelineBar({ phases }: { phases: LivePhaseTiming[] }) {
       {/* Legend */}
       <Box sx={{ display: "flex", gap: 1, mt: 0.5, flexWrap: "wrap" }}>
         {phases.map((phase) => (
-          <Box
-            key={phase.name}
-            sx={{ display: "flex", alignItems: "center", gap: 0.3 }}
-          >
+          <Box key={phase.name} sx={{ display: "flex", alignItems: "center", gap: 0.3 }}>
             <Box
               sx={{
                 width: 6,
@@ -299,11 +285,7 @@ function PhaseTimelineBar({ phases }: { phases: LivePhaseTiming[] }) {
                 }),
               }}
             />
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ fontSize: "0.6rem" }}
-            >
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.6rem" }}>
               {phase.name}
               {phase.isLive ? " ●" : ""}
             </Typography>
@@ -364,9 +346,7 @@ function TxToast({ event, onDismiss }: TxToastProps) {
   useEffect(() => {
     if (event.txId !== prevTxIdRef.current) {
       prevTxIdRef.current = event.txId;
-      setElapsed(
-        isActive ? Date.now() - event.startTime : computeFinalElapsed(),
-      );
+      setElapsed(isActive ? Date.now() - event.startTime : computeFinalElapsed());
       setPhaseElapsed(isActive ? Date.now() - event.phaseStartTime : 0);
       frozen.current = !isActive;
     }
@@ -434,18 +414,11 @@ function TxToast({ event, onDismiss }: TxToastProps) {
 
         {/* Label and phase */}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="body2"
-            sx={{ fontWeight: 600, fontSize: "0.8rem" }}
-          >
+          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: "0.8rem" }}>
             {event.label}
           </Typography>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ fontSize: "0.7rem" }}
-            >
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
               {PHASE_LABELS[event.phase] ?? event.phase}
             </Typography>
             {isActive && (
@@ -479,11 +452,7 @@ function TxToast({ event, onDismiss }: TxToastProps) {
 
         {/* Expand/collapse */}
         {displayPhases.length > 0 && (
-          <IconButton
-            size="small"
-            onClick={() => setExpanded((prev) => !prev)}
-            sx={{ p: 0.25 }}
-          >
+          <IconButton size="small" onClick={() => setExpanded((prev) => !prev)} sx={{ p: 0.25 }}>
             {expanded ? (
               <ExpandLessIcon sx={{ fontSize: 16 }} />
             ) : (
@@ -493,11 +462,7 @@ function TxToast({ event, onDismiss }: TxToastProps) {
         )}
 
         {/* Dismiss */}
-        <IconButton
-          size="small"
-          onClick={onDismiss}
-          sx={{ p: 0.25, color: "text.secondary" }}
-        >
+        <IconButton size="small" onClick={onDismiss} sx={{ p: 0.25, color: "text.secondary" }}>
           <CloseIcon sx={{ fontSize: 14 }} />
         </IconButton>
       </Box>
@@ -517,9 +482,7 @@ function TxToast({ event, onDismiss }: TxToastProps) {
             color="error"
             sx={{ fontSize: "0.7rem", wordBreak: "break-word" }}
           >
-            {event.error.length > 200
-              ? event.error.slice(0, 200) + "..."
-              : event.error}
+            {event.error.length > 200 ? event.error.slice(0, 200) + "..." : event.error}
           </Typography>
         </Box>
       )}
@@ -600,18 +563,14 @@ export function TxNotificationCenter({ account }: { account?: string | null }) {
         ))}
 
       {/* Collapse / expand toggle (rendered last = top in column-reverse) */}
-      <Tooltip
-        title={collapsed ? "Show notifications" : "Hide notifications"}
-        placement="left"
-      >
+      <Tooltip title={collapsed ? "Show notifications" : "Hide notifications"} placement="left">
         <IconButton
           size="small"
           onClick={() => setCollapsed((prev) => !prev)}
           sx={{
             bgcolor: "background.paper",
             border: "1px solid",
-            borderColor:
-              activeCount > 0 ? "rgba(212, 255, 40, 0.3)" : "divider",
+            borderColor: activeCount > 0 ? "rgba(212, 255, 40, 0.3)" : "divider",
             "&:hover": { bgcolor: "action.hover" },
             px: 1,
             borderRadius: 1,
@@ -619,10 +578,7 @@ export function TxNotificationCenter({ account }: { account?: string | null }) {
           }}
         >
           {collapsed && (
-            <Typography
-              variant="caption"
-              sx={{ fontSize: "0.65rem", color: "text.secondary" }}
-            >
+            <Typography variant="caption" sx={{ fontSize: "0.65rem", color: "text.secondary" }}>
               {toastList.length} tx{toastList.length !== 1 ? "s" : ""}
             </Typography>
           )}

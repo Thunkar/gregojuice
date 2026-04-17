@@ -21,7 +21,8 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 PACKAGES=(
   "$ROOT_DIR/packages/embedded-wallet"
-  "$ROOT_DIR/packages/contracts"
+  "$ROOT_DIR/packages/aztec"
+  "$ROOT_DIR/packages/ethereum"
 )
 
 # Bump versions based on latest published version from npm
@@ -44,20 +45,28 @@ done
 
 # Build
 echo ""
-echo "Building @gregojuice/embedded-wallet..."
-cd "$ROOT_DIR/packages/embedded-wallet"
+echo "Building @gregojuice/aztec..."
+cd "$ROOT_DIR/packages/aztec"
 yarn build
 
-echo "Building @gregojuice/contracts..."
-cd "$ROOT_DIR/packages/contracts"
+echo "Building @gregojuice/ethereum..."
+cd "$ROOT_DIR/packages/ethereum"
+yarn build
+
+echo "Building @gregojuice/embedded-wallet..."
+cd "$ROOT_DIR/packages/embedded-wallet"
 yarn build
 
 # Publish (yarn npm publish rewrites workspace:* refs to real versions)
 export YARN_NPM_AUTH_TOKEN="$NPM_TOKEN"
 
 echo ""
-echo "Publishing @gregojuice/contracts..."
-cd "$ROOT_DIR/packages/contracts"
+echo "Publishing @gregojuice/aztec..."
+cd "$ROOT_DIR/packages/aztec"
+yarn npm publish --access public
+
+echo "Publishing @gregojuice/ethereum..."
+cd "$ROOT_DIR/packages/ethereum"
 yarn npm publish --access public
 
 echo "Publishing @gregojuice/embedded-wallet..."
@@ -65,4 +74,4 @@ cd "$ROOT_DIR/packages/embedded-wallet"
 yarn npm publish --access public
 
 echo ""
-echo "Done! Both packages published ($BUMP bump)."
+echo "Done! All packages published ($BUMP bump)."

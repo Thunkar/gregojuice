@@ -25,10 +25,7 @@ import type {
   TypedStructFieldValue,
   BasicValue,
 } from "@aztec/stdlib/abi";
-import type {
-  ContractInstance,
-  ContractInstanceWithAddress,
-} from "@aztec/stdlib/contract";
+import type { ContractInstance, ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import { ContractFunctionInteraction } from "@aztec/aztec.js/contracts";
 import { poseidon2Hash } from "@aztec/foundation/crypto/poseidon";
@@ -54,17 +51,14 @@ export interface ImmutablesLayout {
   fields: Record<string, ImmutableFieldLayout>;
 }
 
-export function getImmutablesLayout(
-  artifact: ContractArtifact,
-): ImmutablesLayout | null {
+export function getImmutablesLayout(artifact: ContractArtifact): ImmutablesLayout | null {
   const immutablesExports = artifact.outputs.globals.immutables
     ? (artifact.outputs.globals.immutables as StructValue[])
     : [];
 
   const layoutForContract = immutablesExports.find((entry) => {
-    const contractNameField = entry.fields.find(
-      (field) => field.name === "contract_name",
-    )?.value as BasicValue<"string", string> | undefined;
+    const contractNameField = entry.fields.find((field) => field.name === "contract_name")
+      ?.value as BasicValue<"string", string> | undefined;
     return contractNameField?.value === artifact.name;
   });
 
@@ -75,32 +69,25 @@ export function getImmutablesLayout(
   const serializedLenValue = layoutForContract.fields.find(
     (field) => field.name === "serialized_len",
   )?.value as IntegerValue | undefined;
-  const serializedLen = serializedLenValue
-    ? parseInt(serializedLenValue.value, 16)
-    : 0;
+  const serializedLen = serializedLenValue ? parseInt(serializedLenValue.value, 16) : 0;
 
-  const fieldsStruct = layoutForContract.fields.find(
-    (field) => field.name === "fields",
-  ) as TypedStructFieldValue<StructValue> | undefined;
+  const fieldsStruct = layoutForContract.fields.find((field) => field.name === "fields") as
+    | TypedStructFieldValue<StructValue>
+    | undefined;
 
   if (!fieldsStruct) {
     return { serializedLen, fields: {} };
   }
 
-  const layoutFields = fieldsStruct.value
-    .fields as TypedStructFieldValue<StructValue>[];
+  const layoutFields = fieldsStruct.value.fields as TypedStructFieldValue<StructValue>[];
 
-  const fields = layoutFields.reduce(
-    (acc: Record<string, ImmutableFieldLayout>, field) => {
-      const indexValue = field.value.fields.find((f) => f.name === "index")
-        ?.value as IntegerValue;
-      acc[field.name] = {
-        index: parseInt(indexValue.value, 16),
-      };
-      return acc;
-    },
-    {},
-  );
+  const fields = layoutFields.reduce((acc: Record<string, ImmutableFieldLayout>, field) => {
+    const indexValue = field.value.fields.find((f) => f.name === "index")?.value as IntegerValue;
+    acc[field.name] = {
+      index: parseInt(indexValue.value, 16),
+    };
+    return acc;
+  }, {});
 
   return { serializedLen, fields };
 }
@@ -111,9 +98,7 @@ export function serializeFromLayout(
 ): Fr[] {
   const layout = getImmutablesLayout(artifact);
   if (!layout) {
-    throw new Error(
-      `Contract artifact "${artifact.name}" has no #[abi(immutables)] layout`,
-    );
+    throw new Error(`Contract artifact "${artifact.name}" has no #[abi(immutables)] layout`);
   }
 
   const layoutFieldNames = Object.keys(layout.fields);
@@ -161,10 +146,7 @@ export function serializeFromLayout(
 // Low-level building blocks
 // ---------------------------------------------------------------------------
 
-export async function computeContractSalt(
-  actualSalt: Fr,
-  serializedImmutables: Fr[],
-): Promise<Fr> {
+export async function computeContractSalt(actualSalt: Fr, serializedImmutables: Fr[]): Promise<Fr> {
   const result = await poseidon2Hash([actualSalt, ...serializedImmutables]);
   return new Fr(result.toBigInt());
 }
@@ -282,20 +264,15 @@ export async function deployWithImmutables(
 
   // Persist immutables to PXE's CapsuleStore via store_immutables utility function
   const capsuleData = [actualSalt, ...serializedImmutables];
-  const storeImmutablesAbi = artifact.functions.find(
-    (f) => f.name === "store_immutables",
-  );
+  const storeImmutablesAbi = artifact.functions.find((f) => f.name === "store_immutables");
   if (!storeImmutablesAbi) {
     throw new Error(`store_immutables function not found in artifact ${artifact.name}`);
   }
   const accounts = await wallet.getAccounts();
   const deployerAddress = accounts[0]?.item ?? AztecAddress.ZERO;
-  const storeCall = new ContractFunctionInteraction(
-    wallet,
-    instance.address,
-    storeImmutablesAbi,
-    [capsuleData],
-  );
+  const storeCall = new ContractFunctionInteraction(wallet, instance.address, storeImmutablesAbi, [
+    capsuleData,
+  ]);
   await storeCall.simulate({
     from: deployerAddress,
     additionalScopes: [instance.address],

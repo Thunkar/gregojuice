@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "composite": true,
+    "noEmit": true,
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@emotion/react",
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "paths": {
+      "@gregojuice/embedded-wallet/ui": ["../../packages/embedded-wallet/src/ui.ts"],
+      "@gregojuice/embedded-wallet": ["../../packages/embedded-wallet/src/index.ts"],
+      "@gregojuice/common": ["../../packages/common/src/index.ts"],
+      "@gregojuice/aztec/*": ["../../packages/aztec/lib/*"],
+      "@gregojuice/aztec/artifacts/*": ["../../packages/aztec/contracts/artifacts/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts*",
+    "../../packages/aztec/contracts/artifacts/**/*.ts",
+    "../../packages/aztec/lib/**/*.ts",
+    "../../packages/embedded-wallet/src/**/*.ts*",
+    "../../packages/common/src/**/*.ts"
+  ]
+}

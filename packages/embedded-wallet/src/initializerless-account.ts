@@ -25,7 +25,8 @@ import { deriveSigningKey } from "@aztec/stdlib/keys";
 import * as immutables from "./immutables";
 
 async function loadArtifact() {
-  const { SchnorrInitializerlessAccountContractArtifact } = await import("@gregojuice/contracts/artifacts/SchnorrInitializerlessAccount");
+  const { SchnorrInitializerlessAccountContractArtifact } =
+    await import("@gregojuice/aztec/artifacts/SchnorrInitializerlessAccount");
   return SchnorrInitializerlessAccountContractArtifact;
 }
 
@@ -44,22 +45,13 @@ export interface SigningPublicKey {
 
 export async function serializeSigningKey(key: SigningPublicKey): Promise<Fr[]> {
   const artifact = await loadArtifact();
-  return immutables.serializeFromLayout(
-    artifact,
-    {
-      public_key: [key.x, key.y],
-    },
-  );
+  return immutables.serializeFromLayout(artifact, {
+    public_key: [key.x, key.y],
+  });
 }
 
-export async function computeContractSalt(
-  actualSalt: Fr,
-  key: SigningPublicKey,
-): Promise<Fr> {
-  return immutables.computeContractSalt(
-    actualSalt,
-    await serializeSigningKey(key),
-  );
+export async function computeContractSalt(actualSalt: Fr, key: SigningPublicKey): Promise<Fr> {
+  return immutables.computeContractSalt(actualSalt, await serializeSigningKey(key));
 }
 
 export async function createSigningKeyCapsule(
@@ -93,18 +85,13 @@ export class SchnorrInitializerlessAccount implements AccountContract {
   }
 
   getAuthWitnessProvider(_address: CompleteAddress): AuthWitnessProvider {
-    return new SchnorrInitializerlessAuthWitnessProvider(
-      this.signingPrivateKey,
-    );
+    return new SchnorrInitializerlessAuthWitnessProvider(this.signingPrivateKey);
   }
 
   getAccount(completeAddress: CompleteAddress): Account {
     const authWitnessProvider = this.getAuthWitnessProvider(completeAddress);
     return new BaseAccount(
-      new DefaultAccountEntrypoint(
-        completeAddress.address,
-        authWitnessProvider,
-      ),
+      new DefaultAccountEntrypoint(completeAddress.address, authWitnessProvider),
       authWitnessProvider,
       completeAddress,
     );
@@ -119,9 +106,7 @@ export class SchnorrInitializerlessAccount implements AccountContract {
 // AuthWitnessProvider
 // ---------------------------------------------------------------------------
 
-export class SchnorrInitializerlessAuthWitnessProvider
-  implements AuthWitnessProvider
-{
+export class SchnorrInitializerlessAuthWitnessProvider implements AuthWitnessProvider {
   constructor(private signingPrivateKey: GrumpkinScalar) {}
 
   async createAuthWit(messageHash: Fr): Promise<AuthWitness> {
@@ -138,9 +123,7 @@ export class SchnorrInitializerlessAuthWitnessProvider
 // Factory: derive account contract + keys from a secret key
 // ---------------------------------------------------------------------------
 
-export async function createSchnorrInitializerlessAccount(
-  secretKey: Fr,
-): Promise<{
+export async function createSchnorrInitializerlessAccount(secretKey: Fr): Promise<{
   account: SchnorrInitializerlessAccount;
   signingPrivateKey: GrumpkinScalar;
   signingPublicKey: SigningPublicKey;
@@ -154,10 +137,7 @@ export async function createSchnorrInitializerlessAccount(
     y: new Fr(publicKeyPoint.y.toBigInt()),
   };
 
-  const account = new SchnorrInitializerlessAccount(
-    signingPrivateKey,
-    signingPublicKey,
-  );
+  const account = new SchnorrInitializerlessAccount(signingPrivateKey, signingPublicKey);
 
   return { account, signingPrivateKey, signingPublicKey };
 }

@@ -21,6 +21,8 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf ./dist .tsbuildinfo",
     "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
@@ -30,7 +32,7 @@
     "@aztec/stdlib": "v4.3.0-nightly.20260417",
     "@aztec/wallet-sdk": "v4.3.0-nightly.20260417",
     "@aztec/wallets": "v4.3.0-nightly.20260417",
-    "@gregojuice/contracts": "workspace:*"
+    "@gregojuice/aztec": "workspace:*"
   },
   "peerDependencies": {
     "@emotion/react": ">=11",

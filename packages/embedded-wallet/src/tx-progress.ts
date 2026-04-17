@@ -5,7 +5,7 @@
  * Completed/errored events are persisted to localStorage, scoped by account address.
  */
 
-export type TxPhase = 'simulating' | 'proving' | 'sending' | 'mining' | 'complete' | 'error';
+export type TxPhase = "simulating" | "proving" | "sending" | "mining" | "complete" | "error";
 
 export interface PhaseTiming {
   name: string;
@@ -29,7 +29,7 @@ export interface TxProgressEvent {
 
 type TxProgressListener = (event: TxProgressEvent) => void;
 
-const STORAGE_PREFIX = 'gregojuice_tx_history_';
+const STORAGE_PREFIX = "gregojuice_tx_history_";
 const MAX_STORED = 50;
 
 class TxProgressEmitter {
@@ -45,7 +45,7 @@ class TxProgressEmitter {
     for (const listener of this.listeners) {
       listener(event);
     }
-    if (event.phase === 'complete' || event.phase === 'error') {
+    if (event.phase === "complete" || event.phase === "error") {
       this.persist(event);
     }
   }
@@ -60,7 +60,7 @@ class TxProgressEmitter {
       const raw = localStorage.getItem(this.accountKey);
       if (!raw) return [];
       const events = JSON.parse(raw) as TxProgressEvent[];
-      return events.map(e => ({ phaseStartTime: e.startTime, ...e }));
+      return events.map((e) => ({ phaseStartTime: e.startTime, ...e }));
     } catch {
       return [];
     }
@@ -69,21 +69,25 @@ class TxProgressEmitter {
   dismissPersisted(txId: string) {
     if (!this.accountKey) return;
     try {
-      const history = this.loadHistory().filter(e => e.txId !== txId);
+      const history = this.loadHistory().filter((e) => e.txId !== txId);
       localStorage.setItem(this.accountKey, JSON.stringify(history));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   private persist(event: TxProgressEvent) {
     if (!this.accountKey) return;
     try {
       const history = this.loadHistory();
-      const idx = history.findIndex(e => e.txId === event.txId);
+      const idx = history.findIndex((e) => e.txId === event.txId);
       if (idx >= 0) history[idx] = event;
       else history.push(event);
       const trimmed = history.slice(-MAX_STORED);
       localStorage.setItem(this.accountKey, JSON.stringify(trimmed));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 }
 

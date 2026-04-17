@@ -1,0 +1,34 @@
+{
+  "name": "@gregojuice/ethereum",
+  "version": "0.0.18",
+  "type": "module",
+  "main": "dist/generated/bridge-contract-artifacts.js",
+  "types": "dist/generated/bridge-contract-artifacts.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/generated/bridge-contract-artifacts.d.ts",
+      "import": "./dist/generated/bridge-contract-artifacts.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist ./generated ./contracts/out ./contracts/cache ./contracts/broadcast",
+    "build:forge": "cd contracts && forge build",
+    "build:codegen": "cd contracts && ./generate-artifacts.sh",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "build": "yarn build:forge && yarn build:codegen && yarn build:ts",
+    "deploy": "cd contracts && forge script script/Deploy.s.sol --rpc-url ${L1_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com} --private-key $PRIVATE_KEY --broadcast",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "yarn build"
+  },
+  "peerDependencies": {
+    "viem": "^2"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.3",
+    "viem": "^2.23.0"
+  }
+}

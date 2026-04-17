@@ -1,0 +1,67 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Spawns `aztec start --local-network` for the test run. This brings up
+ * Anvil (L1, :8545) plus the Aztec node (:8080) and supporting services, so
+ * both L2 flows and bridge flows can hit a real stack.
+ */
+export interface LocalNetwork {
+  workDir: string;
+  nodeUrl: string;
+  l1RpcUrl: string;
+  stop: () => Promise<void>;
+}
+
+const DEFAULT_NODE_URL = "http://localhost:8080";
+const DEFAULT_L1_RPC_URL = "http://localhost:8545";
+const READINESS_TIMEOUT_MS = 180_000;
+
+export async function startLocalNetwork(): Promise<LocalNetwork> {
+  const workDir = await mkdtemp(join(tmpdir(), "gj-e2e-"));
+  const proc: ChildProcess = spawn("aztec", ["start", "--local-network"], {
+    cwd: workDir,
+    env: { ...process.env, AZTEC_WORKDIR: workDir },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  try {
+    await Promise.all([
+      waitForReady(proc, DEFAULT_L1_RPC_URL, "L1 RPC"),
+      waitForReady(proc, DEFAULT_NODE_URL, "Aztec node"),
+    ]);
+  } catch (err) {
+    proc.kill("SIGTERM");
+    throw err;
+  }
+
+  return {
+    workDir,
+    nodeUrl: DEFAULT_NODE_URL,
+    l1RpcUrl: DEFAULT_L1_RPC_URL,
+    stop: async () => {
+      proc.kill("SIGTERM");
+      await new Promise<void>((resolve) => proc.once("exit", () => resolve()));
+      await rm(workDir, { recursive: true, force: true });
+    },
+  };
+}
+
+async function waitForReady(proc: ChildProcess, url: string, label: string): Promise<void> {
+  const deadline = Date.now() + READINESS_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (proc.exitCode !== null) {
+      throw new Error(`local-network exited early with code ${proc.exitCode}`);
+    }
+    try {
+      const res = await fetch(url, { method: "POST", body: "{}" });
+      if (res.status < 500) return;
+    } catch {
+      // not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`${label} did not become ready at ${url}`);
+}
