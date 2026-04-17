@@ -36,6 +36,7 @@ import { getDefaultInitializer, getInitializer } from "@aztec/stdlib/abi";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import type { SubscriptionFPCContract } from "@gregojuice/contracts/artifacts/SubscriptionFPC";
 import { useWallet } from "../contexts/WalletContext";
+import { useAliases } from "../contexts/AliasContext";
 import { signUpApp } from "../services/fpcService";
 import {
   runCalibration,
@@ -55,7 +56,11 @@ import {
 import { FunctionType } from "@aztec/aztec.js/abi";
 import { ArtifactUpload } from "./ArtifactUpload";
 import { FunctionSelector } from "./FunctionSelector";
-import { FunctionArgsForm, getDefaultArgs } from "./FunctionArgsForm";
+import {
+  FunctionArgsForm,
+  getDefaultArgs,
+  type AliasedAddress,
+} from "./FunctionArgsForm";
 import { CalibrationResult } from "./CalibrationResult";
 
 const STEPS = [
@@ -79,6 +84,14 @@ export function AppSignUp({
   onSignedUp,
 }: AppSignUpProps) {
   const { wallet, node, rollupAddress, l1ChainId, l1RpcUrl } = useWallet();
+  const {
+    contracts: storedContracts,
+    senders: storedSenders,
+    addContract: addStoredContractAlias,
+    removeContract: removeStoredContractAlias,
+    addSender: addStoredSenderAlias,
+    removeSender: removeStoredSenderAlias,
+  } = useAliases();
   const [activeStep, setActiveStep] = useState(0);
 
   // Step 1: Artifact
@@ -103,24 +116,23 @@ export function AppSignUp({
   >([]);
   const [contractInstance, setContractInstance] =
     useState<ContractInstanceWithAddress | null>(null);
+  const [contractAlias, setContractAlias] = useState("");
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
 
-  // Extra contract registrations (for contracts called by the sponsored function)
-  const [extraContracts, setExtraContracts] = useState<
-    Array<{ address: string; name: string }>
-  >([]);
+  // Extra contract registrations (for contracts called by the sponsored function).
+  // Persisted contracts live in AliasContext; this local state is just the in-flight
+  // form for registering a new one.
   const [extraArtifact, setExtraArtifact] = useState<ContractArtifact | null>(
     null,
   );
   const [extraAddress, setExtraAddress] = useState("");
+  const [extraAlias, setExtraAlias] = useState("");
   const [extraRegistering, setExtraRegistering] = useState(false);
   const [extraError, setExtraError] = useState<string | null>(null);
 
-  // Extra sender registrations (for addresses that need to be known to PXE for tag computation)
-  const [extraSenders, setExtraSenders] = useState<
-    Array<{ address: string; alias: string }>
-  >([]);
+  // Extra sender registrations (for addresses that need to be known to PXE for tag computation).
+  // Persisted senders live in AliasContext; this local state is just the in-flight form.
   const [senderAddress, setSenderAddress] = useState("");
   const [senderAlias, setSenderAlias] = useState("");
   const [senderRegistering, setSenderRegistering] = useState(false);
@@ -160,6 +172,40 @@ export function AppSignUp({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Aliased addresses available as combo options for address-typed args.
+  const aliasedAddresses = useMemo<AliasedAddress[]>(() => {
+    const list: AliasedAddress[] = [
+      { address: adminAddress.toString(), alias: "admin", kind: "admin" },
+    ];
+    if (contractInstance) {
+      list.push({
+        address: contractInstance.address.toString(),
+        alias: contractAlias.trim() || artifact?.name || "app",
+        kind: "contract",
+      });
+    }
+    for (const c of storedContracts) {
+      list.push({ address: c.address, alias: c.alias, kind: "contract" });
+    }
+    for (const s of storedSenders) {
+      list.push({ address: s.address, alias: s.alias, kind: "sender" });
+    }
+    // Deduplicate by address, preserving first occurrence (admin wins).
+    const seen = new Set<string>();
+    return list.filter((e) => {
+      if (seen.has(e.address)) return false;
+      seen.add(e.address);
+      return true;
+    });
+  }, [
+    adminAddress,
+    storedContracts,
+    storedSenders,
+    contractInstance,
+    contractAlias,
+    artifact,
+  ]);
+
   // Pricing for USD display
   const pricingService = useMemo(() => {
     const svc = new FeePricingService(
@@ -176,6 +222,7 @@ export function AppSignUp({
     setArtifact(a);
     setSelectedFunction(null);
     setContractInstance(null);
+    setContractAlias("");
     setCalibrationResult(null);
     // Pre-select the default initializer for "Compute from Params" mode
     const defaultInit = getDefaultInitializer(a) ?? null;
@@ -251,21 +298,18 @@ export function AppSignUp({
       if (!instance)
         throw new Error("Contract not found on-chain at this address");
       await wallet.registerContract(instance, extraArtifact);
-      setExtraContracts((prev) => [
-        ...prev,
-        { address: extraAddress, name: extraArtifact.name },
-      ]);
+      addStoredContractAlias({
+        address: extraAddress,
+        alias: extraAlias.trim() || extraArtifact.name,
+      });
       setExtraArtifact(null);
       setExtraAddress("");
+      setExtraAlias("");
     } catch (err) {
       setExtraError(err instanceof Error ? err.message : "Registration failed");
     } finally {
       setExtraRegistering(false);
     }
-  };
-
-  const removeExtraContract = (index: number) => {
-    setExtraContracts((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleRegisterSender = async () => {
@@ -275,13 +319,10 @@ export function AppSignUp({
     try {
       const address = AztecAddress.fromString(senderAddress);
       await wallet.registerSender(address, senderAlias || undefined);
-      setExtraSenders((prev) => [
-        ...prev,
-        {
-          address: senderAddress,
-          alias: senderAlias || shortAddress(senderAddress),
-        },
-      ]);
+      addStoredSenderAlias({
+        address: senderAddress,
+        alias: senderAlias.trim() || shortAddress(senderAddress),
+      });
       setSenderAddress("");
       setSenderAlias("");
     } catch (err) {
@@ -291,10 +332,6 @@ export function AppSignUp({
     } finally {
       setSenderRegistering(false);
     }
-  };
-
-  const removeSender = (index: number) => {
-    setExtraSenders((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleCalibrate = async () => {
@@ -386,6 +423,12 @@ export function AppSignUp({
         maxFee: parseUnits(maxFeeFj, 18),
         maxUsers: parseInt(maxUsers),
       });
+      // Persist the signed-up app as an aliased contract so it's available as
+      // an arg pick for future calibrations.
+      addStoredContractAlias({
+        address: contractInstance.address.toString(),
+        alias: contractAlias.trim() || artifact?.name || "app",
+      });
       setSuccess(true);
       onSignedUp?.();
       // Reset wizard after a short delay so the success message is visible
@@ -395,6 +438,7 @@ export function AppSignUp({
         setSelectedFunction(null);
         setContractInstance(null);
         setContractAddress("");
+        setContractAlias("");
         setArgValues([]);
         setCalibrationResult(null);
         setCalibrationIndex(null);
@@ -403,7 +447,6 @@ export function AppSignUp({
         setConfigIndex("0");
         setMaxUses("1");
         setMaxUsers("16");
-        setExtraContracts([]);
         setSuccess(false);
       }, 3000);
     } catch (err) {
@@ -453,6 +496,7 @@ export function AppSignUp({
                     onClick={() => {
                       setArtifact(null);
                       setContractInstance(null);
+                      setContractAlias("");
                     }}
                   >
                     Change
@@ -474,6 +518,17 @@ export function AppSignUp({
                     Compute from Params
                   </ToggleButton>
                 </ToggleButtonGroup>
+
+                <TextField
+                  fullWidth
+                  label="Alias"
+                  placeholder={artifact.name}
+                  value={contractAlias}
+                  onChange={(e) => setContractAlias(e.target.value)}
+                  size="small"
+                  helperText="Shown in address combos when picking args"
+                  sx={{ mb: 2 }}
+                />
 
                 {instanceMode === "public" && (
                   <Box>
@@ -550,7 +605,7 @@ export function AppSignUp({
                             fn={computeInitializer}
                             values={computeConstructorArgs}
                             onChange={setComputeConstructorArgs}
-                            adminAddress={adminAddress.toString()}
+                            aliasedAddresses={aliasedAddresses}
                           />
                         </Box>
                       )}
@@ -671,11 +726,11 @@ export function AppSignUp({
                   function.
                 </Typography>
 
-                {extraContracts.map((ec, i) => (
+                {storedContracts.map((ec) => (
                   <Chip
-                    key={i}
-                    label={`${ec.name} (${shortAddress(ec.address)})`}
-                    onDelete={() => removeExtraContract(i)}
+                    key={ec.address}
+                    label={`${ec.alias} (${shortAddress(ec.address)})`}
+                    onDelete={() => removeStoredContractAlias(ec.address)}
                     size="small"
                     sx={{ mr: 0.5, mb: 0.5 }}
                   />
@@ -696,6 +751,15 @@ export function AppSignUp({
                       placeholder="0x..."
                       value={extraAddress}
                       onChange={(e) => setExtraAddress(e.target.value)}
+                      size="small"
+                      sx={{ mb: 1 }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Alias"
+                      placeholder={extraArtifact.name}
+                      value={extraAlias}
+                      onChange={(e) => setExtraAlias(e.target.value)}
                       size="small"
                       sx={{ mb: 1 }}
                     />
@@ -720,6 +784,7 @@ export function AppSignUp({
                         onClick={() => {
                           setExtraArtifact(null);
                           setExtraAddress("");
+                          setExtraAlias("");
                           setExtraError(null);
                         }}
                       >
@@ -744,11 +809,11 @@ export function AppSignUp({
                   of.
                 </Typography>
 
-                {extraSenders.map((s, i) => (
+                {storedSenders.map((s) => (
                   <Chip
-                    key={i}
+                    key={s.address}
                     label={`${s.alias} (${shortAddress(s.address)})`}
-                    onDelete={() => removeSender(i)}
+                    onDelete={() => removeStoredSenderAlias(s.address)}
                     size="small"
                     color="info"
                     variant="outlined"
@@ -813,7 +878,7 @@ export function AppSignUp({
                       fn={selectedFunction}
                       values={argValues}
                       onChange={setArgValues}
-                      adminAddress={adminAddress.toString()}
+                      aliasedAddresses={aliasedAddresses}
                     />
                   </Box>
                 )}
