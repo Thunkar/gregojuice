@@ -65,19 +65,19 @@ export const PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF =
 // If the test fails with a mismatch, update these values from the test output.
 
 /** Subscribe overhead on L2 gas (first call — pops slot, re-inserts, creates subscription) */
-export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS = 131653;
+export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS = 115279;
 
 /** Subscribe overhead on DA gas */
 export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS = 1216;
 
 /** Sponsor overhead on L2 gas (subsequent calls — pops subscription, re-inserts) */
-export const FPC_SPONSOR_OVERHEAD_L2_GAS = 109878;
+export const FPC_SPONSOR_OVERHEAD_L2_GAS = 93504;
 
 /** Sponsor overhead on DA gas */
 export const FPC_SPONSOR_OVERHEAD_DA_GAS = 640;
 
 /** FPC teardown L2 gas (_ensure_max_fee — constant across all FPC calls) */
-export const FPC_TEARDOWN_L2_GAS = 9690;
+export const FPC_TEARDOWN_L2_GAS = 4623;
 
 /** FPC teardown DA gas */
 export const FPC_TEARDOWN_DA_GAS = 0;
