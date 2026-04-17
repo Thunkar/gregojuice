@@ -3,12 +3,15 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { NetworkProvider } from "./contexts/NetworkContext";
 import { WalletProvider } from "./contexts/WalletContext";
+import { AliasProvider } from "./contexts/AliasContext";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <NetworkProvider>
       <WalletProvider>
-        <App />
+        <AliasProvider>
+          <App />
+        </AliasProvider>
       </WalletProvider>
     </NetworkProvider>
   </StrictMode>,

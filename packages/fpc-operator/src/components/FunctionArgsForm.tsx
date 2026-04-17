@@ -1,13 +1,18 @@
-import { Box, TextField, Typography, Button, InputAdornment } from "@mui/material";
-import PersonIcon from "@mui/icons-material/Person";
+import { Box, TextField, Typography, Autocomplete } from "@mui/material";
 import type { FunctionAbi, AbiType } from "@aztec/aztec.js/abi";
 import { shortAddress } from "@gregojuice/common";
+
+export interface AliasedAddress {
+  address: string;
+  alias: string;
+  kind: "admin" | "contract" | "sender";
+}
 
 interface FunctionArgsFormProps {
   fn: FunctionAbi;
   values: string[];
   onChange: (values: string[]) => void;
-  adminAddress?: string;
+  aliasedAddresses?: AliasedAddress[];
 }
 
 function isAddressType(type: AbiType): boolean {
@@ -61,7 +66,13 @@ function typeLabel(type: AbiType): string {
   }
 }
 
-export function FunctionArgsForm({ fn, values, onChange, adminAddress }: FunctionArgsFormProps) {
+const KIND_LABEL: Record<AliasedAddress["kind"], string> = {
+  admin: "Admin",
+  contract: "Contract",
+  sender: "Sender",
+};
+
+export function FunctionArgsForm({ fn, values, onChange, aliasedAddresses }: FunctionArgsFormProps) {
   const params = fn.parameters;
 
   if (params.length === 0) {
@@ -78,34 +89,54 @@ export function FunctionArgsForm({ fn, values, onChange, adminAddress }: Functio
     onChange(updated);
   };
 
+  const options = aliasedAddresses ?? [];
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
       {params.map((param, i) => {
         const isAddr = isAddressType(param.type);
+        const label = `${param.name} (${typeLabel(param.type)})`;
+        const value = values[i] ?? "";
+
+        if (isAddr) {
+          const matched = options.find((o) => o.address === value) ?? null;
+          return (
+            <Autocomplete
+              key={param.name}
+              freeSolo
+              size="small"
+              options={options}
+              value={matched ?? value}
+              groupBy={(o) => (typeof o === "string" ? "" : KIND_LABEL[o.kind])}
+              getOptionLabel={(o) =>
+                typeof o === "string" ? o : `${o.alias} (${shortAddress(o.address)})`
+              }
+              isOptionEqualToValue={(o, v) =>
+                typeof o !== "string" && typeof v !== "string" && o.address === v.address
+              }
+              onChange={(_, v) => {
+                if (v === null) updateValue(i, "");
+                else if (typeof v === "string") updateValue(i, v);
+                else updateValue(i, v.address);
+              }}
+              onInputChange={(_, v, reason) => {
+                if (reason === "input") updateValue(i, v);
+              }}
+              renderInput={(params) => (
+                <TextField {...params} fullWidth label={label} placeholder="0x..." />
+              )}
+            />
+          );
+        }
+
         return (
           <TextField
             key={param.name}
             fullWidth
-            label={`${param.name} (${typeLabel(param.type)})`}
-            value={values[i] ?? ""}
+            label={label}
+            value={value}
             onChange={(e) => updateValue(i, e.target.value)}
             size="small"
-            slotProps={isAddr && adminAddress ? {
-              input: {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Button
-                      size="small"
-                      startIcon={<PersonIcon sx={{ fontSize: 14 }} />}
-                      onClick={() => updateValue(i, adminAddress)}
-                      sx={{ fontSize: "0.65rem", minWidth: "auto", whiteSpace: "nowrap" }}
-                    >
-                      {shortAddress(adminAddress)}
-                    </Button>
-                  </InputAdornment>
-                ),
-              },
-            } : undefined}
           />
         );
       })}

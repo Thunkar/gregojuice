@@ -1,6 +1,6 @@
 {
   "name": "@gregojuice/contracts",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "type": "module",
   "main": "dist/src/subscription-fpc.js",
   "types": "dist/src/subscription-fpc.d.ts",
