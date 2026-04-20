@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Box,
   Button,
@@ -81,7 +81,7 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
     })();
   }, [status, wallet, address, node]);
 
-  const handleDeploy = async () => {
+  const handleDeploy = useCallback(async () => {
     if (!wallet || !address) return;
     setDeploying(true);
     setDeployError(null);
@@ -93,7 +93,7 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
     } finally {
       setDeploying(false);
     }
-  };
+  }, [wallet, address]);
 
   const bridgeRecipients =
     address && fpcAddress

@@ -122,6 +122,7 @@ export function BackupRestore({ mode = "full" }: BackupRestoreProps) {
           data={importData}
           applying={applying}
           networkMismatch={!!networkMismatch}
+          walletReady={!!wallet}
           onConfirm={handleConfirmImport}
           onCancel={handleCancelImport}
         />
@@ -184,6 +185,7 @@ export function BackupRestore({ mode = "full" }: BackupRestoreProps) {
         data={importData}
         applying={applying}
         networkMismatch={!!networkMismatch}
+        walletReady={!!wallet}
         onConfirm={handleConfirmImport}
         onCancel={handleCancelImport}
       />
@@ -198,6 +200,7 @@ function ConfirmDialog({
   data,
   applying,
   networkMismatch,
+  walletReady,
   onConfirm,
   onCancel,
 }: {
@@ -205,6 +208,7 @@ function ConfirmDialog({
   data: BackupData | null;
   applying: boolean;
   networkMismatch: boolean;
+  walletReady: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -248,7 +252,7 @@ function ConfirmDialog({
           onClick={onConfirm}
           variant="contained"
           color="error"
-          disabled={applying}
+          disabled={applying || !walletReady}
           startIcon={applying ? <CircularProgress size={18} /> : undefined}
           data-testid="backup-import-confirm-button"
         >

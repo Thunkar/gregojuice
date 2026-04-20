@@ -192,9 +192,15 @@ export function CalibrationResult({
         }}
         size="small"
         sx={{ mb: 1.5 }}
+        data-testid="app-signup-fee-source"
+        data-value={feeSource}
       >
-        <ToggleButton value="p75">P75 (last {blockRange} blocks)</ToggleButton>
-        <ToggleButton value="current">Current Min Fee</ToggleButton>
+        <ToggleButton value="p75" data-testid="app-signup-fee-source-p75">
+          P75 (last {blockRange} blocks)
+        </ToggleButton>
+        <ToggleButton value="current" data-testid="app-signup-fee-source-current">
+          Current Min Fee
+        </ToggleButton>
       </ToggleButtonGroup>
 
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
@@ -241,6 +247,8 @@ export function CalibrationResult({
             valueLabelDisplay="auto"
             valueLabelFormat={(v) => `${v}x`}
             size="small"
+            data-testid="app-signup-fee-multiplier"
+            data-value={feeMultiplier}
           />
         </Box>
         {feeSource === "p75" && (

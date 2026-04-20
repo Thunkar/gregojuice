@@ -12,12 +12,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260417",
-    "@aztec/entrypoints": "v4.3.0-nightly.20260417",
-    "@aztec/foundation": "v4.3.0-nightly.20260417",
-    "@aztec/l1-artifacts": "v4.3.0-nightly.20260417",
-    "@aztec/stdlib": "v4.3.0-nightly.20260417",
-    "@aztec/wallet-sdk": "v4.3.0-nightly.20260417",
+    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260420",
+    "@aztec/foundation": "v4.3.0-nightly.20260420",
+    "@aztec/l1-artifacts": "v4.3.0-nightly.20260420",
+    "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/wallet-sdk": "v4.3.0-nightly.20260420",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@gregojuice/aztec": "workspace:*",
@@ -31,7 +31,7 @@
     "viem": "^2.23.0"
   },
   "devDependencies": {
-    "@aztec/wallets": "v4.3.0-nightly.20260417",
+    "@aztec/wallets": "v4.3.0-nightly.20260420",
     "@types/react": "^19.0.6",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react-swc": "^3.7.2",

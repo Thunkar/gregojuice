@@ -99,25 +99,44 @@ test.describe.serial("fpc-dashboard setup", () => {
       expect(phase === "bridged" || phase === "claiming").toBe(true);
     }).toPass({ timeout: 60_000 });
 
+    // Scope the pump strictly to the L1→L2 message sync window. The full
+    // bridge claim has three sub-steps:
+    //   1. L1 deposit confirmed (already true by this point)
+    //   2. L1→L2 message sync        ← needs pumping
+    //   3. L2 claim tx               ← must run WITHOUT a pump racing it
+    //
+    // Pumping through step 3 (or through the subsequent FPC deploy) causes
+    // real txs to race pump-induced empty blocks, which intermittently
+    // strands the tx mid-slot and makes the deploy button look inert.
+    const postPhase = bridge.getByTestId("bridge-post-phase");
     const stopPump = await pumpL2Blocks({
       nodeUrl: global.nodeUrl,
       l1RpcUrl: global.l1RpcUrl,
     });
     try {
-      // Pump window closes either when the session is cleared (done) or
-      // the post-phase container reports claimed=true.
-      await expect(bridge.getByTestId("bridge-post-phase")).toHaveAttribute(
-        "data-claimed",
-        "true",
-        { timeout: 180_000 },
-      );
+      await expect(postPhase).toHaveAttribute("data-l2-synced", "true", { timeout: 180_000 });
     } finally {
       await stopPump();
     }
 
+    // After the L1→L2 message lands, the claim tx runs on its own (the
+    // node mines blocks normally). Wait for `data-claimed=true` without
+    // any background pumping.
+    await expect(postPhase).toHaveAttribute("data-claimed", "true", { timeout: 180_000 });
+
     // ── Step 2: deploy FPC ────────────────────────────────────────────
     // fpc-dashboard auto-advances once the bridge iframe posts `complete`.
-    await expect(wizard).toHaveAttribute("data-active-step", "2", { timeout: 30_000 });
+    // If we don't see the transition, something upstream failed — dump the
+    // wizard's current step and the bridge session so we can triage.
+    try {
+      await expect(wizard).toHaveAttribute("data-active-step", "2", { timeout: 30_000 });
+    } catch (err) {
+      const actual = await wizard.getAttribute("data-active-step");
+      const bridgePhase = bridgeFrame ? await getBridgeSessionPhase(bridgeFrame) : "no-frame";
+      throw new Error(
+        `wizard stuck on step ${actual} (bridge phase=${bridgePhase}) — ${(err as Error).message}`,
+      );
+    }
 
     const deployBtn = page.getByTestId("setup-deploy-fpc");
     await expect(deployBtn).toBeEnabled({ timeout: 30_000 });

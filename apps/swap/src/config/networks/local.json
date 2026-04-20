@@ -2,18 +2,30 @@
   "id": "local",
   "nodeUrl": "http://localhost:8080",
   "chainId": "31337",
-  "rollupVersion": "3708660450",
+  "rollupVersion": "2648162698",
   "contracts": {
-    "gregoCoin": "0x2d7b4ea7cd3ea1e1371a298fe850f58ea814188d1fc7a1e97e78d6b7f0ecb1e7",
-    "gregoCoinPremium": "0x201b2d30e488355068375d5dea83f5a91103827f64e64c92cf97b8e6acb9f42e",
-    "amm": "0x1071c04d31d21fc30e516ad10dbdb41cfa534bb2b41c5d3283fd7fc02ea767d1",
-    "liquidityToken": "0x1bd9cb63e2009757785071ce8f8fc320e972a85ccc122e7de888b7f8f82a5052",
-    "pop": "0x2015ba5ca3add8ff0eb20a48c3bb3d45ae51e747d59014f33bfc19b47bad22e5",
-    "sponsoredFPC": "0x254082b62f9108d044b8998f212bb145619d91bfcd049461d74babb840181257",
-    "salt": "0x186ea3a286e0d4203e487b3af3cacd88f4cb5acf4b4207573979c12b556bf803"
+    "gregoCoin": "0x2526212280e984b72840e2305ecf410a2019f8d9b033fe962f5949e3c70455c4",
+    "gregoCoinPremium": "0x0daf47dfe01a2ecd2a4f71343af56b5f20e5b16173f11723e70080a09da9a1ac",
+    "amm": "0x03c74950432ef37e65ce7eacabc0e107c3f70041937db7f539431500831690ac",
+    "liquidityToken": "0x18ac5155b49ca2de04f1726fc939c0c20110ec981e48e46302a9964352e7fd66",
+    "pop": "0x1ee2b1bcba821586daf8f84fd365fc867b642ec987082f7fca1ccd870c60fbe8",
+    "sponsoredFPC": "0x02a481c5711fce148a5fb401b4969abc589f20ecf0ad8d62231a0917c1916d8c",
+    "salt": "0x1b129867b1726774754cf8ba64c3a51efb361f77bfadbdc4d92b9f39b2868413"
   },
   "deployer": {
-    "address": "0x0318d257cbb7e8810ed4bfad91dda7222eba547dd87cf753f8b4cffc72ec69f2"
+    "address": "0x194c67f3b50c6099cf2e849a837e1be493a555b417f6d993d6abea524f01cda8"
   },
-  "deployedAt": "2026-04-20T12:36:21.026Z"
+  "deployedAt": "2026-04-20T15:09:54.317Z",
+  "subscriptionFPC": {
+    "address": "0x03f715b17dcae904c2f8605b6c73a76bee8fe705325619ae4bf0609cef2db7b4",
+    "secretKey": "0x29b720fb9d0900947c82e3ca516c44d40ab3b3ae756005f4272280988211c0b6",
+    "functions": {
+      "0x1ee2b1bcba821586daf8f84fd365fc867b642ec987082f7fca1ccd870c60fbe8": {
+        "0xa539bd29": 0
+      },
+      "0x03c74950432ef37e65ce7eacabc0e107c3f70041937db7f539431500831690ac": {
+        "0xfd228669": 0
+      }
+    }
+  }
 }

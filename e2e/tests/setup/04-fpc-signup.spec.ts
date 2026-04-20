@@ -3,6 +3,9 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { FunctionSelector } from "@aztec/stdlib/abi";
+import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
+import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import {
   readState,
   writeState,
@@ -83,7 +86,14 @@ async function restoreBackup(page: Page, backupPath: string) {
 
   // The SetupWizard is always the landing view until fpc-admin is restored.
   // It exposes the "Restore from Backup" affordance in import-only mode.
-  await page.getByTestId("setup-wizard").waitFor({ timeout: 60_000 });
+  const wizard = page.getByTestId("setup-wizard");
+  await wizard.waitFor({ timeout: 60_000 });
+
+  // BackupRestore's confirm-click handler early-returns when `wallet` is
+  // still null. Wait for the wizard to leave step 0 ("Creating embedded
+  // wallet...") before proceeding — that's the signal the wallet context
+  // is ready.
+  await expect(wizard).not.toHaveAttribute("data-active-step", "0", { timeout: 90_000 });
 
   // The import-only button triggers the hidden input via a ref click,
   // which would pop the OS file dialog — Playwright can't drive that.
@@ -112,6 +122,13 @@ interface SignUpArgs {
   args: Record<string, string>;
   /** Extra contract registrations required by the sponsored function. */
   extras: { artifactPath: string; address: string; alias: string }[];
+  /**
+   * Senders to register with the admin PXE so note-tag discovery works
+   * during calibration (e.g. the account that minted private notes to
+   * fpc-admin). Chips persist in localStorage so you only need to list
+   * each sender once across the session.
+   */
+  senders?: { address: string; alias: string }[];
   configIndex: number;
 }
 
@@ -148,7 +165,7 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
   // FunctionSelector's handler auto-advances to step 2.
   await expect(wizard).toHaveAttribute("data-active-step", "2", { timeout: 10_000 });
 
-  // ── Step 2: register extras, fill args, calibrate ──────────────────
+  // ── Step 2: register extras, register senders, fill args, calibrate ─
   for (const extra of args.extras) {
     await page.getByTestId("app-signup-extra-artifact").setInputFiles(extra.artifactPath);
     await page.getByTestId("app-signup-extra-address").fill(extra.address);
@@ -161,35 +178,69 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
     });
   }
 
+  // Register senders (idempotent — if the chip already exists from a
+  // previous sign-up this round, skip the registration tx).
+  for (const sender of args.senders ?? []) {
+    const chip = page.getByTestId(`app-signup-sender-chip-${sender.alias}`);
+    if (!(await chip.isVisible().catch(() => false))) {
+      await page.getByTestId("app-signup-sender-address").fill(sender.address);
+      await page.getByTestId("app-signup-sender-alias").fill(sender.alias);
+      await page.getByTestId("app-signup-sender-add").click();
+      await expect(chip).toBeVisible({ timeout: 30_000 });
+    }
+  }
+
   // Fill each arg input by parameter name.
   for (const [paramName, value] of Object.entries(args.args)) {
     await page.getByTestId(`app-signup-arg-${paramName}`).fill(value);
   }
 
-  // Click calibrate. The "Run Calibration" button is always enabled, so
-  // we can click directly. Wait for either the calibration container to
-  // report calibrated=true or for the error alert.
-  const calibration = page.getByTestId("app-signup-calibration");
+  // Click calibrate. `handleCalibrate` auto-advances the wizard to step 3
+  // on success, so we wait for the step transition — NOT for an inner
+  // element in step 2, which unmounts. Race against the calibration error
+  // alert so a failure surfaces immediately.
   const calibrationError = page.getByTestId("app-signup-calibration-error");
   await page.getByTestId("app-signup-calibrate").click();
 
   await Promise.race([
-    expect(calibration)
-      .toHaveAttribute("data-calibrated", "true", { timeout: 240_000 })
+    expect(wizard)
+      .toHaveAttribute("data-active-step", "3", { timeout: 240_000 })
       .then(() => {}),
     calibrationError.waitFor({ state: "visible", timeout: 240_000 }).then(async () => {
       throw new Error(`calibration failed: ${await calibrationError.textContent()}`);
     }),
   ]);
 
-  // Continue to review — this button only renders once calibrated.
-  await page.getByTestId("app-signup-calibration-continue").click();
-  await expect(wizard).toHaveAttribute("data-active-step", "3", { timeout: 10_000 });
+  // ── Step 3: pick fee source + multiplier, set configIndex, sign up ──
+  // The default P75 source pulls from clustec which isn't available on
+  // local-network — switch to "Current Min Fee" which queries the node
+  // directly. Then crank the multiplier to 10x so calibration has plenty
+  // of headroom and we don't hit OutOfGas during real sign-ups.
+  await page.getByTestId("app-signup-fee-source-current").click();
+  await expect(page.getByTestId("app-signup-fee-source")).toHaveAttribute("data-value", "current", {
+    timeout: 5_000,
+  });
 
-  // ── Step 3: max-fee is auto-filled, set configIndex, sign up ────────
+  // MUI Slider renders a real <input type="range"> inside each thumb.
+  // Set its value via a native `input` event — MUI listens for that and
+  // forwards to onChange. `.fill()` on a range input doesn't trigger the
+  // React onChange path, so we set `.value` and dispatch manually.
+  const multiplier = page.getByTestId("app-signup-fee-multiplier");
+  await multiplier.locator('input[type="range"]').evaluate((el: HTMLInputElement) => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter?.call(el, "10");
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(multiplier).toHaveAttribute("data-value", "10", { timeout: 5_000 });
+
   await page.getByTestId("app-signup-config-index").fill(String(args.configIndex));
-  // Max fee is pre-populated from the P75 pricing; we just verify it's
-  // non-empty to avoid submitting with an empty fee.
+
+  // Max fee is computed from the resolved fee-per-gas × multiplier. Wait
+  // for it to populate before submitting.
   await expect(page.getByTestId("app-signup-max-fee")).not.toHaveValue("", {
     timeout: 60_000,
   });
@@ -238,6 +289,8 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     await page.getByTestId("app-signup").waitFor({ timeout: 10_000 });
 
     // ── 2a. Sign up ProofOfPassword::check_password_and_mint ─────────
+    // PoP mints fresh private tokens for the recipient, so calibration
+    // only needs GregoCoin registered — no prior-note discovery needed.
     console.log("[e2e] signing up PoP::check_password_and_mint");
     await signUpOneApp(page, {
       artifactPath: POP_ARTIFACT_PATH,
@@ -271,7 +324,10 @@ test.describe.serial("fpc signs up sponsored apps", () => {
         token_out: swap.gregoCoinPremium,
         amount_out: "100",
         amount_in_max: "1000000",
-        authwit_nonce: "0",
+        // `authwit_nonce=0` short-circuits AMM's authwit check path and
+        // makes calibration fail to materialise the expected authwit.
+        // Any non-zero Field works.
+        authwit_nonce: "1",
       },
       extras: [
         {
@@ -280,6 +336,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
           alias: "GregoCoinPremium",
         },
       ],
+      senders: [{ address: swap.deployerAddress, alias: "swap-admin" }],
       configIndex: 0,
     });
 
@@ -290,17 +347,16 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     });
 
     // ── 4. Compute selectors and patch swap local.json ───────────────
-    // We reuse the same logic as apps/swap/scripts/add-subscription-fpc.ts.
-    const { FunctionSelector } = await import("@aztec/stdlib/abi");
-    const popArtifactJson = JSON.parse(await readFile(POP_ARTIFACT_PATH, "utf-8"));
-    const ammArtifactJson = JSON.parse(await readFile(AMM_ARTIFACT_PATH, "utf-8"));
-    const popFn = popArtifactJson.functions.find(
-      (f: { name: string }) => f.name === "check_password_and_mint",
+    // Mirrors `apps/swap/scripts/add-subscription-fpc.ts`: use the codegen
+    // artifact objects (already normalised) rather than parsing raw Noir
+    // JSON whose shape nests params under `functions[i].abi.parameters`.
+    const popFn = ProofOfPasswordContractArtifact.functions.find(
+      (f) => f.name === "check_password_and_mint",
     );
-    const ammFn = ammArtifactJson.functions.find(
-      (f: { name: string }) => f.name === "swap_tokens_for_exact_tokens_from",
+    const ammFn = AMMContractArtifact.functions.find(
+      (f) => f.name === "swap_tokens_for_exact_tokens_from",
     );
-    if (!popFn || !ammFn) throw new Error("Expected functions missing from artifact JSON");
+    if (!popFn || !ammFn) throw new Error("Expected functions missing from artifact");
     const popSelector = await FunctionSelector.fromNameAndParameters(popFn.name, popFn.parameters);
     const ammSelector = await FunctionSelector.fromNameAndParameters(ammFn.name, ammFn.parameters);
 

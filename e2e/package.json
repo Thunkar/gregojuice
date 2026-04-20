@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260417",
+    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
     "@gregojuice/aztec": "workspace:*",
     "@gregojuice/ethereum": "workspace:*"
   },

@@ -14,8 +14,15 @@ import { DateProvider } from "@aztec/foundation/timer";
  *   try {
  *     await expect(...).toBeVisible(); // UI sees message ready
  *   } finally {
- *     await stop();
+ *     await stop();              // guaranteed quiescent after this resolves
  *   }
+ *
+ * `stop()` is guaranteed to wait for the last in-flight warp to resolve
+ * (or reject) before returning — so downstream code can rely on the node
+ * being quiescent (no competing block production) as soon as `stop()`
+ * resolves. Critical for specs that submit real txs right after pumping:
+ * leaving a warp racing against a deploy causes the deploy to land mid-
+ * slot and silently stall.
  */
 const WARP_BY_SECONDS = 36n; // one L2 slot
 
@@ -30,36 +37,46 @@ export async function pumpL2Blocks(
   const nodeDebug = createAztecNodeDebugClient(nodeUrl);
   const cheatCodes = await CheatCodes.create([l1RpcUrl], node, new DateProvider());
 
-  let stopped = false;
-  let wake: (() => void) | null = null;
+  const controller = new AbortController();
+  const { signal } = controller;
 
+  // An interruptible sleep tied to the controller's abort signal. As soon
+  // as `controller.abort()` fires the pending timer rejects and we bail
+  // out of the loop.
   const sleep = (ms: number) =>
-    new Promise<void>((resolve) => {
+    new Promise<void>((resolve, reject) => {
+      if (signal.aborted) return reject(new Error("aborted"));
       const timer = setTimeout(resolve, ms);
-      wake = () => {
-        clearTimeout(timer);
-        wake = null;
-        resolve();
-      };
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          reject(new Error("aborted"));
+        },
+        { once: true },
+      );
     });
 
   const loop = (async () => {
-    while (!stopped) {
+    while (!signal.aborted) {
       try {
         await cheatCodes.warpL2TimeAtLeastBy(nodeDebug, WARP_BY_SECONDS);
       } catch (err) {
-        // Swallow — the sequencer might refuse if we're mid-slot. Next iter
-        // will retry.
-        console.warn(`[pump-l2-blocks] warp failed: ${(err as Error).message}`);
+        if (!signal.aborted) {
+          console.warn(`[pump-l2-blocks] warp failed: ${(err as Error).message}`);
+        }
       }
-      if (stopped) break;
-      await sleep(intervalMs);
+      if (signal.aborted) break;
+      try {
+        await sleep(intervalMs);
+      } catch {
+        break;
+      }
     }
   })();
 
   return async () => {
-    stopped = true;
-    wake?.();
+    controller.abort();
     await loop;
   };
 }

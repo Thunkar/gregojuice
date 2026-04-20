@@ -41,14 +41,14 @@ aztec-up install 4.0.0-nightly.20260205
 
 ## Updating to Latest Nightly
 
-```bash
-node scripts/update.js                                        # auto-detect latest
-node scripts/update.js --version 4.0.0-nightly.20260206       # specific version
-PASSWORD=<pw> node scripts/update.js --deploy                  # update + deploy to nextnet
-PASSWORD=<pw> node scripts/update.js --deploy devnet           # update + deploy to devnet
-```
+The update script lives at the repo root and bumps every workspace package + every Nargo.toml in one pass:
 
-Use `--deploy [local|devnet|nextnet]` to deploy after update (default: `nextnet`). Use `--skip-aztec-up` to skip Aztec CLI installation. In CI (`CI=1`), the script installs Aztec via curl instead of aztec-up.
+```bash
+node scripts/update.js                                   # auto-detect latest
+node scripts/update.js --version 4.3.0-nightly.20260420  # specific version
+node scripts/update.js --skip-aztec-up                   # skip Aztec CLI install
+node scripts/update.js --skip-compile                    # skip contract recompile
+```
 
 ## Development Setup
 

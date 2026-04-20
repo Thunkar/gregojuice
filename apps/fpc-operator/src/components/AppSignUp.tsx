@@ -748,6 +748,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     color="info"
                     variant="outlined"
                     sx={{ mr: 0.5, mb: 0.5 }}
+                    data-testid={`app-signup-sender-chip-${s.alias}`}
                   />
                 ))}
 
@@ -759,6 +760,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onChange={(e) => setSenderAddress(e.target.value)}
                     size="small"
                     sx={{ flex: 2 }}
+                    slotProps={{ htmlInput: { "data-testid": "app-signup-sender-address" } }}
                   />
                   <TextField
                     label="Alias"
@@ -767,6 +769,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onChange={(e) => setSenderAlias(e.target.value)}
                     size="small"
                     sx={{ flex: 1 }}
+                    slotProps={{ htmlInput: { "data-testid": "app-signup-sender-alias" } }}
                   />
                   <Button
                     variant="outlined"
@@ -775,12 +778,13 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     disabled={senderRegistering || !senderAddress}
                     startIcon={senderRegistering ? <CircularProgress size={14} /> : <AddIcon />}
                     sx={{ height: 40, whiteSpace: "nowrap" }}
+                    data-testid="app-signup-sender-add"
                   >
                     Add
                   </Button>
                 </Box>
                 {senderError && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
+                  <Alert severity="error" sx={{ mt: 1 }} data-testid="app-signup-sender-error">
                     {senderError}
                   </Alert>
                 )}

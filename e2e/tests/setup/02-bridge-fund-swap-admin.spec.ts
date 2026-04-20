@@ -90,17 +90,20 @@ test.describe.serial("bridge funds swap-admin", () => {
       expect(phase === "bridged" || phase === "claiming").toBe(true);
     }).toPass({ timeout: 60_000 });
 
+    // Scope the pump to the L1→L2 message sync window only. The claim tx
+    // that runs afterwards must not race pump-induced empty blocks.
+    const postPhase = page.getByTestId("bridge-post-phase");
     const stopPump = await pumpL2Blocks({
       nodeUrl: global.nodeUrl,
       l1RpcUrl: global.l1RpcUrl,
     });
     try {
-      await expect(page.getByTestId("bridge-post-phase")).toHaveAttribute("data-claimed", "true", {
-        timeout: 180_000,
-      });
+      await expect(postPhase).toHaveAttribute("data-l2-synced", "true", { timeout: 180_000 });
     } finally {
       await stopPump();
     }
+
+    await expect(postPhase).toHaveAttribute("data-claimed", "true", { timeout: 180_000 });
 
     // Programmatic check: swap-admin should now have public FJ on L2.
     const balance = await getPublicFeeJuiceBalance(global.nodeUrl, global.swapAdmin.address);

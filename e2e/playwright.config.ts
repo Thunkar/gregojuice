@@ -75,14 +75,6 @@ export default defineConfig({
       dependencies: ["fpc-signup"],
       use: { ...desktopChrome, baseURL: "http://localhost:5175" },
     },
-    // ──────────────────────────────────────────────────────────────────
-    // Standalone smoke project used during infra debugging. Not part of
-    // the dependency graph — invoked explicitly with --project=setup-only.
-    {
-      name: "setup-only",
-      testMatch: /setup-only\.spec\.ts$/,
-      use: desktopChrome,
-    },
   ],
   webServer: [
     {
