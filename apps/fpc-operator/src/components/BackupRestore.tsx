@@ -93,9 +93,16 @@ export function BackupRestore({ mode = "full" }: BackupRestoreProps) {
   if (mode === "import-only") {
     return (
       <Box sx={{ textAlign: "center", mt: 2 }}>
-        <input ref={fileInputRef} type="file" accept=".json" hidden onChange={handleFileSelect} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          hidden
+          onChange={handleFileSelect}
+          data-testid="backup-import-input"
+        />
         {importError && (
-          <Alert severity="error" sx={{ mb: 1 }}>
+          <Alert severity="error" sx={{ mb: 1 }} data-testid="backup-import-error">
             {importError}
           </Alert>
         )}
@@ -105,6 +112,7 @@ export function BackupRestore({ mode = "full" }: BackupRestoreProps) {
           startIcon={<UploadFileIcon />}
           onClick={() => fileInputRef.current?.click()}
           sx={{ textTransform: "none" }}
+          data-testid="backup-import-trigger"
         >
           Have a backup? Restore from file
         </Button>
@@ -242,6 +250,7 @@ function ConfirmDialog({
           color="error"
           disabled={applying}
           startIcon={applying ? <CircularProgress size={18} /> : undefined}
+          data-testid="backup-import-confirm-button"
         >
           {applying ? "Restoring..." : "Restore"}
         </Button>

@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
-const STATE_DIR = resolve(ROOT, ".state");
+export const STATE_DIR = resolve(ROOT, ".state");
 
 export const STATE_FILES = {
   global: resolve(STATE_DIR, "global.json"),
@@ -34,8 +34,10 @@ export interface GlobalState {
 export interface FpcState {
   fpcAddress: string;
   fpcAdminAddress: string;
-  /** Contents of the BackupRestore JSON export. */
-  backup: unknown;
+  fpcAdminSecretKey: string;
+  fpcSecretKey: string;
+  /** Absolute path to the backup JSON downloaded from the fpc-dashboard. */
+  backupPath: string;
   signedUp?: {
     [functionKey: string]: {
       contractAddress: string;

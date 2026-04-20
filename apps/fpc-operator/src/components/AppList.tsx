@@ -172,7 +172,7 @@ export function AppList({ fpc, fpcAddress }: AppListProps) {
 
   if (apps.length === 0) {
     return (
-      <Box sx={{ textAlign: "center", py: 4 }}>
+      <Box sx={{ textAlign: "center", py: 4 }} data-testid="app-list" data-count={0}>
         <Typography color="text.secondary">
           No apps signed up yet. Use the "Sign Up" tab to register your first app.
         </Typography>
@@ -181,7 +181,7 @@ export function AppList({ fpc, fpcAddress }: AppListProps) {
   }
 
   return (
-    <Box>
+    <Box data-testid="app-list" data-count={apps.length}>
       <Box
         sx={{
           display: "flex",
@@ -217,7 +217,10 @@ export function AppList({ fpc, fpcAddress }: AppListProps) {
               const usd = usdInfo[key];
               const totalFjRaw = BigInt(app.maxFee) * BigInt(app.maxUses) * BigInt(app.maxUsers);
               return (
-                <TableRow key={i}>
+                <TableRow
+                  key={i}
+                  data-testid={`app-list-row-${app.appAddress}-${app.functionSelector}`}
+                >
                   <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
                     {shortAddress(app.appAddress)}
                   </TableCell>

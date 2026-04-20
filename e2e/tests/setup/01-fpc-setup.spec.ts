@@ -1,8 +1,11 @@
 import { test, expect, type Frame } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import {
   writeState,
   readState,
   STATE_FILES,
+  STATE_DIR,
   type GlobalState,
   type FpcState,
 } from "../../fixtures/state.ts";
@@ -134,12 +137,34 @@ test.describe.serial("fpc-dashboard setup", () => {
 
     // ── Settings tab → Export Backup ─────────────────────────────────
     await page.getByTestId("tab-settings").click();
-    await expect(page.getByTestId("backup-export")).toBeVisible();
-  });
+    const exportBtn = page.getByTestId("backup-export");
+    await expect(exportBtn).toBeVisible();
 
-  test.skip("exports the backup JSON + persists fpc.json", async () => {
-    // TODO: click Export Backup, capture the download, write e2e/.state/fpc.json
-    const fpc: FpcState = { fpcAddress: "0x...", fpcAdminAddress: "0x...", backup: {} };
+    // Clicking Export triggers an anchor-based download via Blob URL. We
+    // capture it through Playwright's download event, persist the JSON to
+    // e2e/.state/, and extract the admin + fpc details into fpc.json so
+    // downstream specs can restore the same identity without re-running
+    // the setup wizard.
+    const downloadPromise = page.waitForEvent("download");
+    await exportBtn.click();
+    const download = await downloadPromise;
+    const backupPath = resolve(STATE_DIR, "fpc-backup.json");
+    await download.saveAs(backupPath);
+
+    const backup = JSON.parse(await readFile(backupPath, "utf-8")) as {
+      admin: { address: string; secretKey: string };
+      fpc: { address: string; secretKey: string } | null;
+    };
+    if (!backup.fpc) throw new Error("Backup JSON has no fpc entry — deploy must have failed");
+
+    const fpc: FpcState = {
+      fpcAddress: backup.fpc.address,
+      fpcAdminAddress: backup.admin.address,
+      fpcAdminSecretKey: backup.admin.secretKey,
+      fpcSecretKey: backup.fpc.secretKey,
+      backupPath,
+    };
     await writeState(STATE_FILES.fpc, fpc);
+    console.log(`[e2e] wrote ${STATE_FILES.fpc} (fpc=${fpc.fpcAddress})`);
   });
 });

@@ -13,6 +13,8 @@ interface FunctionArgsFormProps {
   values: string[];
   onChange: (values: string[]) => void;
   aliasedAddresses?: AliasedAddress[];
+  /** Optional prefix so e2e tests can target each arg input by parameter name. */
+  testIdPrefix?: string;
 }
 
 function isAddressType(type: AbiType): boolean {
@@ -77,6 +79,7 @@ export function FunctionArgsForm({
   values,
   onChange,
   aliasedAddresses,
+  testIdPrefix,
 }: FunctionArgsFormProps) {
   const params = fn.parameters;
 
@@ -102,6 +105,7 @@ export function FunctionArgsForm({
         const isAddr = isAddressType(param.type);
         const label = `${param.name} (${typeLabel(param.type)})`;
         const value = values[i] ?? "";
+        const tid = testIdPrefix ? `${testIdPrefix}-${param.name}` : undefined;
 
         if (isAddr) {
           const matched = options.find((o) => o.address === value) ?? null;
@@ -127,9 +131,18 @@ export function FunctionArgsForm({
               onInputChange={(_, v, reason) => {
                 if (reason === "input") updateValue(i, v);
               }}
-              renderInput={(params) => (
-                <TextField {...params} fullWidth label={label} placeholder="0x..." />
-              )}
+              renderInput={(p) => {
+                const inputProps = tid ? { ...p.inputProps, "data-testid": tid } : p.inputProps;
+                return (
+                  <TextField
+                    {...p}
+                    inputProps={inputProps}
+                    fullWidth
+                    label={label}
+                    placeholder="0x..."
+                  />
+                );
+              }}
             />
           );
         }
@@ -142,6 +155,7 @@ export function FunctionArgsForm({
             value={value}
             onChange={(e) => updateValue(i, e.target.value)}
             size="small"
+            slotProps={tid ? { htmlInput: { "data-testid": tid } } : undefined}
           />
         );
       })}

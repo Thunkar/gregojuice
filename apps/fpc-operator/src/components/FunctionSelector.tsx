@@ -6,6 +6,8 @@ interface FunctionSelectorProps {
   artifact: ContractArtifact;
   selectedFunction: FunctionAbi | null;
   onSelect: (fn: FunctionAbi) => void;
+  /** Optional prefix for data-testids. Used by e2e tests to pick by function name. */
+  testIdPrefix?: string;
 }
 
 function getSponsorableFunctions(artifact: ContractArtifact): FunctionAbi[] {
@@ -40,7 +42,12 @@ function formatType(type: AbiType): string {
   }
 }
 
-export function FunctionSelector({ artifact, selectedFunction, onSelect }: FunctionSelectorProps) {
+export function FunctionSelector({
+  artifact,
+  selectedFunction,
+  onSelect,
+  testIdPrefix = "function-selector",
+}: FunctionSelectorProps) {
   const functions = getSponsorableFunctions(artifact);
 
   if (functions.length === 0) {
@@ -64,9 +71,12 @@ export function FunctionSelector({ artifact, selectedFunction, onSelect }: Funct
         }}
         size="small"
         sx={{ mb: 1 }}
+        slotProps={{
+          select: { SelectDisplayProps: { "data-testid": `${testIdPrefix}-display` } as object },
+        }}
       >
         {functions.map((fn) => (
-          <MenuItem key={fn.name} value={fn.name}>
+          <MenuItem key={fn.name} value={fn.name} data-testid={`${testIdPrefix}-option-${fn.name}`}>
             <Box>
               <Typography variant="body2" fontWeight={600}>
                 {fn.name}

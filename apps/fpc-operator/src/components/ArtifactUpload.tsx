@@ -5,9 +5,14 @@ import { loadContractArtifact, type ContractArtifact } from "@aztec/aztec.js/abi
 
 interface ArtifactUploadProps {
   onArtifactLoaded: (artifact: ContractArtifact) => void;
+  /**
+   * Optional prefix for the internal file input's `data-testid`. Used by
+   * e2e tests to drive the dropzone via `setInputFiles()`.
+   */
+  testId?: string;
 }
 
-export function ArtifactUpload({ onArtifactLoaded }: ArtifactUploadProps) {
+export function ArtifactUpload({ onArtifactLoaded, testId }: ArtifactUploadProps) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: async (files) => {
       const file = files[0];
@@ -38,7 +43,7 @@ export function ArtifactUpload({ onArtifactLoaded }: ArtifactUploadProps) {
         "&:hover": { borderColor: "primary.main" },
       }}
     >
-      <input {...getInputProps()} />
+      <input {...getInputProps()} data-testid={testId ?? "artifact-upload-input"} />
       <UploadFileIcon sx={{ fontSize: 48, color: "primary.main", mb: 1 }} />
       <Typography variant="body1" sx={{ mb: 1 }}>
         {isDragActive ? "Drop the artifact here" : "Upload Contract Artifact"}

@@ -267,6 +267,7 @@ export function CalibrationResult({
             : "Adjust multiplier or enter manually"
         }
         sx={{ mb: 2 }}
+        slotProps={{ htmlInput: { "data-testid": "app-signup-max-fee" } }}
       />
 
       {/* Cost summary */}

@@ -407,7 +407,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   // ── Render ──────────────────────────────────────────────────────────
 
   return (
-    <Box>
+    <Box data-testid="app-signup" data-active-step={activeStep}>
       <Stepper activeStep={activeStep} orientation="vertical">
         {/* Step 0: Contract Artifact & Address */}
         <Step>
@@ -424,7 +424,10 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
           </StepLabel>
           <StepContent>
             {!artifact ? (
-              <ArtifactUpload onArtifactLoaded={handleArtifactLoaded} />
+              <ArtifactUpload
+                onArtifactLoaded={handleArtifactLoaded}
+                testId="app-signup-artifact"
+              />
             ) : (
               <Box>
                 <Box
@@ -474,6 +477,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                   size="small"
                   helperText="Shown in address combos when picking args"
                   sx={{ mb: 2 }}
+                  slotProps={{ htmlInput: { "data-testid": "app-signup-contract-alias" } }}
                 />
 
                 {instanceMode === "public" && (
@@ -486,12 +490,14 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                       onChange={(e) => setContractAddress(e.target.value)}
                       size="small"
                       sx={{ mb: 2 }}
+                      slotProps={{ htmlInput: { "data-testid": "app-signup-contract-address" } }}
                     />
                     <Button
                       fullWidth
                       variant="contained"
                       onClick={handleRegisterPublic}
                       disabled={registering || !contractAddress}
+                      data-testid="app-signup-register"
                     >
                       {registering ? <CircularProgress size={20} /> : "Fetch & Register"}
                     </Button>
@@ -577,12 +583,16 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                 )}
 
                 {registerError && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
+                  <Alert severity="error" sx={{ mt: 1 }} data-testid="app-signup-register-error">
                     {registerError}
                   </Alert>
                 )}
                 {contractInstance && (
-                  <Alert severity="success" sx={{ mt: 1 }}>
+                  <Alert
+                    severity="success"
+                    sx={{ mt: 1 }}
+                    data-testid="app-signup-register-success"
+                  >
                     Registered: {shortAddress(contractInstance.address.toString())}
                   </Alert>
                 )}
@@ -610,6 +620,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                 artifact={artifact}
                 selectedFunction={selectedFunction}
                 onSelect={handleFunctionSelected}
+                testIdPrefix="app-signup-function-select"
               />
             )}
           </StepContent>
@@ -660,13 +671,17 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onDelete={() => removeStoredContractAlias(ec.address)}
                     size="small"
                     sx={{ mr: 0.5, mb: 0.5 }}
+                    data-testid={`app-signup-extra-chip-${ec.alias}`}
                   />
                 ))}
 
                 {!extraArtifact ? (
-                  <ArtifactUpload onArtifactLoaded={setExtraArtifact} />
+                  <ArtifactUpload
+                    onArtifactLoaded={setExtraArtifact}
+                    testId="app-signup-extra-artifact"
+                  />
                 ) : (
-                  <Box sx={{ mt: 1 }}>
+                  <Box sx={{ mt: 1 }} data-testid="app-signup-extra-form">
                     <Chip label={extraArtifact.name} size="small" sx={{ mb: 1 }} />
                     <TextField
                       fullWidth
@@ -676,6 +691,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                       onChange={(e) => setExtraAddress(e.target.value)}
                       size="small"
                       sx={{ mb: 1 }}
+                      slotProps={{ htmlInput: { "data-testid": "app-signup-extra-address" } }}
                     />
                     <TextField
                       fullWidth
@@ -685,6 +701,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                       onChange={(e) => setExtraAlias(e.target.value)}
                       size="small"
                       sx={{ mb: 1 }}
+                      slotProps={{ htmlInput: { "data-testid": "app-signup-extra-alias" } }}
                     />
                     <Box sx={{ display: "flex", gap: 1 }}>
                       <Button
@@ -693,6 +710,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                         onClick={handleRegisterExtra}
                         disabled={extraRegistering || !extraAddress}
                         startIcon={extraRegistering ? <CircularProgress size={14} /> : <AddIcon />}
+                        data-testid="app-signup-extra-register"
                       >
                         Register
                       </Button>
@@ -778,22 +796,28 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                       values={argValues}
                       onChange={setArgValues}
                       aliasedAddresses={aliasedAddresses}
+                      testIdPrefix="app-signup-arg"
                     />
                   </Box>
                 )}
 
                 {calibrationError && (
-                  <Alert severity="error" sx={{ mt: 1 }}>
+                  <Alert severity="error" sx={{ mt: 1 }} data-testid="app-signup-calibration-error">
                     {calibrationError}
                   </Alert>
                 )}
 
-                <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+                <Box
+                  sx={{ display: "flex", gap: 1, mt: 2 }}
+                  data-testid="app-signup-calibration"
+                  data-calibrated={calibrationResult ? "true" : "false"}
+                >
                   <Button
                     variant="contained"
                     onClick={handleCalibrate}
                     disabled={calibrating}
                     sx={{ flex: 1 }}
+                    data-testid="app-signup-calibrate"
                   >
                     {calibrating ? (
                       <>
@@ -807,7 +831,12 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     )}
                   </Button>
                   {calibrationResult && (
-                    <Button variant="outlined" onClick={handleSimulationDone} sx={{ flex: 1 }}>
+                    <Button
+                      variant="outlined"
+                      onClick={handleSimulationDone}
+                      sx={{ flex: 1 }}
+                      data-testid="app-signup-calibration-continue"
+                    >
                       Continue to Review
                     </Button>
                   )}
@@ -1054,6 +1083,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onChange={(e) => setConfigIndex(e.target.value)}
                     size="small"
                     sx={{ flex: 1 }}
+                    slotProps={{ htmlInput: { "data-testid": "app-signup-config-index" } }}
                   />
                   <TextField
                     label="Uses / subscription"
@@ -1062,6 +1092,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onChange={(e) => setMaxUses(e.target.value)}
                     size="small"
                     sx={{ flex: 1 }}
+                    slotProps={{ htmlInput: { "data-testid": "app-signup-max-uses" } }}
                   />
                   <TextField
                     label="Users (slots)"
@@ -1071,16 +1102,17 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     size="small"
                     sx={{ flex: 1 }}
                     helperText="≥ 1"
+                    slotProps={{ htmlInput: { "data-testid": "app-signup-max-users" } }}
                   />
                 </Box>
 
                 {submitError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
+                  <Alert severity="error" sx={{ mb: 2 }} data-testid="app-signup-submit-error">
                     {submitError}
                   </Alert>
                 )}
                 {success && (
-                  <Alert severity="success" sx={{ mb: 2 }}>
+                  <Alert severity="success" sx={{ mb: 2 }} data-testid="app-signup-success">
                     App signed up successfully!
                   </Alert>
                 )}
@@ -1099,6 +1131,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     onClick={handleSignUp}
                     disabled={submitting || !maxFeeFj}
                     sx={{ flex: 1 }}
+                    data-testid="app-signup-submit"
                   >
                     {submitting ? (
                       <>
