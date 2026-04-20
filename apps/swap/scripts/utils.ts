@@ -152,8 +152,8 @@ export async function setupWallet(
 }
 
 /**
- * Reconstructs the deployer account from SECRET env var (deterministic)
- * or creates a new random one. Returns the address.
+ * Reconstructs the deployer account from an explicit secret, the SECRET env
+ * var (deterministic), or a new random one. Returns the address.
  *
  * `paymentMethod` covers the init tx. In `feejuice` mode pass `undefined`
  * (account pays with its own FJ); the account must be funded beforehand.
@@ -161,9 +161,11 @@ export async function setupWallet(
 export async function getOrCreateDeployer(
   wallet: EmbeddedWallet,
   paymentMethod?: PaymentMethod,
+  secret?: string,
 ): Promise<AztecAddress> {
   const salt = new Fr(0);
-  const secretKey = process.env.SECRET ? Fr.fromString(process.env.SECRET) : await Fr.random();
+  const seed = secret ?? process.env.SECRET;
+  const secretKey = seed ? Fr.fromString(seed) : await Fr.random();
   const signingKey = deriveSigningKey(secretKey);
   const accountManager = await wallet.createSchnorrAccount(secretKey, salt, signingKey);
 

@@ -2,18 +2,18 @@
   "id": "local",
   "nodeUrl": "http://localhost:8080",
   "chainId": "31337",
-  "rollupVersion": "1535253207",
+  "rollupVersion": "3708660450",
   "contracts": {
-    "gregoCoin": "0x1880a9d171157f62265cce6eda6ea8d44ef60c655f376780d807a9fe8ecbf90e",
-    "gregoCoinPremium": "0x071a12469856275ba38f9d8b745145436a852bffc71fd9f981ceac82d0282624",
-    "amm": "0x1c22715a2ebc919dc21028eccd894825b792ce30b70f4f3d9c80c481a8b6a79c",
-    "liquidityToken": "0x20407854e0666286a3bbde36bd9a9df7061dddcb65e8717b3a406d3b5687c2d9",
-    "pop": "0x275644890c5bb6ab046e7b95bb1f0e3f01b537e069465c965a6fb5cb5e468532",
-    "sponsoredFPC": "0x20473916aa22fb5583db1145e3a4aa6aade0abfacc7af384ab84519a0e213c25",
-    "salt": "0x210d40dd230f6ddc97de29552ab44fe703b5d8d9c56547ec6e7218adb98d1f94"
+    "gregoCoin": "0x303735f880a1332a491a18f45f45708cc8199166d0ed58cc92141a7ff55946bf",
+    "gregoCoinPremium": "0x1c42877f30523a82c325bf05c4e47b3986badb7362394d426cad58613aa455f5",
+    "amm": "0x16394fc8c87a4b08482573b191848a135bbb1849bdb9f3f541ee36a55a9d6ca7",
+    "liquidityToken": "0x20ed3515355d35939ddfc2f775a3c206e79853afc2455e36931395e7e9705e45",
+    "pop": "0x0af461627afe37423805829edad23f438a047e388bebf8f951a5cd8495580f3a",
+    "sponsoredFPC": "0x254082b62f9108d044b8998f212bb145619d91bfcd049461d74babb840181257",
+    "salt": "0x0c495cef55f6a53b906cff99c202005215a620bd3901942b367a2755c66746ca"
   },
   "deployer": {
-    "address": "0x10772acb3e900357b93419bb6f2bf3b96dd4df38d6f023ca4d9c3c85e62ca8d2"
+    "address": "0x0318d257cbb7e8810ed4bfad91dda7222eba547dd87cf753f8b4cffc72ec69f2"
   },
-  "deployedAt": "2026-01-28T07:58:24.775Z"
+  "deployedAt": "2026-04-20T12:14:29.289Z"
 }
