@@ -6,7 +6,8 @@
   "workspaces": [
     "apps/*",
     "e2e",
-    "packages/*"
+    "packages/*",
+    "packages/contracts/*"
   ],
   "scripts": {
     "dev": "turbo run dev",
@@ -17,7 +18,7 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "typecheck": "turbo run typecheck",
-    "compile:contracts": "cd packages/aztec/contracts && aztec compile && aztec codegen ./target -o ./artifacts",
+    "compile:contracts": "cd packages/contracts/aztec/noir && aztec compile && aztec codegen ./target -o ./artifacts",
     "publish:packages": "./scripts/publish.sh"
   },
   "devDependencies": {

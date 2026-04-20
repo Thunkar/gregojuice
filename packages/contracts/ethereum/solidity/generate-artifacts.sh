@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Compiles the Solidity contract and generates TypeScript artifacts.
-# Usage: cd packages/ethereum/contracts && ./generate-artifacts.sh
+# Usage: cd packages/contracts/ethereum/solidity && ./generate-artifacts.sh
 
 set -euo pipefail
 

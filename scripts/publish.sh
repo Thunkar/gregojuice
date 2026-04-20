@@ -21,8 +21,8 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 PACKAGES=(
   "$ROOT_DIR/packages/embedded-wallet"
-  "$ROOT_DIR/packages/aztec"
-  "$ROOT_DIR/packages/ethereum"
+  "$ROOT_DIR/packages/contracts/aztec"
+  "$ROOT_DIR/packages/contracts/ethereum"
 )
 
 # Bump versions based on latest published version from npm
@@ -46,11 +46,11 @@ done
 # Build
 echo ""
 echo "Building @gregojuice/aztec..."
-cd "$ROOT_DIR/packages/aztec"
+cd "$ROOT_DIR/packages/contracts/aztec"
 yarn build
 
 echo "Building @gregojuice/ethereum..."
-cd "$ROOT_DIR/packages/ethereum"
+cd "$ROOT_DIR/packages/contracts/ethereum"
 yarn build
 
 echo "Building @gregojuice/embedded-wallet..."
@@ -62,11 +62,11 @@ export YARN_NPM_AUTH_TOKEN="$NPM_TOKEN"
 
 echo ""
 echo "Publishing @gregojuice/aztec..."
-cd "$ROOT_DIR/packages/aztec"
+cd "$ROOT_DIR/packages/contracts/aztec"
 yarn npm publish --access public
 
 echo "Publishing @gregojuice/ethereum..."
-cd "$ROOT_DIR/packages/ethereum"
+cd "$ROOT_DIR/packages/contracts/ethereum"
 yarn npm publish --access public
 
 echo "Publishing @gregojuice/embedded-wallet..."

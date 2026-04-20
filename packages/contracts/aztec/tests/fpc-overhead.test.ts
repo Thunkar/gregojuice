@@ -26,7 +26,7 @@ import {
   buildNoirFunctionCall,
   buildExtraHashedArgs,
 } from "../lib/subscription-fpc.js";
-import { SubscriptionFPCContract } from "../contracts/artifacts/SubscriptionFPC.js";
+import { SubscriptionFPCContract } from "../noir/artifacts/SubscriptionFPC.js";
 import { setupTestContext, type FPCTestContext, type GasValues, toGas, logGas } from "./utils.js";
 import {
   PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF,

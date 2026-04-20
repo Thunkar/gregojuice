@@ -13,7 +13,7 @@ yarn.lock
 **/codegenCache.json
 
 # Vendored / third-party
-packages/ethereum/contracts/lib/
+packages/contracts/ethereum/solidity/lib/
 
 # HTML/JSON artifacts we don't want prettier to rewrite
 packages/*/dist/**

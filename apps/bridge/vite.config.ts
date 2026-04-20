@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
         "@gregojuice/common": resolve(import.meta.dirname, "../../packages/common/src/index.ts"),
         "@gregojuice/ethereum": resolve(
           import.meta.dirname,
-          "../../packages/ethereum/generated/bridge-contract-artifacts.ts",
+          "../../packages/contracts/ethereum/generated/bridge-contract-artifacts.ts",
         ),
       },
     },

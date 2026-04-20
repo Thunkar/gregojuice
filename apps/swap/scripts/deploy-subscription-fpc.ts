@@ -18,8 +18,8 @@ import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
 import { waitForL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
 import { createExtendedL1Client } from "@aztec/ethereum/client";
+import { createEthereumChain } from "@aztec/ethereum/chain";
 import { createLogger } from "@aztec/foundation/log";
-import { foundry } from "viem/chains";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
@@ -186,7 +186,8 @@ async function bridgeTokens(
   l1FunderKey: string,
   fpcAddress: AztecAddress,
 ) {
-  const l1Client = createExtendedL1Client([l1RpcUrl], l1FunderKey, foundry);
+  const chain = createEthereumChain([l1RpcUrl], 31337);
+  const l1Client = createExtendedL1Client(chain.rpcUrls, l1FunderKey, chain.chainInfo);
   const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, createLogger("bridge"));
 
   const bridgeAmount: bigint = BigInt("1000000000000000000000"); // 1000 FJ

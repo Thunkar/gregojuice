@@ -14,7 +14,7 @@ import { FPC_TEARDOWN_L2_GAS, FPC_TEARDOWN_DA_GAS } from "./fpc-gas-constants.js
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
-} from "../contracts/artifacts/SubscriptionFPC.js";
+} from "../noir/artifacts/SubscriptionFPC.js";
 import { computeVarArgsHash, computeCalldataHash } from "@aztec/stdlib/hash";
 import { HashedValues } from "@aztec/stdlib/tx";
 import { NO_FROM } from "@aztec/aztec.js/account";

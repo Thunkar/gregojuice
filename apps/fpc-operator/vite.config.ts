@@ -49,15 +49,15 @@ export default defineConfig(({ mode }) => {
         "@gregojuice/common": resolve(import.meta.dirname, "../../packages/common/src/index.ts"),
         "@gregojuice/aztec/subscription-fpc": resolve(
           import.meta.dirname,
-          "../../packages/aztec/lib/subscription-fpc.ts",
+          "../../packages/contracts/aztec/lib/subscription-fpc.ts",
         ),
         "@gregojuice/aztec/fpc-gas-constants": resolve(
           import.meta.dirname,
-          "../../packages/aztec/lib/fpc-gas-constants.ts",
+          "../../packages/contracts/aztec/lib/fpc-gas-constants.ts",
         ),
         "@gregojuice/aztec/artifacts/SubscriptionFPC": resolve(
           import.meta.dirname,
-          "../../packages/aztec/contracts/artifacts/SubscriptionFPC.ts",
+          "../../packages/contracts/aztec/noir/artifacts/SubscriptionFPC.ts",
         ),
       },
     },

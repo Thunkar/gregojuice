@@ -5,7 +5,7 @@ import { TokenContract } from "@gregojuice/aztec/artifacts/Token";
 import { AMMContract } from "@gregojuice/aztec/artifacts/AMM";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { Fr } from "@aztec/foundation/curves/bn254";
-import type { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
+import type { FeeJuicePaymentMethod, SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
 import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 
 import { ProofOfPasswordContract } from "@gregojuice/aztec/artifacts/ProofOfPassword";
@@ -18,6 +18,8 @@ import {
   setupWallet,
   getOrCreateDeployer,
 } from "./utils.ts";
+
+type PaymentMethod = FeeJuicePaymentMethod | SponsoredFeePaymentMethod;
 
 const NETWORK = parseNetwork();
 const MINT_TO_ADDRESSES = parseAddressList("--mint-to", "MINT_TO");
@@ -33,7 +35,7 @@ const INITIAL_TOKEN_BALANCE = 1_000_000_000n;
 async function deployContracts(
   wallet: EmbeddedWallet,
   deployer: AztecAddress,
-  paymentMethod?: SponsoredFeePaymentMethod,
+  paymentMethod?: PaymentMethod,
 ) {
   const contractAddressSalt = Fr.random();
 
@@ -213,11 +215,17 @@ async function writeNetworkConfig(
 }
 
 async function main() {
-  const { node, wallet, paymentMethod, sponsoredFPC } = await setupWallet(AZTEC_NODE_URL, NETWORK);
+  const { node, wallet, sponsoredFPC, resolvePaymentMethod } = await setupWallet(
+    AZTEC_NODE_URL,
+    NETWORK,
+  );
 
   const { rollupVersion, l1ChainId: chainId } = await node.getNodeInfo();
 
-  const deployer = await getOrCreateDeployer(wallet, paymentMethod);
+  // In feejuice mode the deployer pays for its own init tx — caller must
+  // have bridged FJ to this address before invoking the script.
+  const deployer = await getOrCreateDeployer(wallet, resolvePaymentMethod);
+  const paymentMethod = resolvePaymentMethod(deployer);
 
   const contractDeploymentInfo = await deployContracts(wallet, deployer, paymentMethod);
   const deploymentInfo = {

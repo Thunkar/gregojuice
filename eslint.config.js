@@ -21,7 +21,7 @@ export const baseConfig = tseslint.config(
       "**/out",
       "**/.turbo",
       "**/codegenCache.json",
-      "packages/ethereum/contracts/lib",
+      "packages/contracts/ethereum/solidity/lib",
     ],
   },
   {

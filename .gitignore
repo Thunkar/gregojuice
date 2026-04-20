@@ -27,17 +27,17 @@ dist-ssr
 vite.config.ts.*
 
 # Aztec (Noir) build outputs
-packages/aztec/contracts/target
-packages/aztec/contracts/artifacts
-packages/aztec/dist
+packages/contracts/aztec/noir/target
+packages/contracts/aztec/noir/artifacts
+packages/contracts/aztec/dist
 
 # Ethereum (Foundry) build outputs
-packages/ethereum/contracts/out
-packages/ethereum/contracts/cache
-packages/ethereum/contracts/broadcast
-packages/ethereum/contracts/lib
-packages/ethereum/generated
-packages/ethereum/dist
+packages/contracts/ethereum/solidity/out
+packages/contracts/ethereum/solidity/cache
+packages/contracts/ethereum/solidity/broadcast
+packages/contracts/ethereum/solidity/lib
+packages/contracts/ethereum/generated
+packages/contracts/ethereum/dist
 
 # Playwright / e2e outputs
 e2e/playwright-report

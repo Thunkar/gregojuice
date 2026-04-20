@@ -1782,9 +1782,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@gregojuice/aztec@workspace:*, @gregojuice/aztec@workspace:packages/aztec":
+"@gregojuice/aztec@workspace:*, @gregojuice/aztec@workspace:packages/contracts/aztec":
   version: 0.0.0-use.local
-  resolution: "@gregojuice/aztec@workspace:packages/aztec"
+  resolution: "@gregojuice/aztec@workspace:packages/contracts/aztec"
   dependencies:
     "@aztec/accounts": "npm:v4.3.0-nightly.20260417"
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260417"
@@ -1885,9 +1885,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@gregojuice/ethereum@workspace:*, @gregojuice/ethereum@workspace:packages/ethereum":
+"@gregojuice/ethereum@workspace:*, @gregojuice/ethereum@workspace:packages/contracts/ethereum":
   version: 0.0.0-use.local
-  resolution: "@gregojuice/ethereum@workspace:packages/ethereum"
+  resolution: "@gregojuice/ethereum@workspace:packages/contracts/ethereum"
   dependencies:
     typescript: "npm:~5.7.3"
     viem: "npm:^2.23.0"

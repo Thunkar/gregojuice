@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
     "declaration": true,
@@ -10,5 +10,5 @@
     "noEmit": false,
     "resolveJsonModule": true
   },
-  "include": ["generated/**/*.ts", "lib/**/*.ts"]
+  "include": ["lib/**/*.ts", "noir/artifacts/**/*.ts"]
 }

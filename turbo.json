@@ -5,9 +5,9 @@
       "dependsOn": ["^build"],
       "outputs": [
         "dist/**",
-        "contracts/artifacts/**",
-        "contracts/target/**",
-        "contracts/out/**",
+        "noir/artifacts/**",
+        "noir/target/**",
+        "solidity/out/**",
         "generated/**"
       ]
     },

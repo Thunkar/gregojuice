@@ -7,7 +7,7 @@ import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
 
-import { EcdsaAccountDeployerContract } from "../contracts/artifacts/EcdsaAccountDeployer.js";
+import { EcdsaAccountDeployerContract } from "../noir/artifacts/EcdsaAccountDeployer.js";
 import { SubscriptionFPC } from "../lib/subscription-fpc.js";
 import { setupTestContext, type FPCTestContext } from "./utils.js";
 
