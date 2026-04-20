@@ -1,5 +1,5 @@
 import { createPublicClient, custom, type Hex } from "viem";
-import { BRIDGE_CONTRACT_ABI } from "@gregojuice/ethereum";
+import { BRIDGE_CONTRACT_ABI, getBridgeAddress } from "@gregojuice/ethereum";
 import type { L1Addresses, BridgeStep, PendingBridge, ClaimCredentials } from "../types";
 import {
   getL1Clients,
@@ -7,7 +7,6 @@ import {
   toHex64,
   generateClaimSecret,
   extractAllDepositEvents,
-  deployOrGetBridgeContract,
   viemReadContract,
   erc20ReadAbi,
   erc20WriteAbi,
@@ -48,9 +47,7 @@ async function executeBridge(params: ExecuteBridgeParams): Promise<ClaimCredenti
   );
   const amounts = recipients.map((r) => r.amount);
 
-  // Deploy or retrieve the bridge contract
-  onStep("approving", isSingle ? undefined : "Preparing bridge contract...");
-  const bridgeAddr = await deployOrGetBridgeContract(publicClient, walletClient, account, chain);
+  const bridgeAddr = getBridgeAddress();
 
   // Build PendingBridge for crash recovery
   const pendingBridge: PendingBridge = {

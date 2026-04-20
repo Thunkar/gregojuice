@@ -13,12 +13,14 @@ import {
 import { FunctionSelector } from "@aztec/stdlib/abi";
 import type { ContractArtifact } from "@aztec/aztec.js/abi";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
+import type { FeeJuicePaymentMethod, SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
+
+type PaymentMethod = FeeJuicePaymentMethod | SponsoredFeePaymentMethod;
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
-import { waitForL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
 import { createExtendedL1Client } from "@aztec/ethereum/client";
 import { createEthereumChain } from "@aztec/ethereum/chain";
+import { advanceL1ToL2Message } from "./cheat-codes.ts";
 import { createLogger } from "@aztec/foundation/log";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
@@ -85,8 +87,9 @@ async function main() {
   const configPath = process.env.NETWORK_CONFIG_PATH ?? DEFAULTS.configPath;
   const config = loadConfig(configPath);
 
-  const { wallet, node, paymentMethod } = await setupWallet(config.nodeUrl, "local");
-  const fpcDeployer = await getOrCreateDeployer(wallet, paymentMethod);
+  const { wallet, node, resolvePaymentMethod } = await setupWallet(config.nodeUrl, "local");
+  const fpcDeployer = await getOrCreateDeployer(wallet, resolvePaymentMethod);
+  const paymentMethod = resolvePaymentMethod(fpcDeployer);
 
   const { fpcAddress, secretKey } = await deployAndRegisterSubscriptionFpc(
     node,
@@ -95,22 +98,10 @@ async function main() {
     paymentMethod,
   );
 
-  // Order matters here:
-  //
-  // 1. bridgeTokens() submits the L1 mint + bridge tx. This is only the L1 half of the flow: the L1->L2 message is now
-  //    pending and needs the L2 sequencer to pick it up before we can claim. On local setups L2 sequencer is quiet
-  //    when nothing else is happening, so we can't just wait.
-  //
-  // 2. executeFpcSignUps() fires a burst of L2 txs (one per sponsored function). Beyond their functional purpose,
-  //    these txs force L2 block production, which advances the chain past the checkpoint containing our pending bridge
-  //    message.
-  //
-  // 3. claimFeeJuiceOnL2() claims tx crediting the FPC's public fee juice balance so it can actually sponsor user
-  //    calls.
-  //
-  // If we did them in the "obvious" order (bridge -> claim -> sign_up), the claim would hang forever waiting for an L2
-  // block that never comes... so it is a bit of a hack, but it works.
+  // Bridge → claim → sign up, using admin-mode time warps via CheatCodes to
+  // force L2 block production so the L1→L2 message becomes available.
   const feeJuiceClaim = await bridgeTokens(node, config.l1RpcUrl, config.l1FunderKey, fpcAddress);
+  await claimFeeJuiceOnL2(node, feeJuiceClaim, wallet, fpcAddress, fpcDeployer, paymentMethod);
   const signedUpFunctions = await executeFpcSignUps(
     fpcAddress,
     fpcDeployer,
@@ -118,7 +109,6 @@ async function main() {
     paymentMethod,
     config.contracts,
   );
-  await claimFeeJuiceOnL2(node, feeJuiceClaim, wallet, fpcAddress, fpcDeployer, paymentMethod);
   updateNetworkConfigFile(config, fpcAddress, secretKey, signedUpFunctions, configPath);
 }
 
@@ -140,13 +130,12 @@ async function claimFeeJuiceOnL2(
   wallet: EmbeddedWallet,
   fpcAddress: AztecAddress,
   fpcDeployer: AztecAddress,
-  paymentMethod: SponsoredFeePaymentMethod,
+  paymentMethod: PaymentMethod,
 ) {
-  // Wait for the L1->L2 bridge message and claim the FJ to credit the FPC's balance.
-  console.log("\nWaiting for L1->L2 message sync...");
-  await waitForL1ToL2MessageReady(node, Fr.fromHexString(feeJuiceClaim.messageHash), {
-    timeoutSeconds: 120,
-  });
+  // Advance L1+L2 time via admin-mode CheatCodes until the bridge message
+  // becomes available — no dummy txs needed.
+  console.log("\nAdvancing time to let the L1→L2 message land...");
+  await advanceL1ToL2Message(node, Fr.fromHexString(feeJuiceClaim.messageHash));
   console.log("Message ready");
 
   console.log("Claiming fee juice on L2 for FPC...");
@@ -206,7 +195,7 @@ async function executeFpcSignUps(
   fpcAddress: AztecAddress,
   fpcDeployer: AztecAddress,
   wallet: EmbeddedWallet,
-  paymentMethod: SponsoredFeePaymentMethod,
+  paymentMethod: PaymentMethod,
   contracts: Record<string, string>,
 ): Promise<ResolvedSignup[]> {
   // Sign up functions so users can subscribe. These L2 txs also advance the L2 chain,
@@ -245,7 +234,7 @@ async function executeFpcSignUps(
 async function deploySubscriptionFpc(
   wallet: EmbeddedWallet,
   deployer: AztecAddress,
-  paymentMethod: SponsoredFeePaymentMethod,
+  paymentMethod: PaymentMethod,
 ): Promise<{ address: AztecAddress; secretKey: Fr }> {
   console.log("Deploying SubscriptionFPC...");
   const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(wallet, deployer);
@@ -326,7 +315,7 @@ async function deployAndRegisterSubscriptionFpc(
   node: AztecNode,
   wallet: EmbeddedWallet,
   deployer: AztecAddress,
-  paymentMethod: SponsoredFeePaymentMethod,
+  paymentMethod: PaymentMethod,
 ) {
   const { address: fpcAddress, secretKey } = await deploySubscriptionFpc(
     wallet,

@@ -107,7 +107,10 @@ export function useBridgeWizard() {
   // ── Derived values ────────────────────────────────────────────────
   // L1 state
   const hasFaucet = !!l1Addresses?.feeAssetHandler;
-  const hasBalance = balance != null && balance.balance > 0n;
+  // Treat dust (< 10 FJ) as "no balance" so the faucet path still kicks in
+  // when a past faucet mint left a sub-bridgeable amount in the wallet.
+  const MIN_USABLE_BALANCE = 10n * 10n ** 18n;
+  const hasBalance = balance != null && balance.balance >= MIN_USABLE_BALANCE;
   const faucetLocked = hasFaucet && !hasBalance;
 
   // Aztec account readiness

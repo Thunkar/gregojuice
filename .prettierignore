@@ -5,6 +5,7 @@
 **/generated/
 **/out/
 **/.turbo/
+**/.state/
 **/node_modules/
 **/*.tsbuildinfo
 

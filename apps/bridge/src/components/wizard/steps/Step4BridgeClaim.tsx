@@ -227,6 +227,7 @@ export function Step4BridgeClaim({
               color="primary"
               onClick={handleBridge}
               disabled={!allAmountsFilled}
+              data-testid="bridge-submit"
             >
               {faucetLocked ? "Mint & Bridge" : "Bridge"}
             </Button>

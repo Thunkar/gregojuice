@@ -2,12 +2,12 @@
   "name": "@gregojuice/ethereum",
   "version": "0.0.18",
   "type": "module",
-  "main": "dist/generated/bridge-contract-artifacts.js",
-  "types": "dist/generated/bridge-contract-artifacts.d.ts",
+  "main": "dist/lib/deterministic.js",
+  "types": "dist/lib/deterministic.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/generated/bridge-contract-artifacts.d.ts",
-      "import": "./dist/generated/bridge-contract-artifacts.js"
+      "types": "./dist/lib/deterministic.d.ts",
+      "import": "./dist/lib/deterministic.js"
     }
   },
   "files": [
@@ -19,7 +19,6 @@
     "build:codegen": "cd solidity && ./generate-artifacts.sh",
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "yarn build:forge && yarn build:codegen && yarn build:ts",
-    "deploy": "cd solidity && forge script script/Deploy.s.sol --rpc-url ${L1_RPC_URL:-https://ethereum-sepolia-rpc.publicnode.com} --private-key $PRIVATE_KEY --broadcast",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "yarn build"

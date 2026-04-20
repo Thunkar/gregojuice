@@ -17,7 +17,6 @@ on:
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VITE_BRIDGE_CONTRACT_ADDRESS: ${{ vars.VITE_BRIDGE_CONTRACT_ADDRESS }}
 
 permissions:
   contents: read

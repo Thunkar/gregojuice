@@ -13,11 +13,13 @@
   },
   "dependencies": {
     "@aztec/aztec.js": "v4.3.0-nightly.20260417",
-    "@gregojuice/aztec": "workspace:*"
+    "@gregojuice/aztec": "workspace:*",
+    "@gregojuice/ethereum": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "@types/node": "^22.15.17",
-    "typescript": "~5.7.3"
+    "typescript": "~5.7.3",
+    "viem": "^2.23.0"
   }
 }

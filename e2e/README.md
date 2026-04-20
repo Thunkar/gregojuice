@@ -21,7 +21,7 @@ The config starts a dev server per app (swap:5175, bridge:5173, fpc-operator:517
 Skip the network startup during local iteration (e.g. when you already have `aztec start --local-network` running in another terminal):
 
 ```sh
-GJ_E2E_SKIP_NETWORK=1 yarn workspace @gregojuice/e2e test
+E2E_SKIP_NETWORK=1 yarn workspace @gregojuice/e2e test
 ```
 
 ## CI

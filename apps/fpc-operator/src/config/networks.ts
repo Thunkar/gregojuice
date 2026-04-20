@@ -14,6 +14,13 @@ const NETWORKS: NetworkConfig[] = [
     l1RpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
     l1ChainId: 11155111,
   },
+  {
+    id: "local",
+    name: "Local Network",
+    aztecNodeUrl: "http://localhost:8080",
+    l1RpcUrl: "http://localhost:8545",
+    l1ChainId: 31337,
+  },
 ];
 
 // Allow overriding via environment variables

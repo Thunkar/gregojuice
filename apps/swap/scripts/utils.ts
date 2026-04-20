@@ -131,9 +131,7 @@ export interface SetupWalletResult {
    * `resolvePaymentMethod(deployer)` after `getOrCreateDeployer` to get the
    * real one — needed because `FeeJuicePaymentMethod` wants the payer address.
    */
-  resolvePaymentMethod: (
-    payer: AztecAddress,
-  ) => FeeJuicePaymentMethod | SponsoredFeePaymentMethod;
+  resolvePaymentMethod: (payer: AztecAddress) => FeeJuicePaymentMethod | SponsoredFeePaymentMethod;
 }
 
 export async function setupWallet(

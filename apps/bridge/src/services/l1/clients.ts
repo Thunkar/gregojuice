@@ -13,8 +13,7 @@ import {
 import { sepolia, mainnet, foundry } from "viem/chains";
 import { computeSecretHash } from "@aztec/aztec.js/crypto";
 import { Fr } from "@aztec/foundation/curves/bn254";
-import { BRIDGE_CONTRACT_ABI, BRIDGE_CONTRACT_BYTECODE } from "@gregojuice/ethereum";
-import { BRIDGE_CONTRACT_STORAGE_KEY } from "../../components/wizard/constants";
+import { BRIDGE_CONTRACT_ABI } from "@gregojuice/ethereum";
 
 // ── ABIs ─────────────────────────────────────────────────────────────
 
@@ -167,62 +166,12 @@ export function extractAllDepositEvents(receipt: TransactionReceipt): DepositEve
   return events;
 }
 
-// ── Bridge contract deployment ───────────────────────────────────────
-
-/** In-flight deployment promise to prevent double-deploy from concurrent calls. */
-let deploymentInFlight: Promise<Hex> | null = null;
+// ── Bridge contract address ──────────────────────────────────────────
 
 /**
- * Returns the GregoJuiceBridge contract address.
- *
- * Resolution order:
- * 1. VITE_BRIDGE_CONTRACT_ADDRESS env var (baked in at build time — production)
- * 2. localStorage cache keyed by chain ID (persists across sessions)
- * 3. Auto-deploy on the fly (dev/first-use fallback — user pays deployment gas)
+ * GregoJuiceBridge is deployed at a deterministic CREATE2 address on every
+ * chain, so the app just returns that address — no env var, no cache, no
+ * auto-deploy. Operators are responsible for ensuring the contract exists
+ * at that address on each network before first use (see `@gregojuice/ethereum`).
  */
-export async function deployOrGetBridgeContract(
-  publicClient: ReturnType<typeof createPublicClient>,
-  walletClient: ReturnType<typeof createWalletClient>,
-  account: Hex,
-  chain: Chain,
-): Promise<Hex> {
-  // 1. Check build-time env var
-  const envAddr = import.meta.env.VITE_BRIDGE_CONTRACT_ADDRESS as string | undefined;
-  if (envAddr) {
-    return envAddr as Hex;
-  }
-
-  // 2. Check localStorage cache (and clean up orphaned v1 key)
-  const storageKey = `${BRIDGE_CONTRACT_STORAGE_KEY}_${chain.id}`;
-  try {
-    localStorage.removeItem(`gregojuice_bridge_contract_${chain.id}`);
-  } catch {
-    /* v1 cleanup */
-  }
-  const cached = localStorage.getItem(storageKey);
-  if (cached) {
-    const code = await publicClient.getCode({ address: cached as Hex });
-    if (code && code !== "0x") return cached as Hex;
-  }
-
-  // 3. Auto-deploy (with concurrency guard)
-  if (deploymentInFlight) return deploymentInFlight;
-
-  deploymentInFlight = (async () => {
-    const hash = await walletClient.deployContract({
-      abi: BRIDGE_CONTRACT_ABI,
-      bytecode: BRIDGE_CONTRACT_BYTECODE,
-      account,
-      chain,
-    });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    if (!receipt.contractAddress) throw new Error("Bridge contract deployment failed");
-
-    localStorage.setItem(storageKey, receipt.contractAddress);
-    return receipt.contractAddress as Hex;
-  })().finally(() => {
-    deploymentInFlight = null;
-  });
-
-  return deploymentInFlight;
-}
+export { getBridgeAddress } from "@gregojuice/ethereum";

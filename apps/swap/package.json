@@ -46,6 +46,7 @@
     "zone.js": "^0.16.1"
   },
   "devDependencies": {
+    "@aztec/aztec": "v4.3.0-nightly.20260417",
     "@aztec/wallets": "v4.3.0-nightly.20260417",
     "@types/buffer-json": "^2",
     "@types/node": "^22.15.17",
