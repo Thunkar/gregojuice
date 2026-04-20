@@ -46,18 +46,18 @@ export default defineConfig({
   projects: [
     {
       name: "fpc-setup",
-      testMatch: /setup\/01-fpc-setup\.spec\.ts$/,
+      testMatch: /01-fpc-setup\.spec\.ts$/,
       use: { ...desktopChrome, baseURL: "http://localhost:5174" },
     },
     {
       name: "bridge-fund",
-      testMatch: /setup\/02-bridge-fund-swap-admin\.spec\.ts$/,
+      testMatch: /02-bridge-fund-swap-admin\.spec\.ts$/,
       dependencies: ["fpc-setup"],
       use: { ...desktopChrome, baseURL: "http://localhost:5173" },
     },
     {
       name: "swap-deploy",
-      testMatch: /setup\/03-swap-deploy\.spec\.ts$/,
+      testMatch: /03-swap-deploy\.spec\.ts$/,
       dependencies: ["bridge-fund"],
       // No baseURL — runs deploy.ts via child_process. Chromium still launches
       // (Playwright quirk) but the spec never navigates.
@@ -65,13 +65,13 @@ export default defineConfig({
     },
     {
       name: "fpc-signup",
-      testMatch: /setup\/04-fpc-signup\.spec\.ts$/,
+      testMatch: /04-fpc-signup\.spec\.ts$/,
       dependencies: ["swap-deploy"],
       use: { ...desktopChrome, baseURL: "http://localhost:5174" },
     },
     {
       name: "swap-flow",
-      testMatch: /swap-flow\.spec\.ts$/,
+      testMatch: /05-swap-flow\.spec\.ts$/,
       dependencies: ["fpc-signup"],
       use: { ...desktopChrome, baseURL: "http://localhost:5175" },
     },

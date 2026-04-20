@@ -9,9 +9,9 @@ import {
   STATE_DIR,
   type GlobalState,
   type FpcState,
-} from "../../fixtures/state.ts";
-import { injectL1Wallet, ANVIL_DEV_KEY } from "../../fixtures/inject-l1-wallet.ts";
-import { pumpL2Blocks } from "../../fixtures/pump-l2-blocks.ts";
+} from "../fixtures/state.ts";
+import { injectL1Wallet, ANVIL_DEV_KEY } from "../fixtures/inject-l1-wallet.ts";
+import { pumpL2Blocks } from "../fixtures/pump-l2-blocks.ts";
 
 /**
  * Spec 01 — fpc-dashboard setup.
@@ -88,28 +88,16 @@ test.describe.serial("fpc-dashboard setup", () => {
     await expect(bridgeButton).toBeEnabled({ timeout: 60_000 });
     await bridgeButton.click();
 
-    // Pump L2 blocks while the bridge session is in a state that needs them:
-    //   - "bridged"  → L1 landed, waiting for L1→L2 message to sync
-    //   - "claiming" → claim tx is being mined on L2
-    // Anything else (null / "l1-pending") doesn't need pumping.
+    // Wait until the bridge session advances to `bridged` (L1 landed,
+    // awaiting L1→L2 message sync), then pump until sync completes.
     const bridgeFrame = page.frames().find((f) => f.url().includes("localhost:5173"));
     if (!bridgeFrame) throw new Error("bridge iframe not attached");
 
-    // Wait until the bridge session transitions into the pump window.
     await expect(async () => {
       const phase = await getBridgeSessionPhase(bridgeFrame);
       expect(phase === "bridged" || phase === "claiming").toBe(true);
     }).toPass({ timeout: 60_000 });
 
-    // Scope the pump strictly to the L1→L2 message sync window. The full
-    // bridge claim has three sub-steps:
-    //   1. L1 deposit confirmed (already true by this point)
-    //   2. L1→L2 message sync        ← needs pumping
-    //   3. L2 claim tx               ← must run WITHOUT a pump racing it
-    //
-    // Pumping through step 3 (or through the subsequent FPC deploy) causes
-    // real txs to race pump-induced empty blocks, which intermittently
-    // strands the tx mid-slot and makes the deploy button look inert.
     const postPhase = bridge.getByTestId("bridge-post-phase");
     const stopPump = await pumpL2Blocks({
       nodeUrl: global.nodeUrl,
@@ -121,31 +109,17 @@ test.describe.serial("fpc-dashboard setup", () => {
       await stopPump();
     }
 
-    // After the L1→L2 message lands, the claim tx runs on its own (the
-    // node mines blocks normally). Wait for `data-claimed=true` without
-    // any background pumping.
-    await expect(postPhase).toHaveAttribute("data-claimed", "true", { timeout: 180_000 });
-
     // ── Step 2: deploy FPC ────────────────────────────────────────────
-    // fpc-dashboard auto-advances once the bridge iframe posts `complete`.
-    // If we don't see the transition, something upstream failed — dump the
-    // wizard's current step and the bridge session so we can triage.
-    try {
-      await expect(wizard).toHaveAttribute("data-active-step", "2", { timeout: 30_000 });
-    } catch (err) {
-      const actual = await wizard.getAttribute("data-active-step");
-      const bridgePhase = bridgeFrame ? await getBridgeSessionPhase(bridgeFrame) : "no-frame";
-      throw new Error(
-        `wizard stuck on step ${actual} (bridge phase=${bridgePhase}) — ${(err as Error).message}`,
-      );
-    }
+    // Once the bridge finishes claiming, fpc-dashboard collapses Step 1
+    // (including the iframe) and advances to Step 2. Watch the outer
+    // wizard's step attribute — the iframe's post-phase attributes would
+    // unmount during the transition.
+    await expect(wizard).toHaveAttribute("data-active-step", "2", { timeout: 180_000 });
 
     const deployBtn = page.getByTestId("setup-deploy-fpc");
     await expect(deployBtn).toBeEnabled({ timeout: 30_000 });
     await deployBtn.click();
 
-    // Either the dashboard appears (success) or an error alert shows up.
-    // Race both so we fail fast on known-bad paths instead of timing out.
     const dashboard = page.getByTestId("dashboard");
     const deployError = page.getByTestId("setup-deploy-error");
     await Promise.race([

@@ -5,10 +5,10 @@ import {
   hasState,
   STATE_FILES,
   type GlobalState,
-} from "../../fixtures/state.ts";
-import { injectL1Wallet, ANVIL_DEV_KEY } from "../../fixtures/inject-l1-wallet.ts";
-import { pumpL2Blocks } from "../../fixtures/pump-l2-blocks.ts";
-import { getPublicFeeJuiceBalance } from "../../fixtures/fee-juice-balance.ts";
+} from "../fixtures/state.ts";
+import { injectL1Wallet, ANVIL_DEV_KEY } from "../fixtures/inject-l1-wallet.ts";
+import { pumpL2Blocks } from "../fixtures/pump-l2-blocks.ts";
+import { getPublicFeeJuiceBalance } from "../fixtures/fee-juice-balance.ts";
 
 /**
  * Spec 02 — fund the swap-admin via the bridge app.

@@ -10,8 +10,8 @@ import {
   STATE_FILES,
   type GlobalState,
   type SwapDeploymentState,
-} from "../../fixtures/state.ts";
-import { getPublicFeeJuiceBalance } from "../../fixtures/fee-juice-balance.ts";
+} from "../fixtures/state.ts";
+import { getPublicFeeJuiceBalance } from "../fixtures/fee-juice-balance.ts";
 
 /**
  * Spec 03 — deploy the swap contracts as swap-admin, paying with native FJ.
@@ -30,7 +30,7 @@ import { getPublicFeeJuiceBalance } from "../../fixtures/fee-juice-balance.ts";
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, "../../..");
+const REPO_ROOT = resolve(HERE, "../..");
 const SWAP_DIR = resolve(REPO_ROOT, "apps/swap");
 const SWAP_LOCAL_JSON = resolve(SWAP_DIR, "src/config/networks/local.json");
 

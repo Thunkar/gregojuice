@@ -4,26 +4,26 @@
   "chainId": "31337",
   "rollupVersion": "2648162698",
   "contracts": {
-    "gregoCoin": "0x2526212280e984b72840e2305ecf410a2019f8d9b033fe962f5949e3c70455c4",
-    "gregoCoinPremium": "0x0daf47dfe01a2ecd2a4f71343af56b5f20e5b16173f11723e70080a09da9a1ac",
-    "amm": "0x03c74950432ef37e65ce7eacabc0e107c3f70041937db7f539431500831690ac",
-    "liquidityToken": "0x18ac5155b49ca2de04f1726fc939c0c20110ec981e48e46302a9964352e7fd66",
-    "pop": "0x1ee2b1bcba821586daf8f84fd365fc867b642ec987082f7fca1ccd870c60fbe8",
+    "gregoCoin": "0x176570fd921a79545707db181abe6399ec901071f9f0de73a22163ec8b2bcff1",
+    "gregoCoinPremium": "0x2af222f5a92be683d30d3dce0dd67b41d002ecad601ebe6682f7d1643e9b5918",
+    "amm": "0x210d2f9d92620ceb2cec4ad4aa31b1d4ee3e4be00aa06d1051e5c02e5c6ac692",
+    "liquidityToken": "0x137275eeefbd0d3392946c662a891da6b9d89d3543bac7d2beabd5f9d7133418",
+    "pop": "0x124d9df6ac303de600858438bc2e19638c978455a3eed0ea132f3d15aae6b661",
     "sponsoredFPC": "0x02a481c5711fce148a5fb401b4969abc589f20ecf0ad8d62231a0917c1916d8c",
-    "salt": "0x1b129867b1726774754cf8ba64c3a51efb361f77bfadbdc4d92b9f39b2868413"
+    "salt": "0x153f00e90a8afafb2ae572ed6c7848d72ab97153778c5069ea4609f0b3578925"
   },
   "deployer": {
     "address": "0x194c67f3b50c6099cf2e849a837e1be493a555b417f6d993d6abea524f01cda8"
   },
-  "deployedAt": "2026-04-20T15:09:54.317Z",
+  "deployedAt": "2026-04-20T21:21:39.384Z",
   "subscriptionFPC": {
-    "address": "0x03f715b17dcae904c2f8605b6c73a76bee8fe705325619ae4bf0609cef2db7b4",
-    "secretKey": "0x29b720fb9d0900947c82e3ca516c44d40ab3b3ae756005f4272280988211c0b6",
+    "address": "0x00bb7de41880aec8de5ba6d0dfb799010d2d24c754a8f4bacfeb81adf8781c3d",
+    "secretKey": "0x182640c327855d20fec2056b924ba316368e58fc4ab30710e340d92807fcc6a4",
     "functions": {
-      "0x1ee2b1bcba821586daf8f84fd365fc867b642ec987082f7fca1ccd870c60fbe8": {
+      "0x124d9df6ac303de600858438bc2e19638c978455a3eed0ea132f3d15aae6b661": {
         "0xa539bd29": 0
       },
-      "0x03c74950432ef37e65ce7eacabc0e107c3f70041937db7f539431500831690ac": {
+      "0x210d2f9d92620ceb2cec4ad4aa31b1d4ee3e4be00aa06d1051e5c02e5c6ac692": {
         "0xfd228669": 0
       }
     }

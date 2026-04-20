@@ -14,7 +14,7 @@ import {
   type GlobalState,
   type FpcState,
   type SwapDeploymentState,
-} from "../../fixtures/state.ts";
+} from "../fixtures/state.ts";
 
 /**
  * Spec 04 — fpc-admin signs up two sponsored apps.
@@ -41,7 +41,7 @@ import {
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(HERE, "../../..");
+const REPO_ROOT = resolve(HERE, "../..");
 const SWAP_DIR = resolve(REPO_ROOT, "apps/swap");
 const SWAP_LOCAL_JSON = resolve(SWAP_DIR, "src/config/networks/local.json");
 const ARTIFACTS_DIR = resolve(REPO_ROOT, "packages/contracts/aztec/noir/target");
