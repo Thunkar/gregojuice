@@ -33,6 +33,7 @@ export function WalletDiscovery({ onUseEmbedded }: WalletDiscoveryProps) {
         <ListItem disablePadding sx={{ mb: 1 }}>
           <ListItemButton
             onClick={onUseEmbedded}
+            data-testid="onboarding-use-embedded"
             sx={{
               border: "1px solid",
               borderColor: "divider",

@@ -1,7 +1,8 @@
 import { ThemeProvider, CssBaseline, Container, Box, Typography } from "@mui/material";
+import { NetworkSwitcher } from "@gregojuice/common/ui";
 import { theme } from "./theme";
 import { WalletChip } from "./components/WalletChip";
-import { NetworkSwitcher } from "./components/NetworkSwitcher";
+import { useNetwork } from "./contexts/NetworkContext";
 import { BridgeWizard } from "./components/BridgeWizard";
 import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
 import { TxNotificationCenter } from "@gregojuice/embedded-wallet/ui";
@@ -42,7 +43,7 @@ export function App() {
           }),
         }}
       >
-        {!isIframe && <NetworkSwitcher />}
+        {!isIframe && <NetworkSwitcher useNetwork={useNetwork} />}
         {!isIframe && <WalletChip />}
 
         <Container maxWidth="sm" sx={{ position: "relative", zIndex: 1 }}>

@@ -3,13 +3,32 @@
   "version": "0.0.1",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./src/ui.ts"
+  },
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf ./dist .tsbuildinfo",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "@mui/material": "^6",
+    "react": "^18 || ^19"
+  },
+  "peerDependenciesMeta": {
+    "@mui/material": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@mui/material": "^6.3.1",
+    "@types/react": "^19.0.6",
+    "react": "^18.3.1",
     "typescript": "~5.7.3"
   }
 }

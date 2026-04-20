@@ -5,6 +5,14 @@
  * (possibly running in a different Playwright project) read what they need.
  * Kept as plain files so debugging a failed run is a matter of catting a file
  * rather than inspecting Playwright's worker state.
+ *
+ * ── Checkpointing ──────────────────────────────────────────────────────────
+ * Runs are incremental by default: if a setup phase's output file already
+ * exists, that phase is skipped. This lets you iterate on a single spec
+ * (e.g. spec 04) without redoing the 5-minute bridge + deploy chain.
+ *
+ * To start from scratch, run with `E2E_RESET=1` (or delete `e2e/.state/`
+ * manually — the `yarn e2e:reset` script does this).
  */
 import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -14,9 +22,16 @@ const ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
 export const STATE_DIR = resolve(ROOT, ".state");
 
 export const STATE_FILES = {
+  /** Written by global-setup: node URLs, chain id, L1 bridge, swap-admin. */
   global: resolve(STATE_DIR, "global.json"),
-  fpc: resolve(STATE_DIR, "fpc.json"),
-  swap: resolve(STATE_DIR, "swap.json"),
+  /** Written by spec 01 (fpc-dashboard setup): fpc-admin + FPC details. */
+  fpc: resolve(STATE_DIR, "fpc-setup.json"),
+  /** Written by spec 02 (bridge-fund): marker that swap-admin has FJ on L2. */
+  swapAdminFunded: resolve(STATE_DIR, "swap-admin-funded.json"),
+  /** Written by spec 03 (swap deploy): deployed contract addresses. */
+  swapDeployment: resolve(STATE_DIR, "swap-deployment.json"),
+  /** Written by spec 04 (fpc-signup): marker that both apps are signed up. */
+  fpcSignedUp: resolve(STATE_DIR, "fpc-signedup.json"),
 } as const;
 
 /** Shape written by `global-setup` before any spec runs. */
@@ -49,7 +64,7 @@ export interface FpcState {
 }
 
 /** Shape written after spec 03 (swap deploy) finishes. */
-export interface SwapState {
+export interface SwapDeploymentState {
   gregoCoin: string;
   gregoCoinPremium: string;
   liquidityToken: string;
@@ -70,8 +85,21 @@ export async function readState<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, "utf-8")) as T;
 }
 
-/** Wipes the `.state/` dir. Called by global-setup at the start of a run. */
+/** Returns true if a checkpoint already exists on disk. */
+export function hasState(path: string): boolean {
+  return existsSync(path);
+}
+
+/** Wipes the `.state/` dir. Called when E2E_RESET=1. */
 export async function resetStateDir(): Promise<void> {
   await rm(STATE_DIR, { recursive: true, force: true });
+  await mkdir(STATE_DIR, { recursive: true });
+}
+
+/**
+ * Ensures `.state/` exists but leaves contents alone. Called by global-setup
+ * on every run so incremental re-runs keep their checkpoints.
+ */
+export async function ensureStateDir(): Promise<void> {
   await mkdir(STATE_DIR, { recursive: true });
 }

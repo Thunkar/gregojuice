@@ -18,7 +18,8 @@ import { SetupWizard } from "./components/SetupWizard";
 import { Dashboard } from "./components/Dashboard";
 import { TxNotificationCenter } from "@gregojuice/embedded-wallet/ui";
 import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
-import { NetworkSwitcher } from "./components/NetworkSwitcher";
+import { NetworkSwitcher } from "@gregojuice/common/ui";
+import { useNetwork } from "./contexts/NetworkContext";
 import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
 
 export function App() {
@@ -48,7 +49,14 @@ export function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <NetworkSwitcher />
+      <NetworkSwitcher
+        useNetwork={useNetwork}
+        onSwitch={(_next, _current, commit) => {
+          commit();
+          // Reload to reinitialize the wallet context against the new network.
+          window.location.reload();
+        }}
+      />
       <Box
         sx={{
           minHeight: "100vh",

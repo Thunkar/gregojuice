@@ -44,6 +44,7 @@ export function SwapProgress() {
   const statusDetail = "Proving & sending transaction...";
   return (
     <Box
+      data-testid="swap-progress"
       sx={{
         width: "100%",
         mt: 3,

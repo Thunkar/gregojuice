@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 import {
   readState,
   writeState,
+  hasState,
   STATE_FILES,
   type GlobalState,
-  type SwapState,
+  type SwapDeploymentState,
 } from "../../fixtures/state.ts";
 import { getPublicFeeJuiceBalance } from "../../fixtures/fee-juice-balance.ts";
 
@@ -59,6 +60,10 @@ test.describe.serial("swap deploy", () => {
   test.slow();
 
   test("deploys swap contracts as swap-admin paying with fee juice", async () => {
+    test.skip(
+      hasState(STATE_FILES.swapDeployment),
+      `checkpoint exists at ${STATE_FILES.swapDeployment}`,
+    );
     const global = await readState<GlobalState>(STATE_FILES.global);
 
     // Sanity: the account that spec 02 funded should still have FJ.
@@ -89,7 +94,7 @@ test.describe.serial("swap deploy", () => {
 
     expect(deployed.deployer.address.toLowerCase()).toBe(global.swapAdmin.address.toLowerCase());
 
-    const state: SwapState = {
+    const state: SwapDeploymentState = {
       gregoCoin: deployed.contracts.gregoCoin,
       gregoCoinPremium: deployed.contracts.gregoCoinPremium,
       liquidityToken: deployed.contracts.liquidityToken,
@@ -99,7 +104,7 @@ test.describe.serial("swap deploy", () => {
       deployerAddress: deployed.deployer.address,
       rollupVersion: deployed.rollupVersion,
     };
-    await writeState(STATE_FILES.swap, state);
-    console.log(`[e2e] wrote ${STATE_FILES.swap}`);
+    await writeState(STATE_FILES.swapDeployment, state);
+    console.log(`[e2e] wrote ${STATE_FILES.swapDeployment}`);
   });
 });

@@ -174,6 +174,9 @@ export function SwapContainer() {
   return (
     <Paper
       elevation={3}
+      data-testid="swap-container"
+      data-phase={swapPhase ?? "idle"}
+      data-drip-phase={dripPhase}
       sx={{
         p: 3,
         backgroundColor: "background.paper",
@@ -196,6 +199,7 @@ export function SwapContainer() {
         onMaxClick={handleMaxFromClick}
         placeholder={fromPlaceholder}
         hasError={fromHasError}
+        testId="swap-from"
       />
 
       {/* Swap Direction Icon (visual only) */}
@@ -234,6 +238,7 @@ export function SwapContainer() {
         isLoadingBalance={isLoadingBalances}
         onMaxClick={handleMaxToClick}
         placeholder={toPlaceholder}
+        testId="swap-to"
       />
 
       {/* Exchange Rate Info */}

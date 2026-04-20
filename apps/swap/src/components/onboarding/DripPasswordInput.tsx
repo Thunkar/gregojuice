@@ -23,6 +23,7 @@ export function DripPasswordInput({ onSubmit }: DripPasswordInputProps) {
 
   return (
     <Box
+      data-testid="drip-password-form"
       sx={{
         mt: 3,
         "@keyframes pulseGlow": {
@@ -56,6 +57,7 @@ export function DripPasswordInput({ onSubmit }: DripPasswordInputProps) {
             handleSubmit();
           }
         }}
+        slotProps={{ htmlInput: { "data-testid": "drip-password-input" } }}
       />
 
       <Button
@@ -64,6 +66,7 @@ export function DripPasswordInput({ onSubmit }: DripPasswordInputProps) {
         onClick={handleSubmit}
         disabled={!password}
         startIcon={<WaterDropIcon />}
+        data-testid="drip-password-submit"
       >
         Continue
       </Button>

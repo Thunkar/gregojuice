@@ -31,6 +31,8 @@ export function WalletChip({ address, isConnected, onClick, onDisconnect }: Wall
         onClick={onClick}
         onDelete={isConnected && onDisconnect ? handleDelete : undefined}
         deleteIcon={<CloseIcon />}
+        data-testid="wallet-chip"
+        data-connected={isConnected ? "true" : "false"}
         sx={{
           backgroundColor: "rgba(212, 255, 40, 0.15)",
           border: "1px solid",

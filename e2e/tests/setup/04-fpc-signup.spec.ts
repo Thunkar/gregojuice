@@ -9,10 +9,11 @@ import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import {
   readState,
   writeState,
+  hasState,
   STATE_FILES,
   type GlobalState,
   type FpcState,
-  type SwapState,
+  type SwapDeploymentState,
 } from "../../fixtures/state.ts";
 
 /**
@@ -227,10 +228,7 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
   // React onChange path, so we set `.value` and dispatch manually.
   const multiplier = page.getByTestId("app-signup-fee-multiplier");
   await multiplier.locator('input[type="range"]').evaluate((el: HTMLInputElement) => {
-    const setter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      "value",
-    )?.set;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     setter?.call(el, "10");
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -265,6 +263,10 @@ test.describe.serial("fpc signs up sponsored apps", () => {
   // window while the mint subprocess churns. `beforeAll` doesn't take the
   // page fixture so nothing is launched yet.
   test.beforeAll(async () => {
+    if (hasState(STATE_FILES.fpcSignedUp)) {
+      console.log(`[e2e] ${STATE_FILES.fpcSignedUp} exists — skipping mint`);
+      return;
+    }
     const global = await readState<GlobalState>(STATE_FILES.global);
     const fpc = await readState<FpcState>(STATE_FILES.fpc);
     console.log(`[e2e] minting GregoCoin + GregoCoinPremium to ${fpc.fpcAdminAddress}`);
@@ -278,8 +280,9 @@ test.describe.serial("fpc signs up sponsored apps", () => {
   });
 
   test("signs up PoP + AMM via the fpc-dashboard UI", async ({ page }) => {
+    test.skip(hasState(STATE_FILES.fpcSignedUp), `checkpoint exists at ${STATE_FILES.fpcSignedUp}`);
     const fpc = await readState<FpcState>(STATE_FILES.fpc);
-    const swap = await readState<SwapState>(STATE_FILES.swap);
+    const swap = await readState<SwapDeploymentState>(STATE_FILES.swapDeployment);
 
     // ── 1. Restore fpc-admin backup into a fresh dashboard context ───
     await restoreBackup(page, fpc.backupPath);
@@ -395,5 +398,9 @@ test.describe.serial("fpc signs up sponsored apps", () => {
       },
     };
     await writeState(STATE_FILES.fpc, updatedFpc);
+    await writeState(STATE_FILES.fpcSignedUp, {
+      signedUpAt: new Date().toISOString(),
+      apps: Object.keys(updatedFpc.signedUp ?? {}),
+    });
   });
 });

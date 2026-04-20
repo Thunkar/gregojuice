@@ -4,7 +4,8 @@
     "composite": true,
     "noEmit": true,
     "moduleDetection": "force",
+    "jsx": "react-jsx",
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

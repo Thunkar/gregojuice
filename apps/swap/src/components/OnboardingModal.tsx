@@ -294,6 +294,13 @@ export function OnboardingModal({ open, onAccountSelect }: OnboardingModalProps)
         backgroundColor: "background.paper",
         backgroundImage: "none",
       }}
+      slotProps={{
+        paper: {
+          "data-testid": "onboarding-modal",
+          "data-status": status,
+          "data-drip-phase": dripPhase,
+        } as object,
+      }}
     >
       <DialogTitle
         sx={{

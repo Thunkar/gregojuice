@@ -31,6 +31,7 @@ export function SwapButton({
       size="large"
       disabled={disabled}
       onClick={onClick}
+      data-testid="swap-submit"
       sx={{
         mt: 3,
         py: 2,

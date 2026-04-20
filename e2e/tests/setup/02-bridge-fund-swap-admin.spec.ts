@@ -1,5 +1,11 @@
 import { test, expect, type Frame } from "@playwright/test";
-import { readState, STATE_FILES, type GlobalState } from "../../fixtures/state.ts";
+import {
+  readState,
+  writeState,
+  hasState,
+  STATE_FILES,
+  type GlobalState,
+} from "../../fixtures/state.ts";
 import { injectL1Wallet, ANVIL_DEV_KEY } from "../../fixtures/inject-l1-wallet.ts";
 import { pumpL2Blocks } from "../../fixtures/pump-l2-blocks.ts";
 import { getPublicFeeJuiceBalance } from "../../fixtures/fee-juice-balance.ts";
@@ -39,6 +45,10 @@ test.describe.serial("bridge funds swap-admin", () => {
   test.slow();
 
   test("bridges fee juice to swap-admin and confirms balance on L2", async ({ page }) => {
+    test.skip(
+      hasState(STATE_FILES.swapAdminFunded),
+      `checkpoint exists at ${STATE_FILES.swapAdminFunded}`,
+    );
     const global = await readState<GlobalState>(STATE_FILES.global);
 
     await injectL1Wallet(page, {
@@ -109,5 +119,12 @@ test.describe.serial("bridge funds swap-admin", () => {
     const balance = await getPublicFeeJuiceBalance(global.nodeUrl, global.swapAdmin.address);
     console.log(`[e2e] swap-admin FJ balance = ${balance}`);
     expect(balance).toBeGreaterThan(0n);
+
+    // Drop a checkpoint marker so subsequent runs skip this spec.
+    await writeState(STATE_FILES.swapAdminFunded, {
+      address: global.swapAdmin.address,
+      balance: balance.toString(),
+      fundedAt: new Date().toISOString(),
+    });
   });
 });

@@ -13,6 +13,7 @@ interface SwapBoxProps {
   onMaxClick?: () => void;
   placeholder?: string;
   hasError?: boolean;
+  testId?: string;
 }
 
 export function SwapBox({
@@ -28,6 +29,7 @@ export function SwapBox({
   onMaxClick,
   placeholder = "0.0",
   hasError = false,
+  testId,
 }: SwapBoxProps) {
   // Format balance: balance is stored as whole units (not wei)
   const formatBalance = (bal: bigint | null | undefined, loading: boolean): string => {
@@ -49,6 +51,8 @@ export function SwapBox({
   return (
     <Paper
       elevation={2}
+      data-testid={testId}
+      data-balance={balance !== null && balance !== undefined ? balance.toString() : ""}
       sx={{
         p: 3,
         backgroundColor: "rgba(0, 0, 0, 0.4)",
@@ -132,6 +136,7 @@ export function SwapBox({
                 },
               },
             },
+            htmlInput: testId ? { "data-testid": `${testId}-input` } : undefined,
           }}
           sx={{
             flex: 1,

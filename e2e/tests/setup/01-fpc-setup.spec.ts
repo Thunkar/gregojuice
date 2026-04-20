@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import {
   writeState,
   readState,
+  hasState,
   STATE_FILES,
   STATE_DIR,
   type GlobalState,
@@ -56,6 +57,7 @@ test.describe.serial("fpc-dashboard setup", () => {
   test.slow();
 
   test("deploys a SubscriptionFPC via the real UI", async ({ page }) => {
+    test.skip(hasState(STATE_FILES.fpc), `checkpoint exists at ${STATE_FILES.fpc}`);
     const global = await readState<GlobalState>(STATE_FILES.global);
 
     await injectL1Wallet(page, {
