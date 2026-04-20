@@ -13,9 +13,6 @@ import {
 import { FunctionSelector } from "@aztec/stdlib/abi";
 import type { ContractArtifact } from "@aztec/aztec.js/abi";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import type { FeeJuicePaymentMethod, SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
-
-type PaymentMethod = FeeJuicePaymentMethod | SponsoredFeePaymentMethod;
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
 import { createExtendedL1Client } from "@aztec/ethereum/client";
@@ -27,7 +24,7 @@ import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
 import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import { TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
-import { setupWallet, getOrCreateDeployer } from "./utils.ts";
+import { setupWallet, getOrCreateDeployer, type PaymentMethod } from "./utils.ts";
 import type { AztecNode } from "@aztec/aztec.js/node";
 
 interface FpcSignupSpec {
@@ -87,9 +84,8 @@ async function main() {
   const configPath = process.env.NETWORK_CONFIG_PATH ?? DEFAULTS.configPath;
   const config = loadConfig(configPath);
 
-  const { wallet, node, resolvePaymentMethod } = await setupWallet(config.nodeUrl, "local");
-  const fpcDeployer = await getOrCreateDeployer(wallet, resolvePaymentMethod);
-  const paymentMethod = resolvePaymentMethod(fpcDeployer);
+  const { wallet, node, paymentMethod } = await setupWallet(config.nodeUrl, "local");
+  const fpcDeployer = await getOrCreateDeployer(wallet, paymentMethod);
 
   const { fpcAddress, secretKey } = await deployAndRegisterSubscriptionFpc(
     node,

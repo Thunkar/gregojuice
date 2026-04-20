@@ -46,11 +46,10 @@ const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 
 async function main() {
   const nodeUrl = NETWORK_URLS[NETWORK];
-  const { node, wallet, resolvePaymentMethod } = await setupWallet(nodeUrl, NETWORK);
+  const { node, wallet, paymentMethod } = await setupWallet(nodeUrl, NETWORK);
 
   console.log("Reconstructing deployer account...");
-  const deployer = await getOrCreateDeployer(wallet, resolvePaymentMethod);
-  const paymentMethod = resolvePaymentMethod(deployer);
+  const deployer = await getOrCreateDeployer(wallet, paymentMethod);
   console.log(`Deployer: ${deployer.toString()}`);
 
   // Verify deployer matches config

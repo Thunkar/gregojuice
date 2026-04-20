@@ -43,8 +43,12 @@ export function Step2AztecAccount({
             size="small"
             sx={{ mb: 2 }}
           >
-            <ToggleButton value="existing">I Have a Wallet</ToggleButton>
-            <ToggleButton value="new">Use an Embedded Wallet</ToggleButton>
+            <ToggleButton value="existing" data-testid="aztec-choice-existing">
+              I Have a Wallet
+            </ToggleButton>
+            <ToggleButton value="new" data-testid="aztec-choice-embedded">
+              Use an Embedded Wallet
+            </ToggleButton>
           </ToggleButtonGroup>
         )}
 

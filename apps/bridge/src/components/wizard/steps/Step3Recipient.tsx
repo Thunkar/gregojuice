@@ -46,7 +46,11 @@ function RecipientRows({
             placeholder="0x..."
             value={r.address}
             onChange={(e) => updateAddress(i, e.target.value)}
-            slotProps={readOnly ? { input: { readOnly: true } } : undefined}
+            slotProps={
+              readOnly
+                ? { input: { readOnly: true } }
+                : { htmlInput: { "data-testid": `recipient-address-${i}` } }
+            }
             size="small"
             helperText={
               i === 0 && recipients.length === 1
@@ -85,7 +89,13 @@ export function Step3Recipient({
       <>
         <RecipientRows recipients={recipients} setRecipients={setRecipients} readOnly />
         {recipientReady && (
-          <Button fullWidth variant="contained" color="primary" onClick={advanceFromStep3}>
+          <Button
+            fullWidth
+            variant="contained"
+            color="primary"
+            onClick={advanceFromStep3}
+            data-testid="recipient-continue"
+          >
             Continue
           </Button>
         )}
@@ -114,7 +124,13 @@ export function Step3Recipient({
           <>
             <RecipientRows recipients={recipients} setRecipients={setRecipients} />
             {recipientReady && (
-              <Button fullWidth variant="contained" color="primary" onClick={advanceFromStep3}>
+              <Button
+                fullWidth
+                variant="contained"
+                color="primary"
+                onClick={advanceFromStep3}
+                data-testid="recipient-continue"
+              >
                 Continue
               </Button>
             )}
@@ -128,7 +144,13 @@ export function Step3Recipient({
     <>
       <RecipientRows recipients={recipients} setRecipients={setRecipients} />
       {recipientReady && (
-        <Button fullWidth variant="contained" color="primary" onClick={advanceFromStep3}>
+        <Button
+          fullWidth
+          variant="contained"
+          color="primary"
+          onClick={advanceFromStep3}
+          data-testid="recipient-continue"
+        >
           Continue
         </Button>
       )}

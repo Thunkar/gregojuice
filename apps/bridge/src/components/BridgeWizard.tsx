@@ -40,6 +40,7 @@ export function BridgeWizard() {
         status={w.stepStatus(1)}
         expanded={w.expandedStep === 1}
         onToggle={() => w.toggle(1)}
+        testId="bridge-step-l1"
       >
         <Step1L1Wallet {...w.step1Props} />
       </StepRow>
@@ -51,6 +52,7 @@ export function BridgeWizard() {
         status={w.stepStatus(2)}
         expanded={w.expandedStep === 2}
         onToggle={() => w.toggle(2)}
+        testId="bridge-step-aztec"
       >
         <Step2AztecAccount {...w.step2Props} />
       </StepRow>
@@ -62,6 +64,7 @@ export function BridgeWizard() {
         status={w.stepStatus(3)}
         expanded={w.expandedStep === 3}
         onToggle={() => w.toggle(3)}
+        testId="bridge-step-recipient"
       >
         <Step3Recipient {...w.step3Props} />
       </StepRow>
@@ -73,6 +76,7 @@ export function BridgeWizard() {
         status={w.stepStatus(4)}
         expanded={w.expandedStep === 4}
         onToggle={() => w.toggle(4)}
+        testId="bridge-step-bridge"
       >
         <Step4BridgeClaim {...w.step4Props} />
 

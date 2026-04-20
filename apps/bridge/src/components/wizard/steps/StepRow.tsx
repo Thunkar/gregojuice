@@ -21,6 +21,7 @@ export function StepRow({
   expanded,
   onToggle,
   children,
+  testId,
 }: {
   label: string;
   description: string;
@@ -28,10 +29,13 @@ export function StepRow({
   expanded: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
+  testId?: string;
 }) {
   const hasContent = !!children;
   return (
     <Box
+      data-testid={testId}
+      data-status={status}
       sx={{
         opacity: status === "pending" ? 0.4 : 1,
         transition: "opacity 0.3s",

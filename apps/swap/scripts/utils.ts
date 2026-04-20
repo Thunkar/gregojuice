@@ -7,7 +7,7 @@ import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
 import { Fr } from "@aztec/foundation/curves/bn254";
-import { FeeJuicePaymentMethod, SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
+import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { ContractInitializationStatus } from "@aztec/aztec.js/wallet";
 
@@ -104,20 +104,18 @@ export async function getSponsoredFPCContract() {
 /**
  * Builds a payment method for the given mode.
  *
- * - `sponsoredfpc`: returns a `SponsoredFeePaymentMethod` pointing at the
- *   sandbox-provided SponsoredFPC.
- * - `feejuice`: returns a `FeeJuicePaymentMethod` that pays out of the given
- *   payer's native FJ balance. The payer must have FJ before calling this.
- *
- * Returns `undefined` when no payment method applies (legacy callers assumed
- * that `undefined` → wallet chooses; kept for backwards compatibility).
+ * - `sponsoredfpc`: `SponsoredFeePaymentMethod` pointing at the sandbox
+ *   SponsoredFPC. Used when the account has no fee juice.
+ * - `feejuice`:     `undefined` — the wallet will pay out of the account's
+ *   own FJ balance by default. The account must be funded beforehand.
  */
+export type PaymentMethod = SponsoredFeePaymentMethod | undefined;
+
 export function buildPaymentMethod(
   mode: PaymentMode,
   sponsoredFPCAddress: AztecAddress,
-  feeJuicePayer: AztecAddress,
-) {
-  if (mode === "feejuice") return new FeeJuicePaymentMethod(feeJuicePayer);
+): PaymentMethod {
+  if (mode === "feejuice") return undefined;
   return new SponsoredFeePaymentMethod(sponsoredFPCAddress);
 }
 
@@ -126,12 +124,7 @@ export interface SetupWalletResult {
   wallet: EmbeddedWallet;
   sponsoredFPC: Awaited<ReturnType<typeof getSponsoredFPCContract>>;
   paymentMode: PaymentMode;
-  /**
-   * Payment method ready to use as soon as the deployer is known. Call
-   * `resolvePaymentMethod(deployer)` after `getOrCreateDeployer` to get the
-   * real one — needed because `FeeJuicePaymentMethod` wants the payer address.
-   */
-  resolvePaymentMethod: (payer: AztecAddress) => FeeJuicePaymentMethod | SponsoredFeePaymentMethod;
+  paymentMethod: PaymentMethod;
 }
 
 export async function setupWallet(
@@ -154,7 +147,7 @@ export async function setupWallet(
     wallet,
     sponsoredFPC,
     paymentMode,
-    resolvePaymentMethod: (payer) => buildPaymentMethod(paymentMode, sponsoredFPC.address, payer),
+    paymentMethod: buildPaymentMethod(paymentMode, sponsoredFPC.address),
   };
 }
 
@@ -162,16 +155,12 @@ export async function setupWallet(
  * Reconstructs the deployer account from SECRET env var (deterministic)
  * or creates a new random one. Returns the address.
  *
- * `paymentMethodForInit` can be a prebuilt method (sponsoredfpc path) or a
- * callback receiving the computed deployer address — needed for feejuice
- * mode, where the deployer pays for its own init tx.
+ * `paymentMethod` covers the init tx. In `feejuice` mode pass `undefined`
+ * (account pays with its own FJ); the account must be funded beforehand.
  */
 export async function getOrCreateDeployer(
   wallet: EmbeddedWallet,
-  paymentMethodForInit?:
-    | FeeJuicePaymentMethod
-    | SponsoredFeePaymentMethod
-    | ((deployer: AztecAddress) => FeeJuicePaymentMethod | SponsoredFeePaymentMethod),
+  paymentMethod?: PaymentMethod,
 ): Promise<AztecAddress> {
   const salt = new Fr(0);
   const secretKey = process.env.SECRET ? Fr.fromString(process.env.SECRET) : await Fr.random();
@@ -181,10 +170,6 @@ export async function getOrCreateDeployer(
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
 
   if (initializationStatus !== ContractInitializationStatus.INITIALIZED) {
-    const paymentMethod =
-      typeof paymentMethodForInit === "function"
-        ? paymentMethodForInit(accountManager.address)
-        : paymentMethodForInit;
     const deployMethod = await accountManager.getDeployMethod();
     await deployMethod.send({
       from: NO_FROM,
