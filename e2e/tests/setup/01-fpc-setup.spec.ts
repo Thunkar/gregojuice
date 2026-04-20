@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Frame } from "@playwright/test";
 import {
   writeState,
   readState,
@@ -14,14 +14,41 @@ import { pumpL2Blocks } from "../../fixtures/pump-l2-blocks.ts";
  *
  * Drives the real fpc-dashboard UI through its SetupWizard:
  *   1. wait for step 1 "Fund Admin & FPC" to activate
- *   2. let the bridge iframe mint+bridge via faucet, advance L1→L2, claim
+ *   2. bridge iframe mints+bridges via faucet, advances L1→L2, claims
  *   3. click "Deploy FPC"
- *   4. land on the Dashboard (export-backup button visible)
+ *   4. land on the Dashboard, click Settings tab, verify Export Backup button
  *
- * Still TODO in follow-up iterations:
- *   - click "Export Backup" + capture the JSON download
+ * Signals come from data-testid attributes on the products under test
+ * (fpc-dashboard, bridge) plus a direct read of the bridge app's session
+ * localStorage to know when the L1→L2 pump window is open — no UI-text
+ * matching or timing guesses.
+ *
+ * Still TODO:
+ *   - click Export Backup + capture the JSON download
  *   - persist fpc-admin secret + fpc address to fpc.json
  */
+
+/** Session key used by the bridge app to persist wizard progress. */
+const BRIDGE_SESSION_KEY = "gregojuice_bridge_session";
+
+/** Reads the bridge-iframe session phase. Returns null if no session. */
+async function getBridgeSessionPhase(
+  frame: Frame,
+): Promise<"l1-pending" | "bridged" | "claiming" | null> {
+  return frame.evaluate((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { phase?: string };
+      const p = parsed.phase;
+      if (p === "l1-pending" || p === "bridged" || p === "claiming") return p;
+      return null;
+    } catch {
+      return null;
+    }
+  }, BRIDGE_SESSION_KEY);
+}
+
 test.describe.serial("fpc-dashboard setup", () => {
   test.slow();
 
@@ -48,39 +75,66 @@ test.describe.serial("fpc-dashboard setup", () => {
     await page.goto("/");
 
     // ── Step 1: bridge ────────────────────────────────────────────────
-    await expect(
-      page.getByText(/Bridge fee juice to fund both your admin account and the FPC contract/i),
-    ).toBeVisible({ timeout: 90_000 });
+    const wizard = page.getByTestId("setup-wizard");
+    await expect(wizard).toHaveAttribute("data-active-step", "1", { timeout: 90_000 });
 
     const bridge = page.frameLocator('iframe[src*="localhost:5173"]');
     const bridgeButton = bridge.getByTestId("bridge-submit");
     await expect(bridgeButton).toBeEnabled({ timeout: 60_000 });
     await bridgeButton.click();
 
-    // Pump L2 blocks only while the iframe is waiting for the L1→L2
-    // message — local-network is otherwise idle.
-    await expect(bridge.getByText(/L1 deposit confirmed/i)).toBeVisible({ timeout: 60_000 });
+    // Pump L2 blocks while the bridge session is in a state that needs them:
+    //   - "bridged"  → L1 landed, waiting for L1→L2 message to sync
+    //   - "claiming" → claim tx is being mined on L2
+    // Anything else (null / "l1-pending") doesn't need pumping.
+    const bridgeFrame = page.frames().find((f) => f.url().includes("localhost:5173"));
+    if (!bridgeFrame) throw new Error("bridge iframe not attached");
+
+    // Wait until the bridge session transitions into the pump window.
+    await expect(async () => {
+      const phase = await getBridgeSessionPhase(bridgeFrame);
+      expect(phase === "bridged" || phase === "claiming").toBe(true);
+    }).toPass({ timeout: 60_000 });
+
     const stopPump = await pumpL2Blocks({
       nodeUrl: global.nodeUrl,
       l1RpcUrl: global.l1RpcUrl,
     });
     try {
-      await expect(bridge.getByText(/^Claimed$/)).toBeVisible({ timeout: 180_000 });
+      // Pump window closes either when the session is cleared (done) or
+      // the post-phase container reports claimed=true.
+      await expect(bridge.getByTestId("bridge-post-phase")).toHaveAttribute(
+        "data-claimed",
+        "true",
+        { timeout: 180_000 },
+      );
     } finally {
       await stopPump();
     }
 
     // ── Step 2: deploy FPC ────────────────────────────────────────────
-    await expect(page.getByText(/Deploy the SubscriptionFPC contract on-chain/i)).toBeVisible({
-      timeout: 30_000,
-    });
-    await page.getByRole("button", { name: /^Deploy FPC$/ }).click();
+    // fpc-dashboard auto-advances once the bridge iframe posts `complete`.
+    await expect(wizard).toHaveAttribute("data-active-step", "2", { timeout: 30_000 });
 
-    // After deploy, the Dashboard replaces the wizard. The Dashboard exposes
-    // BackupRestore in full mode with a prominent "Export Backup" button.
-    await expect(page.getByRole("button", { name: /^Export Backup$/ })).toBeVisible({
-      timeout: 180_000,
-    });
+    const deployBtn = page.getByTestId("setup-deploy-fpc");
+    await expect(deployBtn).toBeEnabled({ timeout: 30_000 });
+    await deployBtn.click();
+
+    // Either the dashboard appears (success) or an error alert shows up.
+    // Race both so we fail fast on known-bad paths instead of timing out.
+    const dashboard = page.getByTestId("dashboard");
+    const deployError = page.getByTestId("setup-deploy-error");
+    await Promise.race([
+      dashboard.waitFor({ state: "visible", timeout: 180_000 }),
+      deployError.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {
+        const msg = await deployError.textContent();
+        throw new Error(`Deploy FPC failed: ${msg ?? "(no message)"}`);
+      }),
+    ]);
+
+    // ── Settings tab → Export Backup ─────────────────────────────────
+    await page.getByTestId("tab-settings").click();
+    await expect(page.getByTestId("backup-export")).toBeVisible();
   });
 
   test.skip("exports the backup JSON + persists fpc.json", async () => {

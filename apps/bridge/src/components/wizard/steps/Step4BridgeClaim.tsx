@@ -237,7 +237,12 @@ export function Step4BridgeClaim({
 
       {/* Phase 2+: Post-bridge sub-steps */}
       {bridgeDone && (
-        <Box>
+        <Box
+          data-testid="bridge-post-phase"
+          data-l1-confirmed="true"
+          data-l2-synced={syncDone ? "true" : "false"}
+          data-claimed={claimed ? "true" : "false"}
+        >
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
             {/* 4a: L1 Deposit */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>

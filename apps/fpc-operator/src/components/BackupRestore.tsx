@@ -141,6 +141,7 @@ export function BackupRestore({ mode = "full" }: BackupRestoreProps) {
         startIcon={exporting ? <CircularProgress size={18} /> : <DownloadIcon />}
         onClick={handleExport}
         disabled={!wallet || !address || exporting}
+        data-testid="backup-export"
       >
         {exporting ? "Exporting..." : "Export Backup"}
       </Button>

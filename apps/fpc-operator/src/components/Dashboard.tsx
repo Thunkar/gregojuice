@@ -21,16 +21,16 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
   const bridgeUrl = import.meta.env.VITE_BRIDGE_URL ?? "http://localhost:5173";
 
   return (
-    <Box>
+    <Box data-testid="dashboard">
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}
         sx={{ mb: 3, borderBottom: 1, borderColor: "divider" }}
       >
-        <Tab label="Sign Up App" />
-        <Tab label="Registered Apps" />
-        <Tab label="Fund FPC" />
-        <Tab label="Settings" />
+        <Tab label="Sign Up App" data-testid="tab-sign-up" />
+        <Tab label="Registered Apps" data-testid="tab-registered-apps" />
+        <Tab label="Fund FPC" data-testid="tab-fund-fpc" />
+        <Tab label="Settings" data-testid="tab-settings" />
       </Tabs>
 
       {tab === 0 && (

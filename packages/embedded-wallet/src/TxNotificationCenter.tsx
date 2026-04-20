@@ -1,4 +1,3 @@
-/** @jsxImportSource @emotion/react */
 /**
  * TxNotificationCenter
  * Toast-style notification panel pinned to the bottom-right corner.

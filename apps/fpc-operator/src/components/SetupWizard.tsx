@@ -104,10 +104,10 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
       : null;
 
   return (
-    <Box>
+    <Box data-testid="setup-wizard" data-active-step={activeStep}>
       <Stepper activeStep={activeStep} orientation="vertical">
         {/* Step 0: Initialize wallet + compute FPC address */}
-        <Step>
+        <Step data-testid="setup-step-init">
           <StepLabel>{STEPS[0]}</StepLabel>
           <StepContent>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 2 }}>
@@ -121,7 +121,7 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
         </Step>
 
         {/* Step 1: Fund admin + FPC together */}
-        <Step>
+        <Step data-testid="setup-step-fund">
           <StepLabel>{STEPS[1]}</StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -140,14 +140,14 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
         </Step>
 
         {/* Step 2: Deploy FPC */}
-        <Step>
+        <Step data-testid="setup-step-deploy">
           <StepLabel>{STEPS[2]}</StepLabel>
           <StepContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Deploy the SubscriptionFPC contract on-chain. Your account will be the admin.
             </Typography>
             {deployError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert severity="error" sx={{ mb: 2 }} data-testid="setup-deploy-error">
                 {deployError}
               </Alert>
             )}
@@ -156,6 +156,7 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
               variant="contained"
               onClick={handleDeploy}
               disabled={deploying || !wallet}
+              data-testid="setup-deploy-fpc"
             >
               {deploying ? (
                 <>
