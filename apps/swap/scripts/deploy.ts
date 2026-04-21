@@ -2,14 +2,18 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
 
-import { TokenContract } from "@gregojuice/aztec/artifacts/Token";
-import { AMMContract } from "@gregojuice/aztec/artifacts/AMM";
+import { TokenContract, TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
+import { AMMContract, AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 
-import { ProofOfPasswordContract } from "@gregojuice/aztec/artifacts/ProofOfPassword";
-import { BatchCall } from "@aztec/aztec.js/contracts";
+import {
+  ProofOfPasswordContract,
+  ProofOfPasswordContractArtifact,
+} from "@gregojuice/aztec/artifacts/ProofOfPassword";
+import { BatchCall, NO_WAIT } from "@aztec/aztec.js/contracts";
+import { waitForTx, type AztecNode } from "@aztec/aztec.js/node";
 
 import {
   parseNetwork,
@@ -64,6 +68,7 @@ export interface SwapDeployResult {
 
 async function deployContracts(
   wallet: EmbeddedWallet,
+  node: AztecNode,
   deployer: AztecAddress,
   password: string,
   mintToAddresses: string[],
@@ -71,122 +76,146 @@ async function deployContracts(
 ) {
   const contractAddressSalt = getSalt();
 
-  const { contract: gregoCoin } = await TokenContract.deploy(
-    wallet,
-    deployer,
-    "GregoCoin",
-    "GRG",
-    18,
-  ).send({
-    from: deployer,
-    fee: { paymentMethod },
-    contractAddressSalt,
-    wait: { timeout: 120 },
-  });
-
-  const { contract: gregoCoinPremium } = await TokenContract.deploy(
+  // ── Build every deployment method + derive its deterministic address ──
+  //
+  // The AMM depends on token addresses, so tokens must resolve first. PoP
+  // depends on GregoCoin. Everything uses the same salt so re-runs with the
+  // same admin + SALT produce the same addresses and can be skipped.
+  const gregoCoinDeploy = TokenContract.deploy(wallet, deployer, "GregoCoin", "GRG", 18);
+  const gregoCoinPremiumDeploy = TokenContract.deploy(
     wallet,
     deployer,
     "GregoCoinPremium",
     "GRGP",
     18,
-  ).send({
-    from: deployer,
-    fee: { paymentMethod },
+  );
+  const liquidityTokenDeploy = TokenContract.deploy(wallet, deployer, "LiquidityToken", "LQT", 18);
+
+  const gregoCoinInstance = await gregoCoinDeploy.getInstance({ contractAddressSalt });
+  const gregoCoinPremiumInstance = await gregoCoinPremiumDeploy.getInstance({
     contractAddressSalt,
-    wait: { timeout: 120 },
   });
+  const liquidityTokenInstance = await liquidityTokenDeploy.getInstance({ contractAddressSalt });
 
-  const { contract: liquidityToken } = await TokenContract.deploy(
+  const ammDeploy = AMMContract.deploy(
     wallet,
-    deployer,
-    "LiquidityToken",
-    "LQT",
-    18,
-  ).send({
-    from: deployer,
-    fee: { paymentMethod },
-    contractAddressSalt,
-    wait: { timeout: 120 },
-  });
+    gregoCoinInstance.address,
+    gregoCoinPremiumInstance.address,
+    liquidityTokenInstance.address,
+  );
+  const ammInstance = await ammDeploy.getInstance({ contractAddressSalt });
 
-  const { contract: amm } = await AMMContract.deploy(
-    wallet,
-    gregoCoin.address,
-    gregoCoinPremium.address,
-    liquidityToken.address,
-  ).send({ from: deployer, fee: { paymentMethod }, contractAddressSalt, wait: { timeout: 120 } });
+  const popDeploy = ProofOfPasswordContract.deploy(wallet, gregoCoinInstance.address, password);
+  const popInstance = await popDeploy.getInstance({ contractAddressSalt });
 
-  const extraMints = mintToAddresses.flatMap((addr) => {
-    const recipient = AztecAddress.fromString(addr);
-    console.log(`Will mint ${INITIAL_TOKEN_BALANCE} GregoCoin + GregoCoinPremium to ${addr}`);
-    return [
-      gregoCoin.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
-      gregoCoinPremium.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
-    ];
-  });
+  await Promise.all([
+    wallet.registerContract(gregoCoinInstance, TokenContractArtifact),
+    wallet.registerContract(gregoCoinPremiumInstance, TokenContractArtifact),
+    wallet.registerContract(liquidityTokenInstance, TokenContractArtifact),
+    wallet.registerContract(ammInstance, AMMContractArtifact),
+    wallet.registerContract(popInstance, ProofOfPasswordContractArtifact),
+  ]);
 
-  await new BatchCall(wallet, [
-    liquidityToken.methods.set_minter(amm.address, true),
-    gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-    gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-    ...extraMints,
-  ]).send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+  // ── Gate deploys on what's already on-chain ─────────────────────────
+  //
+  // registerContract is idempotent + fast, so we always register. Deploy is
+  // only sent when node.getContract returns null for that address.
+  const [gregoCoinExists, gregoCoinPremiumExists, liquidityTokenExists, ammExists, popExists] =
+    await Promise.all([
+      node.getContract(gregoCoinInstance.address),
+      node.getContract(gregoCoinPremiumInstance.address),
+      node.getContract(liquidityTokenInstance.address),
+      node.getContract(ammInstance.address),
+      node.getContract(popInstance.address),
+    ]);
 
-  const nonceForAuthwits = Fr.random();
-  const token0Authwit = await wallet.createAuthWit(deployer, {
-    caller: amm.address,
-    call: await gregoCoin.methods
-      .transfer_to_public_and_prepare_private_balance_increase(
-        deployer,
-        amm.address,
-        INITIAL_TOKEN_BALANCE,
-        nonceForAuthwits,
-      )
-      .getFunctionCall(),
-  });
-  const token1Authwit = await wallet.createAuthWit(deployer, {
-    caller: amm.address,
-    call: await gregoCoinPremium.methods
-      .transfer_to_public_and_prepare_private_balance_increase(
-        deployer,
-        amm.address,
-        INITIAL_TOKEN_BALANCE,
-        nonceForAuthwits,
-      )
-      .getFunctionCall(),
-  });
+  // Fire every missing deploy in parallel with NO_WAIT so simulate+prove+
+  // submit pipelines, then await all tx hashes at the end. The deploys
+  // don't depend on each other being *mined* — AMM/PoP need the token
+  // *addresses*, which are already known deterministically.
+  //
+  // Each .send must be called with `{ wait: NO_WAIT }` inline so TypeScript
+  // picks the TxSendResultImmediate overload (which exposes `txHash`). A
+  // wrapped helper would widen the option type and fall back to the default
+  // `DeployResultMined` overload.
+  const baseOpts = { from: deployer, fee: { paymentMethod }, contractAddressSalt };
+  const pending = [
+    gregoCoinExists ? null : gregoCoinDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+    gregoCoinPremiumExists ? null : gregoCoinPremiumDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+    liquidityTokenExists ? null : liquidityTokenDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+    ammExists ? null : ammDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+    popExists ? null : popDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+  ].filter((p): p is Exclude<typeof p, null> => p !== null);
+  const sent = await Promise.all(pending);
+  await Promise.all(sent.map((r) => waitForTx(node, r.txHash)));
 
-  await new BatchCall(wallet, [
-    liquidityToken.methods.set_minter(amm.address, true),
-    gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-    gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-    amm.methods
-      .add_liquidity(
-        INITIAL_TOKEN_BALANCE,
-        INITIAL_TOKEN_BALANCE,
-        INITIAL_TOKEN_BALANCE,
-        INITIAL_TOKEN_BALANCE,
-        nonceForAuthwits,
-      )
-      .with({ authWitnesses: [token0Authwit, token1Authwit] }),
-  ]).send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+  const gregoCoin = TokenContract.at(gregoCoinInstance.address, wallet);
+  const gregoCoinPremium = TokenContract.at(gregoCoinPremiumInstance.address, wallet);
+  const liquidityToken = TokenContract.at(liquidityTokenInstance.address, wallet);
+  const amm = AMMContract.at(ammInstance.address, wallet);
+  const pop = ProofOfPasswordContract.at(popInstance.address, wallet);
 
-  const popDeployMethod = ProofOfPasswordContract.deploy(wallet, gregoCoin.address, password);
+  // ── Post-deploy seeding ─────────────────────────────────────────────
+  //
+  // Anything that mutates state — minting, authwits, liquidity seed, PoP
+  // minter binding — must only run on a fresh deploy. Re-running an authwit
+  // would re-emit the same nullifier; re-seeding the AMM would double its
+  // pool.
+  if (!ammExists) {
+    const extraMints = mintToAddresses.flatMap((addr) => {
+      const recipient = AztecAddress.fromString(addr);
+      console.log(`Will mint ${INITIAL_TOKEN_BALANCE} GregoCoin + GregoCoinPremium to ${addr}`);
+      return [
+        gregoCoin.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
+        gregoCoinPremium.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
+      ];
+    });
 
-  // Address is computed lazily. This is bad
-  await popDeployMethod.getInstance();
+    await new BatchCall(wallet, [
+      liquidityToken.methods.set_minter(amm.address, true),
+      gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      ...extraMints,
+    ]).send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
 
-  const pop = ProofOfPasswordContract.at(popDeployMethod.address!, wallet);
+    const nonceForAuthwits = Fr.random();
+    const [token0Authwit, token1Authwit] = await Promise.all(
+      [gregoCoin, gregoCoinPremium].map(async (token) =>
+        wallet.createAuthWit(deployer, {
+          caller: amm.address,
+          call: await token.methods
+            .transfer_to_public_and_prepare_private_balance_increase(
+              deployer,
+              amm.address,
+              INITIAL_TOKEN_BALANCE,
+              nonceForAuthwits,
+            )
+            .getFunctionCall(),
+        }),
+      ),
+    );
 
-  await new BatchCall(wallet, [
-    await popDeployMethod.request({ contractAddressSalt, deployer }),
-    gregoCoin.methods.set_minter(pop.address, true),
-  ]).send({
-    from: deployer,
-    fee: { paymentMethod },
-    wait: { timeout: 120 },
-  });
+    await new BatchCall(wallet, [
+      liquidityToken.methods.set_minter(amm.address, true),
+      gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      amm.methods
+        .add_liquidity(
+          INITIAL_TOKEN_BALANCE,
+          INITIAL_TOKEN_BALANCE,
+          INITIAL_TOKEN_BALANCE,
+          INITIAL_TOKEN_BALANCE,
+          nonceForAuthwits,
+        )
+        .with({ authWitnesses: [token0Authwit, token1Authwit] }),
+    ]).send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+  }
+
+  if (!popExists) {
+    await gregoCoin.methods
+      .set_minter(pop.address, true)
+      .send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+  }
 
   return {
     gregoCoinAddress: gregoCoin.address.toString(),
@@ -281,6 +310,7 @@ export async function runSwapDeploy(opts: SwapDeployOptions): Promise<SwapDeploy
 
   const contractDeploymentInfo = await deployContracts(
     wallet,
+    node,
     deployer,
     opts.password,
     opts.mintTo ?? [],

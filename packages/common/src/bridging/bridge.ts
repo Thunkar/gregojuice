@@ -55,12 +55,16 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
 
   const l1PrivateKey: Hex = params.l1PrivateKey ?? generatePrivateKey();
   const chain = createEthereumChain([l1RpcUrl], l1ChainId);
-  const l1Client = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, chain.chainInfo);
+  const baseClient = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, chain.chainInfo);
+  // Override viem's fee estimator so *every* tx submitted through this
+  // client (approve, deposit, mint, anything the portal manager does
+  // internally) uses a gas price that can outbid whatever's stuck in the
+  // mempool from previous aborted runs.
+  const l1Client = withAggressiveGas(baseClient);
 
-  // If the signer has stuck pending txs from previous runs, cancel them so
-  // the portal manager's mint/approve/bridge chain doesn't inherit an old,
-  // underpriced nonce. Uses a self-transfer at the stuck nonce with a high
-  // gas price to evict the stuck tx.
+  // Also clear out any pre-existing stuck txs — the gas override keeps
+  // future txs out of the mempool queue, but anything already sitting at
+  // the next nonce still needs to be evicted.
   await cancelStuckPendingTxs(l1Client);
 
   const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, createLogger("bridging"));
@@ -93,6 +97,36 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
 
   const claim = await portalManager.bridgeTokensPublic(recipient, amountArg, minted);
   return { claim, l1Address: signerAddress, minted };
+}
+
+/**
+ * Wraps a viem wallet client so `estimateFeesPerGas` returns a generous
+ * overbid of the current base fee. Every tx submitted through the returned
+ * client (directly or via contracts) picks up these gas values by default,
+ * which keeps us ahead of whatever public-RPC fee estimator returned for
+ * earlier stuck txs.
+ */
+function withAggressiveGas<T extends ReturnType<typeof createExtendedL1Client>>(client: T): T {
+  const original = client.estimateFeesPerGas.bind(client);
+  (client as unknown as { estimateFeesPerGas: typeof original }).estimateFeesPerGas = (async (
+    args?: Parameters<typeof original>[0],
+  ) => {
+    // viem's default applies a chain-specific multiplier on top of the base
+    // fee and asks the RPC for a priority tip. On Sepolia public nodes the
+    // tip is frequently reported as near-zero, which loses to anything
+    // already in the mempool. Override to baseFee × 10 + 2 gwei priority.
+    const defaults = await original(args);
+    const block = await client.getBlock();
+    const baseFee = block.baseFeePerGas ?? 0n;
+    const floorPriority = 2_000_000_000n; // 2 gwei
+    const maxPriorityFeePerGas =
+      defaults.maxPriorityFeePerGas && defaults.maxPriorityFeePerGas > floorPriority
+        ? defaults.maxPriorityFeePerGas
+        : floorPriority;
+    const maxFeePerGas = baseFee * 10n + maxPriorityFeePerGas;
+    return { maxFeePerGas, maxPriorityFeePerGas };
+  }) as typeof original;
+  return client;
 }
 
 /**
