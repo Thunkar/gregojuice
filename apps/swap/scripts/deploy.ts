@@ -315,8 +315,7 @@ async function cli(): Promise<void> {
   const network = parseNetwork();
   const paymentMode = parsePaymentMode(network);
   const mintTo = parseAddressList("--mint-to", "MINT_TO");
-  const password = process.env.PASSWORD;
-  if (!password) throw new Error("Please specify a PASSWORD");
+  const password = process.env.PASSWORD ?? "potato";
 
   await runSwapDeploy({ network, paymentMode, password, mintTo });
 }

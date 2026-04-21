@@ -26,7 +26,7 @@ import { getPublicFeeJuiceBalance } from "../fixtures/fee-juice-balance.ts";
  * test worker.
  *
  * Output is written to `apps/swap/src/config/networks/local.json`; we read
- * that back and mirror the relevant bits into `e2e/.state/swap.json`.
+ * that back and mirror the relevant bits into the `swapDeployment` state file.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -71,10 +71,16 @@ test.describe.serial("swap deploy", () => {
     console.log(`[e2e] swap-admin FJ before deploy = ${preBalance}`);
     expect(preBalance).toBeGreaterThan(0n);
 
+    // The PoP contract bakes the password into its storage at deploy time,
+    // so capture whatever we used here and persist it alongside the rest of
+    // the deployment state. Downstream specs read it from there rather than
+    // hardcoding their own copy.
+    const password = process.env.PASSWORD ?? "potato";
+
     await runDeploy({
       ...process.env,
       SECRET: global.swapAdmin.secret,
-      PASSWORD: process.env.PASSWORD ?? "gregoE2E!",
+      PASSWORD: password,
     });
 
     const raw = await readFile(SWAP_LOCAL_JSON, "utf-8");
@@ -103,6 +109,7 @@ test.describe.serial("swap deploy", () => {
       contractSalt: deployed.contracts.salt,
       deployerAddress: deployed.deployer.address,
       rollupVersion: deployed.rollupVersion,
+      password,
     };
     await writeState(STATE_FILES.swapDeployment, state);
     console.log(`[e2e] wrote ${STATE_FILES.swapDeployment}`);

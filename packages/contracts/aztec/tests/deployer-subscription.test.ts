@@ -87,7 +87,7 @@ describe("Account deployment subscription", () => {
     );
 
     const subscriptionFPCInstance = await ctx.node.getContract(fpc.address);
-    await userWallet.registerContract(subscriptionFPCInstance, SubscriptionFPC.artifact);
+    await userWallet.registerContract(subscriptionFPCInstance!, SubscriptionFPC.artifact);
 
     const sponsoredCall = await deployer.methods
       .deploy(

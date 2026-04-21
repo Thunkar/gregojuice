@@ -41,10 +41,17 @@
   },
   "devDependencies": {
     "@aztec/accounts": "v4.3.0-nightly.20260420",
+    "@aztec/aztec": "v4.3.0-nightly.20260420",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
     "@aztec/constants": "v4.3.0-nightly.20260420",
     "@aztec/entrypoints": "v4.3.0-nightly.20260420",
     "@aztec/ethereum": "v4.3.0-nightly.20260420",
     "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/noir-protocol-circuits-types": "v4.3.0-nightly.20260420",
+    "@aztec/protocol-contracts": "v4.3.0-nightly.20260420",
+    "@aztec/sequencer-client": "v4.3.0-nightly.20260420",
+    "@aztec/telemetry-client": "v4.3.0-nightly.20260420",
+    "@aztec/world-state": "v4.3.0-nightly.20260420",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }

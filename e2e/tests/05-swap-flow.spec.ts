@@ -1,5 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { readState, STATE_FILES, type GlobalState, type SwapDeploymentState } from "../fixtures/state.ts";
+import {
+  readState,
+  STATE_FILES,
+  type GlobalState,
+  type SwapDeploymentState,
+} from "../fixtures/state.ts";
 
 /**
  * Spec 05 — end-user swap flow.
@@ -20,7 +25,6 @@ import { readState, STATE_FILES, type GlobalState, type SwapDeploymentState } fr
  * with the subscriptionFPC section wired up).
  */
 
-const PASSWORD = process.env.PASSWORD ?? "gregoE2E!";
 const FROM_AMOUNT = "10";
 
 async function openOnboarding(page: Page) {
@@ -51,6 +55,19 @@ test.describe.serial("gregoswap end-user flow", () => {
     const swap = await readState<SwapDeploymentState>(STATE_FILES.swapDeployment);
     console.log(`[e2e] target node=${global.nodeUrl}, gregoCoin=${swap.gregoCoin}`);
 
+    // Forward browser console + pageerror to test output — essential for
+    // diagnosing hangs inside the swap UI (drip tx failures, simulation
+    // errors, etc.) that never surface as test assertions.
+    page.on("console", (msg) => {
+      const t = msg.type();
+      if (t === "error" || t === "warning" || t === "info") {
+        console.log(`[browser:${t}] ${msg.text()}`);
+      }
+    });
+    page.on("pageerror", (err) => {
+      console.log(`[browser:pageerror] ${err.message}`);
+    });
+
     await openOnboarding(page);
 
     // ── 1. Pick embedded wallet ──────────────────────────────────────
@@ -59,21 +76,20 @@ test.describe.serial("gregoswap end-user flow", () => {
     await page.getByTestId("onboarding-use-embedded").click();
 
     // ── 2. Drip: balance is 0, password form appears ────────────────
-    // The flow: modal status → "awaiting_drip" → submit password →
-    // "executing_drip" (dripPhase=sending → mining → success) →
-    // "completed" → modal auto-closes.
     await expect(modal).toHaveAttribute("data-status", "awaiting_drip", { timeout: 120_000 });
 
     const dripInput = page.getByTestId("drip-password-input");
     await dripInput.waitFor({ timeout: 10_000 });
-    await dripInput.fill(PASSWORD);
+    await dripInput.fill(swap.password);
     await page.getByTestId("drip-password-submit").click();
 
-    // Drip submits a sponsored PoP::check_password_and_mint tx. Wait
-    // for the phase to transition through sending → mining → success,
-    // then the modal auto-closes.
-    await expect(modal).toHaveAttribute("data-drip-phase", "success", { timeout: 300_000 });
-    await modal.waitFor({ state: "hidden", timeout: 30_000 });
+    // On success the reducer dispatches DRIP_SUCCESS then COMPLETE, and
+    // the modal auto-closes which in turn fires CLOSE_MODAL — the latter
+    // resets `dripPhase` back to `idle`. All of this can land in a single
+    // React commit, so `data-drip-phase="success"` is too narrow a window
+    // to reliably assert on. The modal hiding is the only stable terminal
+    // signal for a successful drip.
+    await modal.waitFor({ state: "hidden", timeout: 300_000 });
 
     // ── 3. Swap flow: balance is non-zero, swap a small amount ──────
     const swapContainer = page.getByTestId("swap-container");

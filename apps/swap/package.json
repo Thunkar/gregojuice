@@ -16,7 +16,8 @@
     "deploy:testnet": "node --experimental-transform-types scripts/deploy.ts --network testnet",
     "deploy:fpc:local": "node --experimental-transform-types scripts/deploy-subscription-fpc.ts",
     "mint:local": "node --experimental-transform-types scripts/mint.ts --network local",
-    "mint:testnet": "node --experimental-transform-types scripts/mint.ts --network testnet"
+    "mint:testnet": "node --experimental-transform-types scripts/mint.ts --network testnet",
+    "setup:local": "yarn deploy:local && yarn deploy:fpc:local"
   },
   "dependencies": {
     "@aztec/accounts": "v4.3.0-nightly.20260420",

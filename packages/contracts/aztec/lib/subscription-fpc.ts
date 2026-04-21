@@ -247,9 +247,16 @@ export class SubscriptionFPC {
   /**
    * Deploys the FPC with public keys so it can own private notes (slot notes).
    * Returns the deployment handle and the secret key needed to register the contract.
+   *
+   * Pass `secretKey` to make the FPC address deterministic (e.g. so tests can
+   * include it in a pre-funded genesis set). Otherwise a random key is used.
    */
-  static async deployWithKeys(wallet: Wallet, admin: AztecAddressLike) {
-    const secretKey = Fr.random();
+  static async deployWithKeys(
+    wallet: Wallet,
+    admin: AztecAddressLike,
+    opts: { secretKey?: Fr } = {},
+  ) {
+    const secretKey = opts.secretKey ?? Fr.random();
     const { publicKeys } = await deriveKeys(secretKey);
     const deployment = SubscriptionFPCContract.deployWithPublicKeys(publicKeys, wallet, admin);
     return { deployment, secretKey };

@@ -701,7 +701,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/aztec-node@npm:4.3.0-nightly.20260420":
+"@aztec/aztec-node@npm:4.3.0-nightly.20260420, @aztec/aztec-node@npm:v4.3.0-nightly.20260420":
   version: 4.3.0-nightly.20260420
   resolution: "@aztec/aztec-node@npm:4.3.0-nightly.20260420"
   dependencies:
@@ -1203,7 +1203,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/noir-protocol-circuits-types@npm:4.3.0-nightly.20260420":
+"@aztec/noir-protocol-circuits-types@npm:4.3.0-nightly.20260420, @aztec/noir-protocol-circuits-types@npm:v4.3.0-nightly.20260420":
   version: 4.3.0-nightly.20260420
   resolution: "@aztec/noir-protocol-circuits-types@npm:4.3.0-nightly.20260420"
   dependencies:
@@ -1400,7 +1400,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/sequencer-client@npm:4.3.0-nightly.20260420":
+"@aztec/sequencer-client@npm:4.3.0-nightly.20260420, @aztec/sequencer-client@npm:v4.3.0-nightly.20260420":
   version: 4.3.0-nightly.20260420
   resolution: "@aztec/sequencer-client@npm:4.3.0-nightly.20260420"
   dependencies:
@@ -1506,7 +1506,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/telemetry-client@npm:4.3.0-nightly.20260420":
+"@aztec/telemetry-client@npm:4.3.0-nightly.20260420, @aztec/telemetry-client@npm:v4.3.0-nightly.20260420":
   version: 4.3.0-nightly.20260420
   resolution: "@aztec/telemetry-client@npm:4.3.0-nightly.20260420"
   dependencies:
@@ -1632,7 +1632,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/world-state@npm:4.3.0-nightly.20260420":
+"@aztec/world-state@npm:4.3.0-nightly.20260420, @aztec/world-state@npm:v4.3.0-nightly.20260420":
   version: 4.3.0-nightly.20260420
   resolution: "@aztec/world-state@npm:4.3.0-nightly.20260420"
   dependencies:
@@ -2728,14 +2728,21 @@ __metadata:
   resolution: "@gregojuice/aztec@workspace:packages/contracts/aztec"
   dependencies:
     "@aztec/accounts": "npm:v4.3.0-nightly.20260420"
+    "@aztec/aztec": "npm:v4.3.0-nightly.20260420"
+    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260420"
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260420"
     "@aztec/constants": "npm:v4.3.0-nightly.20260420"
     "@aztec/entrypoints": "npm:v4.3.0-nightly.20260420"
     "@aztec/ethereum": "npm:v4.3.0-nightly.20260420"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260420"
     "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260420"
+    "@aztec/noir-protocol-circuits-types": "npm:v4.3.0-nightly.20260420"
+    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260420"
+    "@aztec/sequencer-client": "npm:v4.3.0-nightly.20260420"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260420"
+    "@aztec/telemetry-client": "npm:v4.3.0-nightly.20260420"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260420"
+    "@aztec/world-state": "npm:v4.3.0-nightly.20260420"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"
   languageName: unknown

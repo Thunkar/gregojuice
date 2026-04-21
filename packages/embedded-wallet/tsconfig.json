@@ -4,7 +4,9 @@
     "composite": true,
     "noEmit": true,
     "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@emotion/react",
     "allowImportingTsExtensions": true
   },
-  "include": ["src/**/*.ts", "src/**/*.json"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.json"]
 }

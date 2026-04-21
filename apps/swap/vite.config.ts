@@ -163,7 +163,6 @@ export default defineConfig(({ command, mode }) => {
     },
     optimizeDeps: {
       exclude: ["@aztec/noir-acvm_js", "@aztec/noir-noirc_abi", "@aztec/bb.js"],
-      include: ["@gregojuice/embedded-wallet/ui"],
       esbuildOptions: { target: esTarget },
     },
     plugins: [

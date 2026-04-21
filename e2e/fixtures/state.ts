@@ -26,9 +26,11 @@ export const STATE_FILES = {
   global: resolve(STATE_DIR, "global.json"),
   /** Written by spec 01 (fpc-dashboard setup): fpc-admin + FPC details. */
   fpc: resolve(STATE_DIR, "fpc-setup.json"),
+  /** Written by spec 01: the backup JSON exported from the fpc-dashboard. */
+  fpcBackup: resolve(STATE_DIR, "fpc-backup.json"),
   /** Written by spec 02 (bridge-fund): marker that swap-admin has FJ on L2. */
   swapAdminFunded: resolve(STATE_DIR, "swap-admin-funded.json"),
-  /** Written by spec 03 (swap deploy): deployed contract addresses. */
+  /** Written by spec 03 (swap deploy): deployed contract addresses + password. */
   swapDeployment: resolve(STATE_DIR, "swap-deployment.json"),
   /** Written by spec 04 (fpc-signup): marker that both apps are signed up. */
   fpcSignedUp: resolve(STATE_DIR, "fpc-signedup.json"),
@@ -51,8 +53,6 @@ export interface FpcState {
   fpcAdminAddress: string;
   fpcAdminSecretKey: string;
   fpcSecretKey: string;
-  /** Absolute path to the backup JSON downloaded from the fpc-dashboard. */
-  backupPath: string;
   signedUp?: {
     [functionKey: string]: {
       contractAddress: string;
@@ -73,6 +73,12 @@ export interface SwapDeploymentState {
   contractSalt: string;
   deployerAddress: string;
   rollupVersion: string;
+  /**
+   * Password baked into the PoP contract by `deploy.ts`. Generated fresh per
+   * run (so there's no hardcoded secret) and read by downstream specs that
+   * need to call `check_password_and_mint`.
+   */
+  password: string;
 }
 
 export async function writeState<T>(path: string, value: T): Promise<void> {

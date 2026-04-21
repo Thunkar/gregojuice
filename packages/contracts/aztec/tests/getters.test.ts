@@ -102,7 +102,7 @@ describe("FPC getters", () => {
     await userWallet.registerContract(ctx.fpcInstance, SubscriptionFPC.artifact, ctx.fpcSecretKey);
 
     const tokenInstance = await ctx.node.getContract(token.address);
-    await userWallet.registerContract(tokenInstance, TokenContractArtifact);
+    await userWallet.registerContract(tokenInstance!, TokenContractArtifact);
 
     const userSecret = Fr.random();
     const userAccountManager = await ctx.wallet.createECDSARAccount(

@@ -30,8 +30,7 @@ import {
  *        for a user that presents the password.
  *      - AMM::swap_tokens_for_exact_tokens_from — swaps GregoCoin for
  *        GregoCoinPremium on behalf of a user.
- *   4. Compute function selectors from the artifacts (same logic as
- *      `apps/swap/scripts/add-subscription-fpc.ts`) and write the
+ *   4. Compute function selectors from the artifacts and write the
  *      `subscriptionFPC` section into swap's `local.json`, plus update
  *      `e2e/.state/fpc.json` with the signed-up apps.
  *
@@ -47,8 +46,6 @@ const SWAP_LOCAL_JSON = resolve(SWAP_DIR, "src/config/networks/local.json");
 const ARTIFACTS_DIR = resolve(REPO_ROOT, "packages/contracts/aztec/noir/target");
 const POP_ARTIFACT_PATH = resolve(ARTIFACTS_DIR, "proof_of_password-ProofOfPassword.json");
 const AMM_ARTIFACT_PATH = resolve(ARTIFACTS_DIR, "amm_contract-AMM.json");
-
-const PASSWORD = process.env.PASSWORD ?? "gregoE2E!";
 
 function runMint(env: NodeJS.ProcessEnv, toAddress: string): Promise<void> {
   return new Promise((res, rej) => {
@@ -72,7 +69,7 @@ function runMint(env: NodeJS.ProcessEnv, toAddress: string): Promise<void> {
   });
 }
 
-async function restoreBackup(page: Page, backupPath: string) {
+async function restoreBackup(page: Page) {
   // Seed network selection before the app boots so the SetupWizard doesn't
   // bounce us to testnet.
   await page.addInitScript(() => {
@@ -100,7 +97,7 @@ async function restoreBackup(page: Page, backupPath: string) {
   // which would pop the OS file dialog — Playwright can't drive that.
   // Instead we wait for the input to attach and set files directly.
   await page.getByTestId("backup-import-trigger").waitFor({ timeout: 30_000 });
-  await page.getByTestId("backup-import-input").setInputFiles(backupPath);
+  await page.getByTestId("backup-import-input").setInputFiles(STATE_FILES.fpcBackup);
 
   // Confirmation dialog appears — click "Restore". The confirm button is
   // inside the dialog's Paper, so waiting for the button to attach implies
@@ -285,7 +282,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     const swap = await readState<SwapDeploymentState>(STATE_FILES.swapDeployment);
 
     // ── 1. Restore fpc-admin backup into a fresh dashboard context ───
-    await restoreBackup(page, fpc.backupPath);
+    await restoreBackup(page);
 
     // Switch to the Sign Up App tab (it's the default but be explicit).
     await page.getByTestId("tab-sign-up").click();
@@ -301,7 +298,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
       contractAlias: "ProofOfPassword",
       functionName: "check_password_and_mint",
       args: {
-        password: PASSWORD,
+        password: swap.password,
         to: fpc.fpcAdminAddress,
       },
       extras: [
@@ -350,9 +347,9 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     });
 
     // ── 4. Compute selectors and patch swap local.json ───────────────
-    // Mirrors `apps/swap/scripts/add-subscription-fpc.ts`: use the codegen
-    // artifact objects (already normalised) rather than parsing raw Noir
-    // JSON whose shape nests params under `functions[i].abi.parameters`.
+    // Use the codegen artifact objects (already normalised) rather than
+    // parsing raw Noir JSON whose shape nests params under
+    // `functions[i].abi.parameters`.
     const popFn = ProofOfPasswordContractArtifact.functions.find(
       (f) => f.name === "check_password_and_mint",
     );

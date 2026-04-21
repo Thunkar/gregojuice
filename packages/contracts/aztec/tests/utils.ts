@@ -1,81 +1,59 @@
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import { EmbeddedWallet, type EmbeddedWalletOptions } from "@aztec/wallets/embedded";
-import type { InteractionWaitOptions, SendReturn } from "@aztec/aztec.js/contracts";
+import type {
+  ContractInstanceWithAddress,
+  InteractionWaitOptions,
+  SendReturn,
+} from "@aztec/aztec.js/contracts";
 import type { SendOptions } from "@aztec/aztec.js/wallet";
 import type { ExecutionPayload } from "@aztec/stdlib/tx";
 import { BaseWallet } from "@aztec/wallet-sdk/base-wallet";
 import { getInitialTestAccountsData } from "@aztec/accounts/testing";
+import { deployFundedSchnorrAccounts } from "@aztec/wallets/testing";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
-import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
-import { waitForL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
-import { createLogger } from "@aztec/aztec.js/log";
 import { Fr } from "@aztec/aztec.js/fields";
-import { createEthereumChain } from "@aztec/ethereum/chain";
-import { createExtendedL1Client } from "@aztec/ethereum/client";
+import { deriveKeys } from "@aztec/aztec.js/keys";
+import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import { expect } from "vitest";
+import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPCContractArtifact } from "../noir/artifacts/SubscriptionFPC.js";
+import { setupLocalNetwork } from "./fixtures/local-network.js";
 
-const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
-const L1_RPC_URL = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
-const L1_CHAIN_ID = Number(process.env.L1_CHAIN_ID ?? 31337);
-const MNEMONIC = "test test test test test test test test test test test junk";
+/**
+ * Fixed secret used for the SubscriptionFPC across all tests. Combined with
+ * a random salt per-suite, this lets the fixture pre-compute the FPC's
+ * address and include it in the genesis pre-funded set — so the deploy tx
+ * and every sponsored call can pay for themselves without bridging.
+ *
+ * The salt randomises per `setupTestContext()` call so parallel suites
+ * can't collide on the same deterministic address.
+ */
+const FPC_SECRET_KEY = Fr.fromString(
+  "0x00000000000000000000000000000000000000000000000000000000deadbeef",
+);
 
 export interface TestContext {
   node: AztecNode;
   wallet: EmbeddedWallet;
   admin: AztecAddress;
   feeJuice: FeeJuiceContract;
+  /** Tears down the in-process anvil + node. */
+  stop: () => Promise<void>;
 }
 
-async function setupBaseContext(): Promise<TestContext> {
-  const node = createAztecNodeClient(NODE_URL);
-  await waitForNode(node);
-  const wallet = await EmbeddedWallet.create(node, { ephemeral: true });
-
-  const testAccounts = await getInitialTestAccountsData();
-  const [admin] = await Promise.all(
-    testAccounts.slice(0, 1).map(async (account) => {
-      return (await wallet.createSchnorrAccount(account.secret, account.salt, account.signingKey))
-        .address;
-    }),
-  );
-
-  const feeJuice = FeeJuiceContract.at(wallet);
-
-  return { node, wallet, admin, feeJuice };
+async function deriveAdminAddress(): Promise<AztecAddress> {
+  const [account] = await getInitialTestAccountsData();
+  return account.address;
 }
 
-/**
- * Bridges fee juice from L1 to a target L2 address.
- * Handles: L1 mint + bridge → advance blocks → wait for L1→L2 message → claim on L2.
- */
-export async function fundWithFeeJuice(ctx: TestContext, target: AztecAddress): Promise<void> {
-  const chain = createEthereumChain([L1_RPC_URL], L1_CHAIN_ID);
-  const l1Client = createExtendedL1Client(chain.rpcUrls, MNEMONIC, chain.chainInfo);
-
-  const portal = await L1FeeJuicePortalManager.new(ctx.node, l1Client, createLogger("test:bridge"));
-
-  const claim = await portal.bridgeTokensPublic(target, undefined, true);
-
-  // Advance L2 blocks so the L1→L2 message becomes available
-  const advanceBlock = () => ctx.feeJuice.methods.check_balance(0).send({ from: ctx.admin });
-  await advanceBlock();
-  await advanceBlock();
-
-  await waitForL1ToL2MessageReady(ctx.node, Fr.fromHexString(claim.messageHash), {
-    timeoutSeconds: 120,
+async function computeFpcAddress(admin: AztecAddress, salt: Fr): Promise<AztecAddress> {
+  const { publicKeys } = await deriveKeys(FPC_SECRET_KEY);
+  const instance = await getContractInstanceFromInstantiationParams(SubscriptionFPCContractArtifact, {
+    constructorArgs: [admin],
+    salt,
+    publicKeys,
   });
-
-  await ctx.feeJuice.methods
-    .claim(target, claim.claimAmount, claim.claimSecret, claim.messageLeafIndex)
-    .send({ from: ctx.admin });
-
-  const { result: balance } = await ctx.feeJuice.methods
-    .balance_of_public(target)
-    .simulate({ from: ctx.admin });
-
-  expect(balance).toBeGreaterThan(0n);
+  return instance.address;
 }
 
 /**
@@ -96,14 +74,11 @@ export class GrieferWallet extends EmbeddedWallet {
     executionPayload: ExecutionPayload,
     opts: SendOptions<W>,
   ): Promise<SendReturn<W>> {
-    return BaseWallet.prototype.sendTx.call(this, executionPayload, opts);
+    return BaseWallet.prototype.sendTx.call(this, executionPayload, opts) as Promise<SendReturn<W>>;
   }
 }
 
 // ── FPC test context ─────────────────────────────────────────────────
-
-import type { ContractInstanceWithAddress } from "@aztec/aztec.js/contracts";
-import { SubscriptionFPC } from "../lib/subscription-fpc.js";
 
 export interface FPCTestContext extends TestContext {
   fpc: SubscriptionFPC;
@@ -112,26 +87,57 @@ export interface FPCTestContext extends TestContext {
 }
 
 /**
- * Sets up the full test environment: node + admin wallet + deployed & funded SubscriptionFPC.
+ * Spins up a fresh in-process sandbox (anvil + L1 contracts + AztecNode),
+ * derives the admin from the first initial test account, and deploys a
+ * SubscriptionFPC whose address was included in the genesis pre-funded
+ * set. No bridging step required.
+ *
+ * Each call picks a random salt so parallel suites can't collide.
  */
 export async function setupTestContext(): Promise<FPCTestContext> {
-  const ctx = await setupBaseContext();
+  const admin = await deriveAdminAddress();
+  const fpcSalt = Fr.random();
+  const fpcAddress = await computeFpcAddress(admin, fpcSalt);
 
-  const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(ctx.wallet, ctx.admin);
-  const fpcSecretKey = secretKey;
-  const instance = await deployment.getInstance();
-  await ctx.wallet.registerContract(instance, SubscriptionFPC.artifact, secretKey);
+  const network = await setupLocalNetwork({
+    fundedAddresses: [admin, fpcAddress],
+  });
+
+  const wallet = await EmbeddedWallet.create(network.node, { ephemeral: true });
+  const [testAccount] = await getInitialTestAccountsData();
+  // Deploy the admin's schnorr account contract on-chain. Registration alone
+  // puts the instance in the PXE but doesn't publish its code — every tx the
+  // admin sends has to hit a live account contract.
+  await deployFundedSchnorrAccounts(wallet, [testAccount]);
+
+  const feeJuice = FeeJuiceContract.at(wallet);
+
+  // Deploy with the same (secret, salt) the genesis pre-fund used.
+  const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(wallet, admin, {
+    secretKey: FPC_SECRET_KEY,
+  });
+  const instance = await deployment.getInstance({ contractAddressSalt: fpcSalt });
+  await wallet.registerContract(instance, SubscriptionFPC.artifact, secretKey);
+
   const {
     receipt: { contract: rawFpc },
   } = await deployment.send({
-    from: ctx.admin,
+    from: admin,
+    contractAddressSalt: fpcSalt,
     wait: { returnReceipt: true },
   });
   const fpc = new SubscriptionFPC(rawFpc);
 
-  await fundWithFeeJuice(ctx, fpc.address);
-
-  return { ...ctx, fpc, fpcInstance: instance, fpcSecretKey };
+  return {
+    node: network.node,
+    wallet,
+    admin,
+    feeJuice,
+    fpc,
+    fpcInstance: instance,
+    fpcSecretKey: secretKey,
+    stop: network.stop,
+  };
 }
 
 // ── Gas measurement helpers ──────────────────────────────────────────

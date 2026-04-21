@@ -1,12 +1,10 @@
 import { test, expect, type Frame } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import {
   writeState,
   readState,
   hasState,
   STATE_FILES,
-  STATE_DIR,
   type GlobalState,
   type FpcState,
 } from "../fixtures/state.ts";
@@ -143,10 +141,9 @@ test.describe.serial("fpc-dashboard setup", () => {
     const downloadPromise = page.waitForEvent("download");
     await exportBtn.click();
     const download = await downloadPromise;
-    const backupPath = resolve(STATE_DIR, "fpc-backup.json");
-    await download.saveAs(backupPath);
+    await download.saveAs(STATE_FILES.fpcBackup);
 
-    const backup = JSON.parse(await readFile(backupPath, "utf-8")) as {
+    const backup = JSON.parse(await readFile(STATE_FILES.fpcBackup, "utf-8")) as {
       admin: { address: string; secretKey: string };
       fpc: { address: string; secretKey: string } | null;
     };
@@ -157,7 +154,6 @@ test.describe.serial("fpc-dashboard setup", () => {
       fpcAdminAddress: backup.admin.address,
       fpcAdminSecretKey: backup.admin.secretKey,
       fpcSecretKey: backup.fpc.secretKey,
-      backupPath,
     };
     await writeState(STATE_FILES.fpc, fpc);
     console.log(`[e2e] wrote ${STATE_FILES.fpc} (fpc=${fpc.fpcAddress})`);

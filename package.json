@@ -20,6 +20,7 @@
     "typecheck": "turbo run typecheck",
     "compile:contracts": "cd packages/contracts/aztec/noir && aztec compile && aztec codegen ./target -o ./artifacts",
     "bootstrap:local": "node scripts/bootstrap-local-networks.js",
+    "setup:local": "yarn bootstrap:local && yarn workspace @gregojuice/swap setup:local",
     "publish:packages": "./scripts/publish.sh"
   },
   "devDependencies": {
