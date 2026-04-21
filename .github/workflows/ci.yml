@@ -16,9 +16,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Fast gate: format/lint/typecheck. Fails the build before the expensive
-  # test suites run. The setup action is cached so this lands in ~2 min.
-  check:
+  # Fast gate: format + lint + build. Building with `tsc -b` gives us
+  # typechecking for free while also producing the artifacts that the
+  # integration + e2e jobs need — they pick them up from the turbo cache
+  # without redoing any work.
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,14 +33,14 @@ jobs:
       - name: Lint
         run: yarn lint
 
-      - name: Typecheck
-        run: yarn typecheck
+      - name: Build
+        run: yarn build
 
   # Integration tests need a running local-network. Vitest runs the
   # @gregojuice/aztec + @gregojuice/embedded-wallet suites against it.
   integration:
     runs-on: ubuntu-latest
-    needs: check
+    needs: build
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -55,11 +57,16 @@ jobs:
       - name: Wait for network readiness
         run: |
           for i in $(seq 1 90); do
+            # L1 (anvil) — plain eth_blockNumber call.
+            # L2 (aztec node) — a valid JSON-RPC ping. `-d '{}'` returns
+            # HTTP 400 which `curl -f` treats as failure, so use an actual
+            # method the node exposes (node_getNodeInfo).
             if curl -sf -X POST -H 'Content-Type: application/json' \
                 -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
                 http://localhost:8545 > /dev/null \
               && curl -sf -X POST -H 'Content-Type: application/json' \
-                -d '{}' http://localhost:8080 > /dev/null; then
+                -d '{"jsonrpc":"2.0","method":"node_getNodeInfo","params":[],"id":1}' \
+                http://localhost:8080 > /dev/null; then
               echo "local-network is ready"
               exit 0
             fi
@@ -97,17 +104,24 @@ jobs:
           retention-days: 7
 
   # Playwright e2e tests. Runs in parallel with integration — both gate on
-  # `check`, neither depends on the other.
+  # `build`, neither depends on the other.
   e2e:
     runs-on: ubuntu-latest
-    needs: check
+    needs: build
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
 
+      # System deps are apt-installed and not cacheable, but the fetch is
+      # fast when they're already present; the chromium binary itself lives
+      # in ~/.cache/ms-playwright and is cached by the setup action, so a
+      # warm `playwright install chromium` is effectively a no-op.
+      - name: Install Playwright system deps
+        run: yarn workspace @gregojuice/e2e exec playwright install-deps chromium
+
       - name: Install Playwright browsers
-        run: yarn workspace @gregojuice/e2e exec playwright install --with-deps chromium
+        run: yarn workspace @gregojuice/e2e exec playwright install chromium
 
       - name: Build workspace
         run: yarn build

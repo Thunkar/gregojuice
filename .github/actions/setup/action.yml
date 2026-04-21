@@ -21,17 +21,33 @@ runs:
       shell: bash
       run: corepack enable
 
-    # Cache yarn's store + node_modules. `yarn install --immutable` is a no-op
-    # when the lockfile + cache match, so a cache hit drops install to <10s.
-    - name: Restore yarn cache
+    # Cache everything yarn touches: the download store, the install state,
+    # and — crucially — every `node_modules` tree across the workspace. The
+    # previous setup only cached `.yarn/cache` (tarballs), which meant
+    # `yarn install` still re-extracted node_modules and ran `node-gyp`
+    # against every native addon (bcrypto, lmdb, esbuild, @swc/core, ...).
+    # That's ~80 seconds per job. Caching node_modules itself drops install
+    # to well under 10s on a hit.
+    #
+    # Key on yarn.lock so any dependency bump busts the cache automatically.
+    - name: Restore yarn + node_modules cache
       uses: actions/cache@v4
       with:
         path: |
           .yarn/cache
           .yarn/install-state.gz
-        key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          packages/contracts/*/node_modules
+          e2e/node_modules
+        # Bump the `v2` suffix to force-bust the cache whenever this
+        # action's paths change — otherwise actions/cache reuses whatever's
+        # under the matching key even if it was saved under a narrower path
+        # set, leaving native addons to rebuild every time.
+        key: yarn-v2-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
         restore-keys: |
-          yarn-${{ runner.os }}-
+          yarn-v2-${{ runner.os }}-
 
     - name: Install dependencies
       shell: bash
@@ -92,3 +108,43 @@ runs:
       if: steps.contracts-cache.outputs.cache-hit != 'true'
       shell: bash
       run: yarn workspace @gregojuice/aztec build
+
+    # Turbo's local cache. When hit, `yarn build` / `yarn typecheck` / `yarn
+    # lint` replay cached outputs instead of re-running. Keyed on source
+    # files the tasks read — turbo itself then hashes them internally, so
+    # this cache key is just "commit-shaped" to pick up any incremental
+    # work the last run on this branch did.
+    #
+    # `restore-keys` fallback lets a first CI run on a new branch restore
+    # the most recent main-branch turbo cache and do only an incremental
+    # rebuild on top.
+    - name: Cache turbo outputs
+      uses: actions/cache@v4
+      with:
+        path: |
+          .turbo
+          apps/*/.turbo
+          packages/*/.turbo
+          packages/contracts/*/.turbo
+          e2e/.turbo
+          apps/*/dist
+          packages/*/dist
+          packages/contracts/*/dist
+          packages/contracts/ethereum/generated
+          packages/contracts/ethereum/solidity/out
+        key: turbo-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-
+
+    # Cache Playwright's browser download. ~200 MB. The e2e job installs
+    # chromium + dependencies via `playwright install --with-deps chromium`;
+    # the browser binary lives in ~/.cache/ms-playwright, system deps are
+    # apt-installed. Only the browser binary is cacheable cross-run.
+    - name: Cache Playwright browsers
+      id: playwright-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+        restore-keys: |
+          playwright-${{ runner.os }}-
