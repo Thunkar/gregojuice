@@ -53,6 +53,12 @@ run_and_capture "Fund FPC admin (${NETWORK})" \
 run_and_capture "Deploy FPC + fund FPC (${NETWORK})" \
   yarn workspace @gregojuice/fpc-operator "deploy-fpc:${NETWORK}"
 
+# Calibration of the AMM/Token signups simulates a swap from the FPC admin,
+# so it needs a GregoCoin + GregoCoinPremium balance. Mint from swap-admin
+# (the Token's owner) to the FPC admin before calibrating.
+run_and_capture "Mint swap tokens to FPC admin (${NETWORK})" \
+  yarn workspace @gregojuice/swap "mint:${NETWORK}" --to "${FPC_ADMIN_ADDRESS}"
+
 run_and_capture "Register swap FPC signups (${NETWORK})" \
   yarn workspace @gregojuice/swap "register-fpc-signups:${NETWORK}"
 

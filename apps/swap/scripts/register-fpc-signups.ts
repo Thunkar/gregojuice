@@ -47,6 +47,8 @@ import {
   getOrCreateAdmin,
   type NetworkName,
 } from "@gregojuice/common/testing";
+import type { AztecNode } from "@aztec/aztec.js/node";
+import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 
 const P75_BLOCK_RANGE = 2000;
 const P75_MULTIPLIER = 2;
@@ -76,26 +78,30 @@ interface SignupSpec {
   maxUsers?: number;
 }
 
+const PASSWORD = process.env.PASSWORD ?? "potato";
+
 const SIGNUPS: SignupSpec[] = [
   {
     artifact: ProofOfPasswordContractArtifact,
     functionName: "check_password_and_mint",
     contractAlias: ["pop"],
-    // PoP contract function signature: (password: Field, to: AztecAddress, amount: u128)
-    // Admin passes their own password seed (0 for test runs); mint to self.
-    sampleArgs: ({ admin }) => ["0x0", admin.toString(), 10n],
+    // Signature: (password: str<31>, to: AztecAddress). The calibration
+    // simulate goes through subscribe → check_password_and_mint, which
+    // hashes the password and asserts against the on-chain hash. Must
+    // match whatever the contract was deployed with.
+    sampleArgs: ({ admin }) => [PASSWORD, admin.toString()],
   },
   {
     artifact: AMMContractArtifact,
     functionName: "swap_tokens_for_exact_tokens_from",
     contractAlias: ["amm"],
-    // AMM swap uses amountIn=10 + amountOutMin=0. Tokens need to be already minted to admin.
+    // Tokens need to be already minted to admin.
     sampleArgs: ({ admin, contracts }) => [
       admin.toString(),
       contracts.gregoCoin.toString(),
       contracts.gregoCoinPremium.toString(),
       10n,
-      0n,
+      20n,
       Fr.random().toString(),
     ],
   },
@@ -121,10 +127,16 @@ async function main() {
   const { secretKey } = loadOrCreateSecret("FPC_ADMIN_SECRET");
   const admin = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
 
-  // Hydrate the PXE with all swap contracts + register the admin as its own sender
-  // so simulating calibration calls works (the admin is both caller and subject).
+  // Hydrate the PXE with all swap contracts.
   const contracts = await registerSwapContracts(wallet, node, config.contracts);
-  await wallet.registerSender(admin, "swap-admin");
+
+  // Register the swap admin (the token's minter) as a sender on the FPC
+  // admin's wallet so note-tag discovery finds the GregoCoin notes that
+  // were minted to the FPC admin during the `mint:<network>` step of the
+  // setup orchestration. Without this, the AMM swap calibration can't see
+  // its own balances and fails "Balance too low".
+  const swapAdmin = AztecAddress.fromString(config.deployer.address);
+  await wallet.registerSender(swapAdmin, "swap-admin");
 
   // Register the FPC contract so we can simulate subscribe() against it.
   const fpcInstance = await node.getContract(fpcAddress);
@@ -188,8 +200,8 @@ function requireEnv(name: string): string {
 }
 
 async function registerSwapContracts(
-  wallet: import("@aztec/wallets/embedded").EmbeddedWallet,
-  node: import("@aztec/aztec.js/node").AztecNode,
+  wallet: EmbeddedWallet,
+  node: AztecNode,
   contracts: Record<string, string>,
 ): Promise<Record<string, AztecAddress>> {
   // Map alias → artifact so we can register everything the sample calls touch.
@@ -256,9 +268,9 @@ async function resolveSignups(
 async function pickMaxFee(params: {
   network: NetworkName;
   fpc: SubscriptionFPC;
-  wallet: import("@aztec/wallets/embedded").EmbeddedWallet;
+  wallet: EmbeddedWallet;
   admin: AztecAddress;
-  node: import("@aztec/aztec.js/node").AztecNode;
+  node: AztecNode;
   signup: ResolvedSignup;
   contracts: Record<string, AztecAddress>;
 }): Promise<bigint> {
