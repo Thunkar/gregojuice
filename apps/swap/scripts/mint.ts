@@ -2,10 +2,10 @@
  * Mint tokens to one or more addresses on an existing deployment.
  *
  * Usage:
- *   SECRET=0x... node --experimental-transform-types scripts/mint.ts --network testnet --to 0xaddr1 --to 0xaddr2
- *   SECRET=0x... MINT_TO=0xaddr1,0xaddr2 node --experimental-transform-types scripts/mint.ts --network testnet
+ *   SWAP_SECRET=0x... node --experimental-transform-types scripts/mint.ts --network testnet --to 0xaddr1 --to 0xaddr2
+ *   SWAP_SECRET=0x... MINT_TO=0xaddr1,0xaddr2 node --experimental-transform-types scripts/mint.ts --network testnet
  *
- * Requires SECRET env var to reconstruct the deployer account (must match the original deployer).
+ * Requires SWAP_SECRET env var to reconstruct the deployer account (must match the original deployer).
  */
 
 import fs from "fs";
@@ -18,8 +18,9 @@ import {
   parseAddressList,
   NETWORK_URLS,
   setupWallet,
-  getOrCreateDeployer,
-} from "./utils.ts";
+  loadOrCreateSecret,
+  getOrCreateAdmin,
+} from "@gregojuice/common/testing";
 
 const NETWORK = parseNetwork();
 const MINT_TO = parseAddressList("--to", "MINT_TO");
@@ -29,8 +30,8 @@ if (MINT_TO.length === 0) {
   process.exit(1);
 }
 
-if (!process.env.SECRET) {
-  console.error("SECRET env var is required to reconstruct the deployer account.");
+if (!process.env.SWAP_SECRET) {
+  console.error("SWAP_SECRET env var is required to reconstruct the deployer account.");
   process.exit(1);
 }
 
@@ -49,7 +50,8 @@ async function main() {
   const { node, wallet, paymentMethod } = await setupWallet(nodeUrl, NETWORK);
 
   console.log("Reconstructing deployer account...");
-  const deployer = await getOrCreateDeployer(wallet, paymentMethod);
+  const { secretKey } = loadOrCreateSecret("SWAP_SECRET");
+  const deployer = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
   console.log(`Deployer: ${deployer.toString()}`);
 
   // Verify deployer matches config

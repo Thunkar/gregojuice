@@ -2781,10 +2781,21 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@gregojuice/common@workspace:packages/common"
   dependencies:
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260420"
+    "@aztec/aztec": "npm:v4.3.0-nightly.20260420"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260420"
+    "@aztec/constants": "npm:v4.3.0-nightly.20260420"
+    "@aztec/ethereum": "npm:v4.3.0-nightly.20260420"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260420"
+    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260420"
+    "@aztec/pxe": "npm:v4.3.0-nightly.20260420"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260420"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260420"
     "@mui/material": "npm:^6.3.1"
     "@types/react": "npm:^19.0.6"
     react: "npm:^18.3.1"
     typescript: "npm:~5.7.3"
+    viem: "npm:^2.21.0"
   peerDependencies:
     "@mui/material": ^6
     react: ^18 || ^19
@@ -2861,10 +2872,15 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@gregojuice/fpc-operator@workspace:apps/fpc-operator"
   dependencies:
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260420"
+    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260420"
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260420"
+    "@aztec/constants": "npm:v4.3.0-nightly.20260420"
     "@aztec/entrypoints": "npm:v4.3.0-nightly.20260420"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260420"
     "@aztec/l1-artifacts": "npm:v4.3.0-nightly.20260420"
+    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260420"
+    "@aztec/pxe": "npm:v4.3.0-nightly.20260420"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260420"
     "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260420"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260420"
@@ -2897,6 +2913,7 @@ __metadata:
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260420"
     "@aztec/constants": "npm:v4.3.0-nightly.20260420"
     "@aztec/entrypoints": "npm:v4.3.0-nightly.20260420"
+    "@aztec/ethereum": "npm:v4.3.0-nightly.20260420"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260420"
     "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260420"
     "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260420"
@@ -10377,6 +10394,27 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ox@npm:0.14.17":
+  version: 0.14.17
+  resolution: "ox@npm:0.14.17"
+  dependencies:
+    "@adraffy/ens-normalize": "npm:^1.11.0"
+    "@noble/ciphers": "npm:^1.3.0"
+    "@noble/curves": "npm:1.9.1"
+    "@noble/hashes": "npm:^1.8.0"
+    "@scure/bip32": "npm:^1.7.0"
+    "@scure/bip39": "npm:^1.6.0"
+    abitype: "npm:^1.2.3"
+    eventemitter3: "npm:5.0.1"
+  peerDependencies:
+    typescript: ">=5.4.0"
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 10c0/a4632918d89db20e7265dff96dec3786046e2ec99a42659badd300b7b24678348f505fd57e651c3a814a150d905f512a23a037f15757eae41db601d25fa7b10c
+  languageName: node
+  linkType: hard
+
 "ox@npm:0.14.5":
   version: 0.14.5
   resolution: "ox@npm:0.14.5"
@@ -12576,6 +12614,27 @@ __metadata:
     typescript:
       optional: true
   checksum: 10c0/577bda96d258b990e90992766dbbf8b179db2ff1b6d480be3bebb867795d13ca16a01c3448826f09b02e8d04a6bb2c37d18967fd1076a9a3cafec3c33970567c
+  languageName: node
+  linkType: hard
+
+"viem@npm:^2.21.0":
+  version: 2.48.2
+  resolution: "viem@npm:2.48.2"
+  dependencies:
+    "@noble/curves": "npm:1.9.1"
+    "@noble/hashes": "npm:1.8.0"
+    "@scure/bip32": "npm:1.7.0"
+    "@scure/bip39": "npm:1.6.0"
+    abitype: "npm:1.2.3"
+    isows: "npm:1.0.7"
+    ox: "npm:0.14.17"
+    ws: "npm:8.18.3"
+  peerDependencies:
+    typescript: ">=5.0.4"
+  peerDependenciesMeta:
+    typescript:
+      optional: true
+  checksum: 10c0/5e67eebbb0ec48273cf3a4e85964bca6e30eb0b7d85bd8cf33a4b3e821563ea9b8cc2416f98cf80ebd6346679ff7f19b20dad420e51e4706900fde08513a828a
   languageName: node
   linkType: hard
 

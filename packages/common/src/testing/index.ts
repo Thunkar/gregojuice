@@ -1,3 +1,10 @@
+/**
+ * Shared CLI / deploy-script plumbing for the app scripts folders.
+ *
+ * Importers are Node-only — this module pulls in PXE + aztec.js + @aztec/accounts
+ * which aren't browser-safe. The `@gregojuice/common/testing` subpath export
+ * keeps it out of the default browser bundle entry.
+ */
 import { SPONSORED_FPC_SALT } from "@aztec/constants";
 import { SponsoredFPCContractArtifact } from "@aztec/noir-contracts.js/SponsoredFPC";
 import { getPXEConfig } from "@aztec/pxe/server";
@@ -10,29 +17,67 @@ import { Fr } from "@aztec/foundation/curves/bn254";
 import { SponsoredFeePaymentMethod } from "@aztec/aztec.js/fee";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { ContractInitializationStatus } from "@aztec/aztec.js/wallet";
+import { getSchnorrAccountContractAddress } from "@aztec/accounts/schnorr";
 
 // ── Network configuration ────────────────────────────────────────────
 
-export const VALID_NETWORKS = ["local", "devnet", "nextnet", "testnet"] as const;
+export const VALID_NETWORKS = ["local", "testnet"] as const;
 export type NetworkName = (typeof VALID_NETWORKS)[number];
 
 export const NETWORK_URLS: Record<NetworkName, string> = {
   local: "http://localhost:8080",
-  devnet: "https://v4-devnet-2.aztec-labs.com",
-  nextnet: "https://nextnet.aztec-labs.com",
   testnet: "https://rpc.testnet.aztec-labs.com",
 };
+
+/** L1 parameters the bridging scripts need. Keep in sync with the rollup. */
+export const L1_DEFAULTS: Record<NetworkName, { l1RpcUrl: string; l1ChainId: number }> = {
+  local: { l1RpcUrl: "http://localhost:8545", l1ChainId: 31337 },
+  testnet: { l1RpcUrl: "https://ethereum-sepolia-rpc.publicnode.com", l1ChainId: 11155111 },
+};
+
+/**
+ * Anvil's first pre-funded dev key — used only for `local`. Published and
+ * non-secret; lets CI + dev loops work with zero configuration.
+ */
+export const LOCAL_L1_FUNDER_KEY =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+/**
+ * Picks the L1 funder key + bridge mint flag for the target network.
+ *
+ *   L1_FUNDER_KEY env set   → use it, skip the mint (caller holds FJ on L1).
+ *   local, env unset        → anvil dev key signs the tx (it has ETH for gas),
+ *                             but we mint FJ via the fee-asset handler so the
+ *                             dev key doesn't need a pre-funded FJ balance.
+ *   non-local, env unset    → generate an ephemeral L1 key and mint via the
+ *                             faucet (no external L1 funding required).
+ */
+export function resolveL1Funder(network: NetworkName): {
+  l1FunderKey: `0x${string}` | undefined;
+  mint: boolean;
+} {
+  const env = process.env.L1_FUNDER_KEY as `0x${string}` | undefined;
+  if (env) return { l1FunderKey: env, mint: false };
+  if (network === "local") return { l1FunderKey: LOCAL_L1_FUNDER_KEY as `0x${string}`, mint: true };
+  return { l1FunderKey: undefined, mint: true };
+}
+
+/**
+ * `local` can cheat-warp L1+L2 time to force the L1→L2 message through;
+ * every other network just polls for inclusion.
+ */
+export function bridgeMode(network: NetworkName): "warp" | "poll" {
+  return network === "local" ? "warp" : "poll";
+}
 
 // ── Payment modes ────────────────────────────────────────────────────
 
 export const VALID_PAYMENT_MODES = ["feejuice", "sponsoredfpc"] as const;
 export type PaymentMode = (typeof VALID_PAYMENT_MODES)[number];
 
-/** Default payment mode per network if --payment is omitted. */
+/** Default payment mode per network if `--payment` is omitted. */
 const DEFAULT_PAYMENT_MODE: Record<NetworkName, PaymentMode> = {
   local: "sponsoredfpc",
-  devnet: "sponsoredfpc",
-  nextnet: "sponsoredfpc",
   testnet: "feejuice",
 };
 
@@ -40,12 +85,12 @@ const DEFAULT_PAYMENT_MODE: Record<NetworkName, PaymentMode> = {
 
 export function parseNetwork(): NetworkName {
   const args = process.argv.slice(2);
-  const networkIndex = args.indexOf("--network");
-  if (networkIndex === -1 || networkIndex === args.length - 1) {
+  const idx = args.indexOf("--network");
+  if (idx === -1 || idx === args.length - 1) {
     console.error(`Usage: ... --network <${VALID_NETWORKS.join("|")}>`);
     process.exit(1);
   }
-  const network = args[networkIndex + 1];
+  const network = args[idx + 1];
   if (!VALID_NETWORKS.includes(network as NetworkName)) {
     console.error(`Invalid network: ${network}. Must be one of: ${VALID_NETWORKS.join(", ")}`);
     process.exit(1);
@@ -54,8 +99,8 @@ export function parseNetwork(): NetworkName {
 }
 
 /**
- * Parses `--payment <feejuice|sponsoredfpc>` from argv. If omitted, falls back
- * to the network default (sponsoredfpc for sandbox/devnet/nextnet, feejuice for testnet).
+ * Parses `--payment <feejuice|sponsoredfpc>` from argv, falling back to the
+ * network default (sponsoredfpc on `local`, feejuice on `testnet`).
  */
 export function parsePaymentMode(network: NetworkName): PaymentMode {
   const args = process.argv.slice(2);
@@ -71,6 +116,10 @@ export function parsePaymentMode(network: NetworkName): PaymentMode {
   return mode as PaymentMode;
 }
 
+/**
+ * Collects repeated `--flag <value>` occurrences plus an optional comma-
+ * separated env-var list into a single array. Used by `mint.ts` etc.
+ */
 export function parseAddressList(flag: string, envVar?: string): string[] {
   const args = process.argv.slice(2);
   const addresses: string[] = [];
@@ -102,7 +151,7 @@ export async function getSponsoredFPCContract() {
 }
 
 /**
- * Builds a payment method for the given mode.
+ * Builds the payment method for a given mode.
  *
  * - `sponsoredfpc`: `SponsoredFeePaymentMethod` pointing at the sandbox
  *   SponsoredFPC. Used when the account has no fee juice.
@@ -151,26 +200,46 @@ export async function setupWallet(
   };
 }
 
+// ── Admin key handling ───────────────────────────────────────────────
+
 /**
- * Reconstructs the deployer account from an explicit secret, the SECRET env
- * var (deterministic), or a new random one. Returns the address.
- *
- * `paymentMethod` covers the init tx. In `feejuice` mode pass `undefined`
- * (account pays with its own FJ); the account must be funded beforehand.
+ * Reads an admin secret from the named env var, generating a fresh one only
+ * when absent. The caller is expected to surface the generated secret back
+ * to the operator (typically as `export NAME=…` on stdout) so it can be
+ * re-exported for subsequent runs.
  */
-export async function getOrCreateDeployer(
+export function loadOrCreateSecret(envVar: string): { secretKey: Fr; generated: boolean } {
+  const env = process.env[envVar];
+  if (env) return { secretKey: Fr.fromString(env), generated: false };
+  return { secretKey: Fr.random(), generated: true };
+}
+
+/**
+ * Computes the deterministic L2 address of a schnorr admin account at salt=0
+ * without touching the chain. Useful for scripts that need to know the
+ * address before the account itself is deployed (e.g. for bridging).
+ */
+export async function deriveSchnorrAdminAddress(secretKey: Fr): Promise<AztecAddress> {
+  return getSchnorrAccountContractAddress(secretKey, new Fr(0));
+}
+
+/**
+ * Registers the admin schnorr account in the wallet (PXE) and, if it hasn't
+ * been initialised on-chain yet, sends the deploy tx. Returns its address.
+ *
+ * `paymentMethod` covers the init tx when required. In `feejuice` mode pass
+ * `undefined` — the admin must already be funded.
+ */
+export async function getOrCreateAdmin(
   wallet: EmbeddedWallet,
+  secretKey: Fr,
   paymentMethod?: PaymentMethod,
-  secret?: string,
 ): Promise<AztecAddress> {
   const salt = new Fr(0);
-  const seed = secret ?? process.env.SECRET;
-  const secretKey = seed ? Fr.fromString(seed) : await Fr.random();
   const signingKey = deriveSigningKey(secretKey);
   const accountManager = await wallet.createSchnorrAccount(secretKey, salt, signingKey);
 
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
-
   if (initializationStatus !== ContractInitializationStatus.INITIALIZED) {
     const deployMethod = await accountManager.getDeployMethod();
     await deployMethod.send({
@@ -181,6 +250,5 @@ export async function getOrCreateDeployer(
       wait: { timeout: 120 },
     });
   }
-
   return accountManager.address;
 }

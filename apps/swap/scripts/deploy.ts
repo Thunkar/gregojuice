@@ -17,11 +17,12 @@ import {
   parsePaymentMode,
   NETWORK_URLS,
   setupWallet,
-  getOrCreateDeployer,
+  loadOrCreateSecret,
+  getOrCreateAdmin,
   type NetworkName,
   type PaymentMode,
   type PaymentMethod,
-} from "./utils.ts";
+} from "@gregojuice/common/testing";
 
 const INITIAL_TOKEN_BALANCE = 1_000_000_000n;
 
@@ -33,7 +34,7 @@ export interface SwapDeployOptions {
   password: string;
   /**
    * Optional deterministic secret for the deployer account (hex-encoded Fr).
-   * Falls back to `process.env.SECRET`, then to a random key. For e2e runs
+   * Falls back to `process.env.SWAP_SECRET`, then to a random key. For e2e runs
    * this should be the swap-admin secret derived by global-setup.
    */
   deployerSecret?: string;
@@ -272,7 +273,10 @@ export async function runSwapDeploy(opts: SwapDeployOptions): Promise<SwapDeploy
 
   const { rollupVersion, l1ChainId: chainId } = await node.getNodeInfo();
 
-  const deployer = await getOrCreateDeployer(wallet, paymentMethod, opts.deployerSecret);
+  const { secretKey } = opts.deployerSecret
+    ? { secretKey: Fr.fromString(opts.deployerSecret) }
+    : loadOrCreateSecret("SWAP_SECRET");
+  const deployer = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
 
   const contractDeploymentInfo = await deployContracts(
     wallet,

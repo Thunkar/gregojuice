@@ -6,13 +6,10 @@
  * `evm_setNextBlockTimestamp`. The `CheatCodes` wrapper from
  * `@aztec/aztec/testing` bundles both into a single call.
  *
- * Script callers (deploy, deploy-subscription-fpc, mint) want a tiny surface:
- * given a fresh L1→L2 message, wait until the L2 node sees it as available.
- * This file provides exactly that.
+ * `@aztec/aztec/testing` and `@aztec/stdlib/interfaces/client` are loaded
+ * lazily so bundles that never touch a local network can tree-shake them.
  */
 import type { AztecNode } from "@aztec/aztec.js/node";
-import { createAztecNodeDebugClient } from "@aztec/stdlib/interfaces/client";
-import { CheatCodes } from "@aztec/aztec/testing";
 import { isL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
 import { DateProvider } from "@aztec/foundation/timer";
 import type { Fr } from "@aztec/foundation/curves/bn254";
@@ -37,6 +34,10 @@ export async function advanceL1ToL2Message(
   const l1RpcUrl = opts.l1RpcUrl ?? process.env.ETHEREUM_HOST ?? "http://localhost:8545";
   const timeoutMs = opts.timeoutMs ?? 120_000;
 
+  const [{ createAztecNodeDebugClient }, { CheatCodes }] = await Promise.all([
+    import("@aztec/stdlib/interfaces/client"),
+    import("@aztec/aztec/testing"),
+  ]);
   const nodeDebug = createAztecNodeDebugClient(nodeUrl);
   const cheatCodes = await CheatCodes.create([l1RpcUrl], node, new DateProvider());
 

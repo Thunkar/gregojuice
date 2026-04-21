@@ -79,7 +79,7 @@ test.describe.serial("swap deploy", () => {
 
     await runDeploy({
       ...process.env,
-      SECRET: global.swapAdmin.secret,
+      SWAP_SECRET: global.swapAdmin.secret,
       PASSWORD: password,
     });
 

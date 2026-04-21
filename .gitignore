@@ -56,6 +56,9 @@ apps/*/.e2e
 # JSONs live alongside these for public networks (testnet, devnet, nextnet).
 apps/*/src/config/networks/local.json
 
+# FPC admin backups (contain real admin secret keys — never commit)
+apps/fpc-operator/backups/
+
 # TypeScript build cache
 *.tsbuildinfo
 

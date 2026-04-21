@@ -9,7 +9,11 @@
     "clean": "rm -rf ./dist .tsbuildinfo",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fund-admin:local": "node --experimental-transform-types scripts/fund-fpc-admin.ts --network local",
+    "fund-admin:testnet": "node --experimental-transform-types scripts/fund-fpc-admin.ts --network testnet",
+    "deploy-fpc:local": "node --experimental-transform-types scripts/deploy-fpc.ts --network local",
+    "deploy-fpc:testnet": "node --experimental-transform-types scripts/deploy-fpc.ts --network testnet"
   },
   "dependencies": {
     "@aztec/aztec.js": "v4.3.0-nightly.20260420",
@@ -31,6 +35,11 @@
     "viem": "^2.23.0"
   },
   "devDependencies": {
+    "@aztec/accounts": "v4.3.0-nightly.20260420",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
+    "@aztec/constants": "v4.3.0-nightly.20260420",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/pxe": "v4.3.0-nightly.20260420",
     "@aztec/wallets": "v4.3.0-nightly.20260420",
     "@types/react": "^19.0.6",
     "@types/react-dom": "^19.0.3",

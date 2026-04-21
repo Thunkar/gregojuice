@@ -134,6 +134,18 @@ export default defineConfig(({ command, mode }) => {
           "../../packages/embedded-wallet/src/index.ts",
         ),
         "@gregojuice/common/ui": resolve(import.meta.dirname, "../../packages/common/src/ui.ts"),
+        "@gregojuice/common/bridging": resolve(
+          import.meta.dirname,
+          "../../packages/common/src/bridging/index.ts",
+        ),
+        "@gregojuice/common/fee-stats": resolve(
+          import.meta.dirname,
+          "../../packages/common/src/fee-stats.ts",
+        ),
+        "@gregojuice/common/testing": resolve(
+          import.meta.dirname,
+          "../../packages/common/src/testing/index.ts",
+        ),
         "@gregojuice/common": resolve(import.meta.dirname, "../../packages/common/src/index.ts"),
         "@gregojuice/aztec/subscription-fpc": resolve(
           import.meta.dirname,
