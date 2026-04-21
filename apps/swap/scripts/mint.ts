@@ -2,10 +2,10 @@
  * Mint tokens to one or more addresses on an existing deployment.
  *
  * Usage:
- *   SWAP_SECRET=0x... node --experimental-transform-types scripts/mint.ts --network testnet --to 0xaddr1 --to 0xaddr2
- *   SWAP_SECRET=0x... MINT_TO=0xaddr1,0xaddr2 node --experimental-transform-types scripts/mint.ts --network testnet
+ *   SWAP_ADMIN_SECRET=0x... node --experimental-transform-types scripts/mint.ts --network testnet --to 0xaddr1 --to 0xaddr2
+ *   SWAP_ADMIN_SECRET=0x... MINT_TO=0xaddr1,0xaddr2 node --experimental-transform-types scripts/mint.ts --network testnet
  *
- * Requires SWAP_SECRET env var to reconstruct the deployer account (must match the original deployer).
+ * Requires SWAP_ADMIN_SECRET env var to reconstruct the deployer account (must match the original deployer).
  */
 
 import fs from "fs";
@@ -30,8 +30,8 @@ if (MINT_TO.length === 0) {
   process.exit(1);
 }
 
-if (!process.env.SWAP_SECRET) {
-  console.error("SWAP_SECRET env var is required to reconstruct the deployer account.");
+if (!process.env.SWAP_ADMIN_SECRET) {
+  console.error("SWAP_ADMIN_SECRET env var is required to reconstruct the deployer account.");
   process.exit(1);
 }
 
@@ -50,7 +50,7 @@ async function main() {
   const { node, wallet, paymentMethod } = await setupWallet(nodeUrl, NETWORK);
 
   console.log("Reconstructing deployer account...");
-  const { secretKey } = loadOrCreateSecret("SWAP_SECRET");
+  const { secretKey } = loadOrCreateSecret("SWAP_ADMIN_SECRET");
   const deployer = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
   console.log(`Deployer: ${deployer.toString()}`);
 

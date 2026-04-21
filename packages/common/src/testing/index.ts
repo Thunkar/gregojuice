@@ -215,12 +215,23 @@ export function loadOrCreateSecret(envVar: string): { secretKey: Fr; generated: 
 }
 
 /**
- * Computes the deterministic L2 address of a schnorr admin account at salt=0
- * without touching the chain. Useful for scripts that need to know the
- * address before the account itself is deployed (e.g. for bridging).
+ * Universal salt read from the `SALT` env var, defaulting to `Fr(0)` when
+ * unset. Used for admin schnorr account salts, swap contract address salt,
+ * FPC contract address salt — everything that needs a salt to give
+ * reproducible deployments across re-runs.
+ */
+export function getSalt(): Fr {
+  const env = process.env.SALT;
+  return env ? Fr.fromString(env) : new Fr(0);
+}
+
+/**
+ * Computes the deterministic L2 address of a schnorr admin account without
+ * touching the chain. Uses the `SALT` env var (defaults to 0) so callers
+ * that override the universal salt see the right address.
  */
 export async function deriveSchnorrAdminAddress(secretKey: Fr): Promise<AztecAddress> {
-  return getSchnorrAccountContractAddress(secretKey, new Fr(0));
+  return getSchnorrAccountContractAddress(secretKey, getSalt());
 }
 
 /**
@@ -235,9 +246,8 @@ export async function getOrCreateAdmin(
   secretKey: Fr,
   paymentMethod?: PaymentMethod,
 ): Promise<AztecAddress> {
-  const salt = new Fr(0);
   const signingKey = deriveSigningKey(secretKey);
-  const accountManager = await wallet.createSchnorrAccount(secretKey, salt, signingKey);
+  const accountManager = await wallet.createSchnorrAccount(secretKey, getSalt(), signingKey);
 
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
   if (initializationStatus !== ContractInitializationStatus.INITIALIZED) {

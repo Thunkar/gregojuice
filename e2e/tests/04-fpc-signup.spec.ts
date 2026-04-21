@@ -270,7 +270,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     await runMint(
       {
         ...process.env,
-        SWAP_SECRET: global.swapAdmin.secret,
+        SWAP_ADMIN_SECRET: global.swapAdmin.secret,
       },
       fpc.fpcAdminAddress,
     );

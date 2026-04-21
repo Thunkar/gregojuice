@@ -13,25 +13,25 @@ import {
   setupWallet,
   loadOrCreateSecret,
   deriveSchnorrAdminAddress,
+  getSalt,
 } from "@gregojuice/common/testing";
 import { FeeJuicePaymentMethodWithClaim } from "@aztec/aztec.js/fee";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { ContractInitializationStatus } from "@aztec/aztec.js/wallet";
 import { deriveSigningKey } from "@aztec/stdlib/keys";
-import { Fr } from "@aztec/foundation/curves/bn254";
 
 const FUND_AMOUNT: bigint = BigInt("1000000000000000000000"); // 1000 FJ
 
 async function main() {
   const network = parseNetwork();
-  const { secretKey, generated } = loadOrCreateSecret("FPC_SECRET");
+  const { secretKey, generated } = loadOrCreateSecret("FPC_ADMIN_SECRET");
 
   const adminAddress = await deriveSchnorrAdminAddress(secretKey);
   console.error(`FPC admin address: ${adminAddress.toString()}`);
 
   const { node, wallet } = await setupWallet(NETWORK_URLS[network], network);
   const signingKey = deriveSigningKey(secretKey);
-  const accountManager = await wallet.createSchnorrAccount(secretKey, new Fr(0), signingKey);
+  const accountManager = await wallet.createSchnorrAccount(secretKey, getSalt(), signingKey);
 
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
   if (initializationStatus === ContractInitializationStatus.INITIALIZED) {
@@ -64,7 +64,7 @@ async function main() {
   }
 
   if (generated) {
-    console.log(`export FPC_SECRET=${secretKey.toString()}`);
+    console.log(`export FPC_ADMIN_SECRET=${secretKey.toString()}`);
   }
   console.log(`export FPC_ADMIN_ADDRESS=${adminAddress.toString()}`);
 }

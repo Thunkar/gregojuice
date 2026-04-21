@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Orchestrates a full swap-app deploy on the target network:
 #
-#   1. Fund the swap admin (generates SWAP_SECRET if not set).
+#   1. Fund the swap admin (generates SWAP_ADMIN_SECRET if not set).
 #   2. Deploy swap contracts with that admin.
-#   3. Fund the FPC admin (generates FPC_SECRET if not set).
+#   3. Fund the FPC admin (generates FPC_ADMIN_SECRET if not set).
 #   4. Deploy the SubscriptionFPC and fund it.
 #   5. Register the swap-app signups on the FPC (calibrate on non-local).
 #
 # Each step's stdout contains `export KEY=VAL` lines for the next step; we
 # capture them by eval-ing the greppable subset of output.
 #
-# Supply `SWAP_SECRET` / `FPC_SECRET` via env to make the flow deterministic.
+# Supply `SWAP_ADMIN_SECRET` / `FPC_ADMIN_SECRET` via env to make the flow deterministic.
 # Optional: `L1_FUNDER_KEY` to avoid the faucet mint.
 
 set -euo pipefail

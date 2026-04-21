@@ -7,13 +7,13 @@
  *   yarn swap fund-admin --network <local|testnet>
  *
  * Env vars:
- *   SWAP_SECRET   — hex Fr for the admin secret. If unset, a new key is
- *                   generated and the script prints an `export SWAP_SECRET=…`
- *                   line on stdout before exiting.
- *   L1_FUNDER_KEY — optional. L1 private key holding FJ on the target chain.
- *                   Defaults to anvil dev key on `local` (with mint=true via
- *                   the faucet handler). On `testnet`, when unset, a random
- *                   L1 key is generated and the faucet mints FJ for us.
+ *   SWAP_ADMIN_SECRET — hex Fr for the admin secret. If unset, a new key is
+ *                       generated and the script prints an `export SWAP_ADMIN_SECRET=…`
+ *                       line on stdout before exiting.
+ *   L1_FUNDER_KEY     — optional. L1 private key holding FJ on the target chain.
+ *                       Defaults to anvil dev key on `local` (with mint=true via
+ *                       the faucet handler). On `testnet`, when unset, a random
+ *                       L1 key is generated and the faucet mints FJ for us.
  */
 import { bridge } from "@gregojuice/common/bridging";
 import {
@@ -25,25 +25,25 @@ import {
   setupWallet,
   loadOrCreateSecret,
   deriveSchnorrAdminAddress,
+  getSalt,
 } from "@gregojuice/common/testing";
 import { FeeJuicePaymentMethodWithClaim } from "@aztec/aztec.js/fee";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { ContractInitializationStatus } from "@aztec/aztec.js/wallet";
 import { deriveSigningKey } from "@aztec/stdlib/keys";
-import { Fr } from "@aztec/foundation/curves/bn254";
 
 const FUND_AMOUNT: bigint = BigInt("1000000000000000000000"); // 1000 FJ
 
 async function main() {
   const network = parseNetwork();
-  const { secretKey, generated } = loadOrCreateSecret("SWAP_SECRET");
+  const { secretKey, generated } = loadOrCreateSecret("SWAP_ADMIN_SECRET");
 
   const adminAddress = await deriveSchnorrAdminAddress(secretKey);
   console.error(`Swap admin address: ${adminAddress.toString()}`);
 
   const { node, wallet } = await setupWallet(NETWORK_URLS[network], network);
   const signingKey = deriveSigningKey(secretKey);
-  const accountManager = await wallet.createSchnorrAccount(secretKey, new Fr(0), signingKey);
+  const accountManager = await wallet.createSchnorrAccount(secretKey, getSalt(), signingKey);
 
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
   if (initializationStatus === ContractInitializationStatus.INITIALIZED) {
@@ -79,7 +79,7 @@ async function main() {
   }
 
   if (generated) {
-    console.log(`export SWAP_SECRET=${secretKey.toString()}`);
+    console.log(`export SWAP_ADMIN_SECRET=${secretKey.toString()}`);
   }
   console.log(`export SWAP_ADMIN_ADDRESS=${adminAddress.toString()}`);
 }

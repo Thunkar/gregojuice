@@ -5,8 +5,11 @@
  *
  * Inputs:
  *   --network <local|testnet>
- *   FPC_ADDRESS    — hex AztecAddress of the deployed FPC (from fpc-operator/deploy-fpc)
- *   SWAP_SECRET    — swap admin secret (must match `deploy.ts`'s admin)
+ *   FPC_ADDRESS      — hex AztecAddress of the deployed FPC (from fpc-operator/deploy-fpc)
+ *   FPC_ADMIN_SECRET — FPC admin secret (signup txs must be sent by the FPC deployer)
+ *   FPC_SECRET       — the contract key secret the FPC was deployed with, so the
+ *                      PXE can derive its public keys for note encoding during
+ *                      calibration simulations. Published by deploy-fpc on stdout.
  *
  * Side outputs:
  *   Writes `subscriptionFPC.{address, functions}` into the committed swap
@@ -113,7 +116,9 @@ async function main() {
   console.error(`Registering swap signups on FPC ${fpcAddress.toString()}...`);
 
   const { node, wallet, paymentMethod } = await setupWallet(NETWORK_URLS[network], network);
-  const { secretKey } = loadOrCreateSecret("SWAP_SECRET");
+  // Signups must be sent by the FPC admin (who deployed the FPC), not the swap admin.
+  // The FPC admin is funded + deployed by `fpc-operator/scripts/fund-fpc-admin.ts`.
+  const { secretKey } = loadOrCreateSecret("FPC_ADMIN_SECRET");
   const admin = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
 
   // Hydrate the PXE with all swap contracts + register the admin as its own sender
@@ -124,9 +129,11 @@ async function main() {
   // Register the FPC contract so we can simulate subscribe() against it.
   const fpcInstance = await node.getContract(fpcAddress);
   if (!fpcInstance) throw new Error(`FPC ${fpcAddress.toString()} not found on-chain`);
-  // We don't own the FPC's secret key; registering without one skips note
-  // decryption (we're only simulating/sending — the FPC handles its own notes).
-  await wallet.registerContract(fpcInstance, SubscriptionFPCContractArtifact);
+  // The FPC's contract key secret is published by deploy-fpc (it's public by
+  // design — the FPC holds notes for its slot tracking and the PXE needs its
+  // keys to decode those notes during simulation).
+  const fpcSecret = Fr.fromString(requireEnv("FPC_SECRET"));
+  await wallet.registerContract(fpcInstance, SubscriptionFPCContractArtifact, fpcSecret);
 
   const fpc = new SubscriptionFPC(SubscriptionFPCContract.at(fpcAddress, wallet));
 
