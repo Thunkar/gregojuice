@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "composite": true,
+    "noEmit": true,
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@emotion/react",
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "paths": {
+      "@gregojuice/embedded-wallet/ui": ["../../packages/embedded-wallet/src/ui.ts"],
+      "@gregojuice/embedded-wallet": ["../../packages/embedded-wallet/src/index.ts"],
+      "@gregojuice/common/ui": ["../../packages/common/src/ui.ts"],
+      "@gregojuice/common/bridging": ["../../packages/common/src/bridging/index.ts"],
+      "@gregojuice/common/fee-stats": ["../../packages/common/src/fee-stats.ts"],
+      "@gregojuice/common/testing": ["../../packages/common/src/testing/index.ts"],
+      "@gregojuice/common": ["../../packages/common/src/index.ts"],
+      "@gregojuice/aztec/*": ["../../packages/contracts/aztec/lib/*"],
+      "@gregojuice/aztec/artifacts/*": ["../../packages/contracts/aztec/noir/artifacts/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts*",
+    "scripts/**/*.ts",
+    "../../packages/contracts/aztec/noir/artifacts/**/*.ts",
+    "../../packages/contracts/aztec/lib/**/*.ts",
+    "../../packages/embedded-wallet/src/**/*.ts*",
+    "../../packages/common/src/**/*.ts",
+    "../../packages/common/src/**/*.tsx"
+  ]
+}

@@ -1,6 +1,0 @@
-[workspace]
-members = [
-    "./subscription-fpc",
-    "./ecdsa_account_deployer",
-    "./schnorr_initializerless_account"
-]

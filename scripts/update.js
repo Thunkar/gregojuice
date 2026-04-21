@@ -1,26 +1,31 @@
 #!/usr/bin/env node
 
 /**
- * Update gregojuice to the latest Aztec nightly version.
+ * Update gregojuice to a given Aztec nightly version across the whole monorepo.
+ *
+ * Scope:
+ *   - every workspace package.json under apps/, packages/, e2e/
+ *   - every Nargo.toml under packages/contracts/aztec/noir/
  *
  * Usage:
- *   node scripts/update.js [--version VERSION] [--skip-aztec-up]
+ *   node scripts/update.js [--version VERSION] [--skip-aztec-up] [--skip-compile]
  */
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
-import { resolve, dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
+import { resolve, dirname, join, relative } from "path";
+import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, "..");
 
-// Color codes
+const WORKSPACE_ROOTS = ["apps", "packages", "packages/contracts", "e2e"];
+
 const COLORS = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
+  reset: "\x1b[0m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
 };
 
 function log(color, message) {
@@ -29,126 +34,138 @@ function log(color, message) {
 
 function exec(command, options = {}) {
   return execSync(command, {
-    cwd: ROOT,
-    stdio: options.silent ? 'pipe' : 'inherit',
-    encoding: 'utf-8',
+    cwd: options.cwd || ROOT,
+    stdio: options.silent ? "pipe" : "inherit",
+    encoding: "utf-8",
     ...options,
   });
 }
 
-async function fetchLatestNightly() {
-  log(COLORS.yellow, 'Fetching latest nightly from npm...');
+function isDir(path) {
   try {
-    const output = exec('npm view @aztec/aztec.js versions --json', { silent: true });
-    const versions = JSON.parse(output);
-    const nightlies = versions.filter(v => v.match(/^4\.\d+\.\d+-nightly\.\d+$/));
-    const latest = nightlies[nightlies.length - 1];
-    if (!latest) {
-      throw new Error('No nightly versions found');
-    }
-    return latest;
-  } catch (error) {
-    log(COLORS.red, 'Failed to fetch latest nightly version from npm');
-    log(COLORS.red, 'Please specify a version with --version');
-    process.exit(1);
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
   }
 }
 
-function updatePackageJsonFiles(version) {
-  log(COLORS.yellow, '[1/5] Updating package.json files...');
+function isFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
 
-  const packagesDir = resolve(ROOT, 'packages');
-  const packages = readdirSync(packagesDir).filter(name => {
-    const pkgPath = join(packagesDir, name, 'package.json');
-    try {
-      statSync(pkgPath);
-      return true;
-    } catch {
-      return false;
+/**
+ * Returns every package.json under the given workspace roots.
+ * Handles two layouts:
+ *   - `e2e/package.json` (single workspace at the root of its dir)
+ *   - `apps/<name>/package.json` / `packages/<name>/package.json` (children)
+ */
+function findWorkspacePackageJsons() {
+  const results = [];
+  for (const root of WORKSPACE_ROOTS) {
+    const rootPath = resolve(ROOT, root);
+    if (!isDir(rootPath)) continue;
+
+    const topLevelPkg = join(rootPath, "package.json");
+    if (isFile(topLevelPkg)) {
+      results.push(topLevelPkg);
+      continue;
     }
-  });
 
-  for (const pkg of packages) {
-    const path = join(packagesDir, pkg, 'package.json');
-    let content = readFileSync(path, 'utf-8');
-    const original = content;
-
-    // Update @aztec/* dependency versions
-    content = content.replace(/"(@aztec\/[^"]+)": "v[^"]+"/g, `"$1": "v${version}"`);
-
-    if (content !== original) {
-      writeFileSync(path, content, 'utf-8');
-      log(COLORS.green, `  ✓ packages/${pkg}/package.json`);
+    for (const entry of readdirSync(rootPath, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const pkgPath = join(rootPath, entry.name, "package.json");
+      if (isFile(pkgPath)) results.push(pkgPath);
     }
   }
-
-  log(COLORS.green, '✓ package.json files updated\n');
+  return results;
 }
 
 function findNargoTomlFiles(dir) {
   const results = [];
-  const entries = readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
+  if (!isDir(dir)) return results;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const fullPath = join(dir, entry.name);
-    if (entry.isDirectory() && entry.name !== 'node_modules' && entry.name !== 'target') {
+    if (entry.isDirectory() && entry.name !== "node_modules" && entry.name !== "target") {
       results.push(...findNargoTomlFiles(fullPath));
-    } else if (entry.name === 'Nargo.toml') {
+    } else if (entry.name === "Nargo.toml") {
       results.push(fullPath);
     }
   }
   return results;
 }
 
-function updateNargoToml(version) {
-  log(COLORS.yellow, '[2/5] Updating Nargo.toml files...');
+function updatePackageJsonFiles(version) {
+  log(COLORS.yellow, "[1/5] Updating workspace package.json files...");
 
-  const contractsDir = resolve(ROOT, 'packages/contracts');
+  const packageJsons = findWorkspacePackageJsons();
+  let changed = 0;
+
+  for (const path of packageJsons) {
+    const original = readFileSync(path, "utf-8");
+    const updated = original.replace(/"(@aztec\/[^"]+)": "v[^"]+"/g, `"$1": "v${version}"`);
+    if (updated !== original) {
+      writeFileSync(path, updated, "utf-8");
+      log(COLORS.green, `  ✓ ${relative(ROOT, path)}`);
+      changed++;
+    }
+  }
+
+  log(COLORS.green, `✓ Updated ${changed} package.json file(s)\n`);
+}
+
+function updateNargoToml(version) {
+  log(COLORS.yellow, "[2/5] Updating Nargo.toml files...");
+
+  const contractsDir = resolve(ROOT, "packages/contracts/aztec/noir");
   const nargoFiles = findNargoTomlFiles(contractsDir);
+  let changed = 0;
 
   for (const nargoPath of nargoFiles) {
-    let content = readFileSync(nargoPath, 'utf-8');
+    let content = readFileSync(nargoPath, "utf-8");
     const original = content;
 
-    // Update aztec-nr tags
+    // aztec-nr
     content = content.replace(
       /(git\s*=\s*"https:\/\/github\.com\/AztecProtocol\/aztec-nr"[^}]*tag\s*=\s*")v[^"]+"/g,
       `$1v${version}"`,
     );
-
-    // Update aztec-packages tags
+    // aztec-packages
     content = content.replace(
       /(git\s*=\s*"https:\/\/github\.com\/AztecProtocol\/aztec-packages\/?",?\s*tag\s*=\s*")v[^"]+"/g,
       `$1v${version}"`,
     );
 
     if (content !== original) {
-      const relative = nargoPath.replace(ROOT + '/', '');
-      writeFileSync(nargoPath, content, 'utf-8');
-      log(COLORS.green, `  ✓ ${relative}`);
+      writeFileSync(nargoPath, content, "utf-8");
+      log(COLORS.green, `  ✓ ${relative(ROOT, nargoPath)}`);
+      changed++;
     }
   }
 
-  log(COLORS.green, '✓ Nargo.toml files updated\n');
+  log(COLORS.green, `✓ Updated ${changed} Nargo.toml file(s)\n`);
 }
 
 function installDependencies() {
-  log(COLORS.yellow, '[3/5] Running yarn install...');
-  exec('yarn install');
-  log(COLORS.green, '✓ Dependencies installed\n');
+  log(COLORS.yellow, "[3/5] Running yarn install...");
+  exec("yarn install");
+  log(COLORS.green, "✓ Dependencies installed\n");
 }
 
 function installAztecCLI(version) {
   log(COLORS.yellow, `[4/5] Installing Aztec CLI version ${version}...`);
 
-  // Check if already at the right version
   try {
-    const current = exec('aztec --version', { silent: true }).trim();
+    const current = exec("aztec --version", { silent: true }).trim();
     if (current === version) {
       log(COLORS.green, `✓ Aztec CLI already at v${version}, skipping\n`);
       return;
     }
   } catch {
-    // aztec not installed, proceed with installation
+    // not installed yet — proceed
   }
 
   const isCI = !!process.env.CI;
@@ -156,56 +173,82 @@ function installAztecCLI(version) {
   if (isCI) {
     log(COLORS.yellow, `Running version-specific installer for ${version}...`);
     process.env.FOUNDRY_DIR = `${process.env.HOME}/.foundry`;
-    exec(`curl -fsSL "https://install.aztec.network/${version}/install" | VERSION="${version}" bash`);
-
+    exec(
+      `curl -fsSL "https://install.aztec.network/${version}/install" | VERSION="${version}" bash`,
+    );
     process.env.PATH = `${process.env.HOME}/.aztec/versions/${version}/bin:${process.env.PATH}`;
     process.env.PATH = `${process.env.HOME}/.aztec/versions/${version}/node_modules/.bin:${process.env.PATH}`;
-    log(COLORS.green, '✓ Aztec CLI installed (CI mode)\n');
-  } else {
-    try {
-      exec('command -v aztec-up', { silent: true });
-      exec(`aztec-up install ${version}`);
-      log(COLORS.green, '✓ Aztec CLI updated\n');
-    } catch {
-      log(
-        COLORS.red,
-        `Warning: aztec-up not found in PATH. Please install manually with: aztec-up install ${version}\n`,
-      );
-    }
+    log(COLORS.green, "✓ Aztec CLI installed (CI mode)\n");
+    return;
+  }
+
+  try {
+    exec("command -v aztec-up", { silent: true });
+    exec(`aztec-up install ${version}`);
+    log(COLORS.green, "✓ Aztec CLI updated\n");
+  } catch {
+    log(
+      COLORS.red,
+      `Warning: aztec-up not found in PATH. Install manually: aztec-up install ${version}\n`,
+    );
   }
 }
 
 function compileContracts() {
-  log(COLORS.yellow, '[5/5] Compiling contracts...');
-  exec('yarn compile:contracts');
-  log(COLORS.green, '✓ Contracts compiled\n');
+  log(COLORS.yellow, "[5/5] Building @gregojuice/aztec (compile + codegen)...");
+  exec("yarn workspace @gregojuice/aztec build");
+  log(COLORS.green, "✓ Contracts compiled\n");
 }
 
-async function main() {
-  log(COLORS.green, '=== Gregojuice Nightly Update Script ===\n');
+async function fetchLatestNightly() {
+  log(COLORS.yellow, "Fetching latest nightly from npm...");
+  try {
+    const output = exec("npm view @aztec/aztec.js versions --json", { silent: true });
+    const versions = JSON.parse(output);
+    const nightlies = versions.filter((v) => v.match(/^4\.\d+\.\d+-nightly\.\d+$/));
+    const latest = nightlies[nightlies.length - 1];
+    if (!latest) throw new Error("No nightly versions found");
+    return latest;
+  } catch {
+    log(COLORS.red, "Failed to fetch latest nightly version from npm");
+    log(COLORS.red, "Please specify a version with --version");
+    process.exit(1);
+  }
+}
 
-  // Parse arguments
+function parseArgs() {
   const args = process.argv.slice(2);
   let version = null;
   let skipAztecUp = false;
+  let skipCompile = false;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--version' && args[i + 1]) {
-      version = args[i + 1].replace(/^v/, '');
-      i++;
-    } else if (args[i] === '--skip-aztec-up') {
+    const a = args[i];
+    if (a === "--version" && args[i + 1]) {
+      version = args[++i].replace(/^v/, "");
+    } else if (a === "--skip-aztec-up") {
       skipAztecUp = true;
-    } else if (args[i] === '--help') {
-      console.log('Usage: node scripts/update.js [OPTIONS]');
-      console.log('\nOptions:');
-      console.log('  --version VERSION    Specify nightly version (e.g., 4.2.0-nightly.20260412)');
-      console.log('  --skip-aztec-up      Skip Aztec CLI installation');
-      console.log('  --help               Show this help message');
+    } else if (a === "--skip-compile") {
+      skipCompile = true;
+    } else if (a === "--help" || a === "-h") {
+      console.log("Usage: node scripts/update.js [OPTIONS]");
+      console.log("\nOptions:");
+      console.log("  --version VERSION    Specify nightly version (e.g., 4.2.0-nightly.20260412)");
+      console.log("  --skip-aztec-up      Skip Aztec CLI installation");
+      console.log("  --skip-compile       Skip the compile/codegen step at the end");
+      console.log("  --help, -h           Show this help message");
       process.exit(0);
     }
   }
 
-  // Fetch latest if not specified
+  return { version, skipAztecUp, skipCompile };
+}
+
+async function main() {
+  log(COLORS.green, "=== Gregojuice Nightly Update Script ===\n");
+
+  let { version, skipAztecUp, skipCompile } = parseArgs();
+
   if (!version) {
     version = await fetchLatestNightly();
     log(COLORS.green, `Latest nightly version: v${version}\n`);
@@ -213,24 +256,27 @@ async function main() {
     log(COLORS.green, `Updating to version: v${version}\n`);
   }
 
-  // Run update steps
   updatePackageJsonFiles(version);
   updateNargoToml(version);
   installDependencies();
 
-  if (!skipAztecUp) {
-    installAztecCLI(version);
+  if (skipAztecUp) {
+    log(COLORS.yellow, "[4/5] Skipping Aztec CLI installation (--skip-aztec-up)\n");
   } else {
-    log(COLORS.yellow, '[4/5] Skipping Aztec CLI installation (--skip-aztec-up flag set)\n');
+    installAztecCLI(version);
   }
 
-  compileContracts();
+  if (skipCompile) {
+    log(COLORS.yellow, "[5/5] Skipping contract compile (--skip-compile)\n");
+  } else {
+    compileContracts();
+  }
 
-  log(COLORS.green, '=== Update Complete ===');
+  log(COLORS.green, "=== Update Complete ===");
   log(COLORS.green, `Version: v${version}`);
 }
 
-main().catch(error => {
+main().catch((error) => {
   log(COLORS.red, `Error: ${error.message}`);
   process.exit(1);
 });

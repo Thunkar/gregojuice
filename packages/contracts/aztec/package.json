@@ -1,0 +1,58 @@
+{
+  "name": "@gregojuice/aztec",
+  "version": "0.0.18",
+  "type": "module",
+  "main": "dist/lib/subscription-fpc.js",
+  "types": "dist/lib/subscription-fpc.d.ts",
+  "exports": {
+    "./subscription-fpc": {
+      "types": "./dist/lib/subscription-fpc.d.ts",
+      "import": "./dist/lib/subscription-fpc.js"
+    },
+    "./fpc-gas-constants": {
+      "types": "./dist/lib/fpc-gas-constants.d.ts",
+      "import": "./dist/lib/fpc-gas-constants.js"
+    },
+    "./artifacts/*": {
+      "types": "./dist/noir/artifacts/*.d.ts",
+      "import": "./dist/noir/artifacts/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist ./noir/artifacts ./noir/target",
+    "compile": "cd noir && bash ../../../../node_modules/.bin/aztec compile",
+    "codegen": "cd noir && bash ../../../../node_modules/.bin/aztec codegen ./target -o artifacts",
+    "build": "yarn compile && yarn codegen && tsc -p tsconfig.build.json && mkdir -p dist/noir/target && cp noir/target/*.json dist/noir/target/",
+    "build:codegen": "yarn codegen",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "yarn build:ts"
+  },
+  "dependencies": {
+    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
+    "@aztec/foundation": "v4.3.0-nightly.20260420",
+    "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/wallets": "v4.3.0-nightly.20260420"
+  },
+  "devDependencies": {
+    "@aztec/accounts": "v4.3.0-nightly.20260420",
+    "@aztec/aztec": "v4.3.0-nightly.20260420",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
+    "@aztec/constants": "v4.3.0-nightly.20260420",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260420",
+    "@aztec/ethereum": "v4.3.0-nightly.20260420",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/noir-protocol-circuits-types": "v4.3.0-nightly.20260420",
+    "@aztec/protocol-contracts": "v4.3.0-nightly.20260420",
+    "@aztec/sequencer-client": "v4.3.0-nightly.20260420",
+    "@aztec/telemetry-client": "v4.3.0-nightly.20260420",
+    "@aztec/world-state": "v4.3.0-nightly.20260420",
+    "typescript": "~5.7.3",
+    "vitest": "^3"
+  }
+}

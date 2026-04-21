@@ -1,0 +1,173 @@
+import type { AztecNode } from "@aztec/aztec.js/node";
+import { EmbeddedWallet, type EmbeddedWalletOptions } from "@aztec/wallets/embedded";
+import type {
+  ContractInstanceWithAddress,
+  InteractionWaitOptions,
+  SendReturn,
+} from "@aztec/aztec.js/contracts";
+import type { SendOptions } from "@aztec/aztec.js/wallet";
+import type { ExecutionPayload } from "@aztec/stdlib/tx";
+import { BaseWallet } from "@aztec/wallet-sdk/base-wallet";
+import { getInitialTestAccountsData } from "@aztec/accounts/testing";
+import { deployFundedSchnorrAccounts } from "@aztec/wallets/testing";
+import type { AztecAddress } from "@aztec/aztec.js/addresses";
+import { Fr } from "@aztec/aztec.js/fields";
+import { deriveKeys } from "@aztec/aztec.js/keys";
+import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
+import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
+import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPCContractArtifact } from "../noir/artifacts/SubscriptionFPC.js";
+import { setupLocalNetwork } from "./fixtures/local-network.js";
+
+/**
+ * Fixed secret used for the SubscriptionFPC across all tests. Combined with
+ * a random salt per-suite, this lets the fixture pre-compute the FPC's
+ * address and include it in the genesis pre-funded set — so the deploy tx
+ * and every sponsored call can pay for themselves without bridging.
+ *
+ * The salt randomises per `setupTestContext()` call so parallel suites
+ * can't collide on the same deterministic address.
+ */
+const FPC_SECRET_KEY = Fr.fromString(
+  "0x00000000000000000000000000000000000000000000000000000000deadbeef",
+);
+
+export interface TestContext {
+  node: AztecNode;
+  wallet: EmbeddedWallet;
+  admin: AztecAddress;
+  feeJuice: FeeJuiceContract;
+  /** Tears down the in-process anvil + node. */
+  stop: () => Promise<void>;
+}
+
+async function deriveAdminAddress(): Promise<AztecAddress> {
+  const [account] = await getInitialTestAccountsData();
+  return account.address;
+}
+
+async function computeFpcAddress(admin: AztecAddress, salt: Fr): Promise<AztecAddress> {
+  const { publicKeys } = await deriveKeys(FPC_SECRET_KEY);
+  const instance = await getContractInstanceFromInstantiationParams(
+    SubscriptionFPCContractArtifact,
+    {
+      constructorArgs: [admin],
+      salt,
+      publicKeys,
+    },
+  );
+  return instance.address;
+}
+
+/**
+ * EmbeddedWallet subclass that skips pre-simulation before sending.
+ * EmbeddedWallet.sendTx simulates first to estimate gas, which causes
+ * expected-to-revert txs to fail before they ever reach the node.
+ * This wallet calls BaseWallet.sendTx directly, bypassing that simulation.
+ */
+export class GrieferWallet extends EmbeddedWallet {
+  static override create<T extends EmbeddedWallet = GrieferWallet>(
+    nodeOrUrl: string | AztecNode,
+    options?: EmbeddedWalletOptions,
+  ): Promise<T> {
+    return super.create<T>(nodeOrUrl, options);
+  }
+
+  public override sendTx<W extends InteractionWaitOptions = undefined>(
+    executionPayload: ExecutionPayload,
+    opts: SendOptions<W>,
+  ): Promise<SendReturn<W>> {
+    return BaseWallet.prototype.sendTx.call(this, executionPayload, opts) as Promise<SendReturn<W>>;
+  }
+}
+
+// ── FPC test context ─────────────────────────────────────────────────
+
+export interface FPCTestContext extends TestContext {
+  fpc: SubscriptionFPC;
+  fpcInstance: ContractInstanceWithAddress;
+  fpcSecretKey: Fr;
+}
+
+/**
+ * Spins up a fresh in-process sandbox (anvil + L1 contracts + AztecNode),
+ * derives the admin from the first initial test account, and deploys a
+ * SubscriptionFPC whose address was included in the genesis pre-funded
+ * set. No bridging step required.
+ *
+ * Each call picks a random salt so parallel suites can't collide.
+ */
+export async function setupTestContext(): Promise<FPCTestContext> {
+  const admin = await deriveAdminAddress();
+  const fpcSalt = Fr.random();
+  const fpcAddress = await computeFpcAddress(admin, fpcSalt);
+
+  const network = await setupLocalNetwork({
+    fundedAddresses: [admin, fpcAddress],
+  });
+
+  const wallet = await EmbeddedWallet.create(network.node, { ephemeral: true });
+  const [testAccount] = await getInitialTestAccountsData();
+  // Deploy the admin's schnorr account contract on-chain. Registration alone
+  // puts the instance in the PXE but doesn't publish its code — every tx the
+  // admin sends has to hit a live account contract.
+  await deployFundedSchnorrAccounts(wallet, [testAccount]);
+
+  const feeJuice = FeeJuiceContract.at(wallet);
+
+  // Deploy with the same (secret, salt) the genesis pre-fund used.
+  const { deployment, secretKey } = await SubscriptionFPC.deployWithKeys(wallet, admin, {
+    secretKey: FPC_SECRET_KEY,
+  });
+  const instance = await deployment.getInstance({ contractAddressSalt: fpcSalt });
+  await wallet.registerContract(instance, SubscriptionFPC.artifact, secretKey);
+
+  const {
+    receipt: { contract: rawFpc },
+  } = await deployment.send({
+    from: admin,
+    contractAddressSalt: fpcSalt,
+    wait: { returnReceipt: true },
+  });
+  const fpc = new SubscriptionFPC(rawFpc);
+
+  return {
+    node: network.node,
+    wallet,
+    admin,
+    feeJuice,
+    fpc,
+    fpcInstance: instance,
+    fpcSecretKey: secretKey,
+    stop: network.stop,
+  };
+}
+
+// ── Gas measurement helpers ──────────────────────────────────────────
+
+export interface GasValues {
+  gasLimits: { daGas: number; l2Gas: number };
+  teardownGasLimits: { daGas: number; l2Gas: number };
+}
+
+export function toGas(estimatedGas: {
+  gasLimits: { daGas: bigint | number; l2Gas: bigint | number };
+  teardownGasLimits: { daGas: bigint | number; l2Gas: bigint | number };
+}): GasValues {
+  return {
+    gasLimits: {
+      daGas: Number(estimatedGas.gasLimits.daGas),
+      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+    },
+    teardownGasLimits: {
+      daGas: Number(estimatedGas.teardownGasLimits.daGas),
+      l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas),
+    },
+  };
+}
+
+export function logGas(label: string, gas: GasValues) {
+  console.log(
+    `  ${label}: DA=${gas.gasLimits.daGas}  L2=${gas.gasLimits.l2Gas}  teardown(DA=${gas.teardownGasLimits.daGas} L2=${gas.teardownGasLimits.l2Gas})`,
+  );
+}

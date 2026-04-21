@@ -21,16 +21,18 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf ./dist .tsbuildinfo",
     "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260417",
-    "@aztec/entrypoints": "v4.3.0-nightly.20260417",
-    "@aztec/foundation": "v4.3.0-nightly.20260417",
-    "@aztec/stdlib": "v4.3.0-nightly.20260417",
-    "@aztec/wallet-sdk": "v4.3.0-nightly.20260417",
-    "@aztec/wallets": "v4.3.0-nightly.20260417",
-    "@gregojuice/contracts": "workspace:*"
+    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260420",
+    "@aztec/foundation": "v4.3.0-nightly.20260420",
+    "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/wallet-sdk": "v4.3.0-nightly.20260420",
+    "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "@gregojuice/aztec": "workspace:*"
   },
   "peerDependencies": {
     "@emotion/react": ">=11",
@@ -53,7 +55,7 @@
     }
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.3.0-nightly.20260417",
+    "@aztec/accounts": "v4.3.0-nightly.20260420",
     "@emotion/react": "^11.14.0",
     "@mui/icons-material": "^6.3.1",
     "@mui/material": "^6.3.1",

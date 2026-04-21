@@ -3,11 +3,48 @@
   "version": "0.0.1",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ui": "./src/ui.ts",
+    "./bridging": "./src/bridging/index.ts",
+    "./fee-stats": "./src/fee-stats.ts",
+    "./testing": "./src/testing/index.ts"
+  },
   "scripts": {
     "build": "tsc -b",
-    "clean": "rm -rf ./dist .tsbuildinfo"
+    "clean": "rm -rf ./dist .tsbuildinfo",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@mui/material": "^6",
+    "react": "^18 || ^19"
+  },
+  "peerDependenciesMeta": {
+    "@mui/material": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@aztec/accounts": "v4.3.0-nightly.20260420",
+    "@aztec/aztec": "v4.3.0-nightly.20260420",
+    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
+    "@aztec/constants": "v4.3.0-nightly.20260420",
+    "@aztec/ethereum": "v4.3.0-nightly.20260420",
+    "@aztec/foundation": "v4.3.0-nightly.20260420",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/pxe": "v4.3.0-nightly.20260420",
+    "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "viem": "^2.21.0"
   },
   "devDependencies": {
+    "@mui/material": "^6.3.1",
+    "@types/react": "^19.0.6",
+    "react": "^18.3.1",
     "typescript": "~5.7.3"
   }
 }

@@ -1,0 +1,37 @@
+{
+  "id": "testnet",
+  "nodeUrl": "https://rpc.testnet.aztec-labs.com",
+  "chainId": "11155111",
+  "rollupVersion": "4127419662",
+  "contracts": {
+    "gregoCoin": "0x1c42339fd847cdf39c9acf0c9bd23a56edc35e56b2e9e8e229203d7a18e73ef1",
+    "gregoCoinPremium": "0x1efafa0dc8519f89a8b6fb232e4ba0aa75c2ab33b6cc97a313369b8f62f7ff01",
+    "amm": "0x2b1bb3a73b1d7f316c09575eeead0fec58acc61584cd54a7a34fa15fbcdb0d73",
+    "liquidityToken": "0x225e1d7d52e2608e1f36a2f1d88e798c3a77e33052be6208463558053825a348",
+    "pop": "0x20ae286edb142b7172070bdc899c9e2732ab7281db6526cb7889d5999ae3b08c",
+    "sponsoredFPC": "0x02a481c5711fce148a5fb401b4969abc589f20ecf0ad8d62231a0917c1916d8c",
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "deployer": {
+    "address": "0x15929371a2296539529feb1ee12fabbf452aed7e0b610cfd4effa06475775f79"
+  },
+  "deployedAt": "2026-04-21T16:10:20.906Z",
+  "subscriptionFPC": {
+    "address": "0x19b7a539f75e431ec8382b5099512386081b85833e02b61aef145bbe3640d250",
+    "secretKey": "0x000000000000000000000000000000000000000000000000000000000000002c",
+    "functions": {
+      "0x20ae286edb142b7172070bdc899c9e2732ab7281db6526cb7889d5999ae3b08c": {
+        "0xa539bd29": 0
+      },
+      "0x2b1bb3a73b1d7f316c09575eeead0fec58acc61584cd54a7a34fa15fbcdb0d73": {
+        "0xfd228669": 0
+      },
+      "0x1c42339fd847cdf39c9acf0c9bd23a56edc35e56b2e9e8e229203d7a18e73ef1": {
+        "0x859e4f61": 0
+      },
+      "0x1efafa0dc8519f89a8b6fb232e4ba0aa75c2ab33b6cc97a313369b8f62f7ff01": {
+        "0x859e4f61": 0
+      }
+    }
+  }
+}

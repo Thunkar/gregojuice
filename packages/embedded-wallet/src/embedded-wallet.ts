@@ -11,19 +11,7 @@
  *   signingKey: the signing private key (Fq buffer, derivable from secretKey but stored for consistency)
  */
 
-import {
-  collectOffchainEffects,
-  SimulationOverrides,
-  mergeExecutionPayloads,
-  type ExecutionPayload,
-  type TxSimulationResult,
-  type TxExecutionRequest,
-  TxStatus,
-} from "@aztec/stdlib/tx";
-import { NO_FROM } from "@aztec/aztec.js/account";
-import { DefaultEntrypoint } from "@aztec/entrypoints/default";
-import type { DefaultAccountEntrypointOptions } from "@aztec/entrypoints/account";
-import type { SimulateViaEntrypointOptions } from "@aztec/wallet-sdk/base-wallet";
+import { collectOffchainEffects, type ExecutionPayload, TxStatus } from "@aztec/stdlib/tx";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
@@ -37,11 +25,7 @@ import { waitForTx } from "@aztec/aztec.js/node";
 import type { SendOptions } from "@aztec/aztec.js/wallet";
 import { CallAuthorizationRequest } from "@aztec/aztec.js/authorization";
 import { AccountManager } from "@aztec/aztec.js/wallet";
-import {
-  txProgress,
-  type PhaseTiming,
-  type TxProgressEvent,
-} from "./tx-progress";
+import { txProgress, type PhaseTiming, type TxProgressEvent } from "./tx-progress";
 import {
   EmbeddedWallet as EmbeddedWalletBase,
   type EmbeddedWalletOptions,
@@ -95,43 +79,24 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
     // AccountManager.create() uses the derived salt for address computation.
     // getInitializationFunctionAndArgs() returns undefined → initializationHash = Fr.ZERO.
-    const accountManager = await AccountManager.create(
-      this,
-      secret,
-      accountContract,
-      derivedSalt,
-    );
+    const accountManager = await AccountManager.create(this, secret, accountContract, derivedSalt);
 
     const instance = accountManager.getInstance();
-    const existingInstance = await this.pxe.getContractInstance(
-      instance.address,
-    );
+    const existingInstance = await this.pxe.getContractInstance(instance.address);
     if (!existingInstance) {
       const artifact = await accountContract.getContractArtifact();
-      await this.registerContract(
-        instance,
-        artifact,
-        accountManager.getSecretKey(),
-      );
+      await this.registerContract(instance, artifact, accountManager.getSecretKey());
     }
 
     // Always store/refresh the immutables capsule so the contract can verify the signing key.
     // This is idempotent — store_immutables validates against the salt before persisting.
     const artifact = await accountContract.getContractArtifact();
-    const capsuleData = [
-      actualSalt,
-      ...(await serializeSigningKey(signingPublicKey)),
-    ];
-    const storeAbi = artifact.functions.find(
-      (f) => f.name === "store_immutables",
-    );
+    const capsuleData = [actualSalt, ...(await serializeSigningKey(signingPublicKey))];
+    const storeAbi = artifact.functions.find((f) => f.name === "store_immutables");
     if (storeAbi) {
-      const storeCall = new ContractFunctionInteraction(
-        this,
-        instance.address,
-        storeAbi,
-        [capsuleData],
-      );
+      const storeCall = new ContractFunctionInteraction(this, instance.address, storeAbi, [
+        capsuleData,
+      ]);
       await storeCall.simulate({ from: instance.address });
     }
 
@@ -142,10 +107,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
    * Creates and stores a new initializerless Schnorr account.
    * Returns the AccountManager — the account is immediately usable (no deployment needed).
    */
-  async createInitializerlessAccount(
-    secretKey?: Fr,
-    actualSalt?: Fr,
-  ): Promise<AccountManager> {
+  async createInitializerlessAccount(secretKey?: Fr, actualSalt?: Fr): Promise<AccountManager> {
     const sk = secretKey ?? Fr.random();
     const as = actualSalt ?? Fr.random();
 
@@ -171,8 +133,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     if (accounts.length === 0) return null;
 
     const address = accounts[0].item;
-    const { secretKey, salt, signingKey, type } =
-      await this.walletDB.retrieveAccount(address);
+    const { secretKey, salt, signingKey, type } = await this.walletDB.retrieveAccount(address);
 
     return this.createAccountInternal(type, secretKey, salt, signingKey);
   }
@@ -185,8 +146,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     salt: Fr;
     type: string;
   }> {
-    const { secretKey, salt, type } =
-      await this.walletDB.retrieveAccount(address);
+    const { secretKey, salt, type } = await this.walletDB.retrieveAccount(address);
     return { secretKey, salt, type: type as string };
   }
 
@@ -217,14 +177,9 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     const phases: PhaseTiming[] = [];
 
     const fnName = executionPayload.calls?.[0]?.name ?? "Transaction";
-    const label = fnName
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+    const label = fnName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-    const emit = (
-      phase: TxProgressEvent["phase"],
-      extra?: Partial<TxProgressEvent>,
-    ) => {
+    const emit = (phase: TxProgressEvent["phase"], extra?: Partial<TxProgressEvent>) => {
       txProgress.emit({
         txId,
         label,
@@ -246,27 +201,20 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
       emit("simulating");
       const simStart = Date.now();
-      const simulationResult = await this.simulateViaEntrypoint(
-        executionPayload,
-        {
-          from: opts.from,
-          feeOptions,
-          additionalScopes: opts.additionalScopes,
-          skipTxValidation: true,
-          skipFeeEnforcement: true,
-        },
-      );
+      const simulationResult = await this.simulateViaEntrypoint(executionPayload, {
+        from: opts.from,
+        feeOptions,
+        additionalScopes: opts.additionalScopes,
+        skipTxValidation: true,
+        skipFeeEnforcement: true,
+      });
       const simElapsed = Date.now() - simStart;
-      const offchainEffects = collectOffchainEffects(
-        simulationResult.privateExecutionResult,
-      );
+      const offchainEffects = collectOffchainEffects(simulationResult.privateExecutionResult);
       const authWitStart = Date.now();
       const authWitnesses = await Promise.all(
         offchainEffects.map(async (effect) => {
           try {
-            const authRequest = await CallAuthorizationRequest.fromFields(
-              effect.data,
-            );
+            const authRequest = await CallAuthorizationRequest.fromFields(effect.data);
             return this.createAuthWit(authRequest.onBehalfOf, {
               consumer: effect.contractAddress,
               innerHash: authRequest.innerHash,
@@ -287,14 +235,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       if (simStats?.timings) {
         const t = simStats.timings;
         const prepareDuration = simElapsed - t.total;
-        if (prepareDuration > 10)
-          breakdown.push({ label: "Prepare", duration: prepareDuration });
+        if (prepareDuration > 10) breakdown.push({ label: "Prepare", duration: prepareDuration });
         if (t.sync > 0) breakdown.push({ label: "Sync", duration: t.sync });
         if (t.perFunction.length > 0) {
-          const witgenTotal = t.perFunction.reduce(
-            (sum, fn) => sum + fn.time,
-            0,
-          );
+          const witgenTotal = t.perFunction.reduce((sum, fn) => sum + fn.time, 0);
           breakdown.push({
             label: "Private execution",
             duration: witgenTotal,
@@ -311,8 +255,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
             label: "Public simulation",
             duration: t.publicSimulation,
           });
-        if (t.unaccounted > 0)
-          breakdown.push({ label: "Other", duration: t.unaccounted });
+        if (t.unaccounted > 0) breakdown.push({ label: "Other", duration: t.unaccounted });
       }
       if (authWitDuration > 0)
         breakdown.push({ label: "Auth witnesses", duration: authWitDuration });
@@ -320,9 +263,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         const rt = simStats.nodeRPCCalls.roundTrips;
         const fmt = (ms: number) =>
           ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-        details.push(
-          `${rt.roundTrips} RPC round-trips (${fmt(rt.totalBlockingTime)} blocking)`,
-        );
+        details.push(`${rt.roundTrips} RPC round-trips (${fmt(rt.totalBlockingTime)} blocking)`);
       }
       phases.push({
         name: "Simulation",
@@ -334,10 +275,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
       emit("proving");
       const provingStart = Date.now();
-      const estimated = getGasLimits(
-        simulationResult,
-        this.estimatedGasPadding,
-      );
+      const estimated = getGasLimits(simulationResult, this.estimatedGasPadding);
       this.log.verbose(
         `Estimated gas limits for tx: DA=${estimated.gasLimits.daGas} L2=${estimated.gasLimits.l2Gas} teardownDA=${estimated.teardownGasLimits.daGas} teardownL2=${estimated.teardownGasLimits.l2Gas}`,
       );
@@ -346,9 +284,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         maxFeesPerGas: feeOptions.gasSettings.maxFeesPerGas,
         maxPriorityFeesPerGas: feeOptions.gasSettings.maxPriorityFeesPerGas,
         gasLimits: opts.fee?.gasSettings?.gasLimits ?? estimated.gasLimits,
-        teardownGasLimits:
-          opts.fee?.gasSettings?.teardownGasLimits ??
-          estimated.teardownGasLimits,
+        teardownGasLimits: opts.fee?.gasSettings?.teardownGasLimits ?? estimated.teardownGasLimits,
       });
       const txRequest = await this.createTxExecutionRequestFromPayloadAndFee(
         executionPayload,
@@ -363,8 +299,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       const stats = provenTx.stats;
       if (stats?.timings) {
         const t = stats.timings;
-        if (t.sync && t.sync > 0)
-          phases.push({ name: "Sync", duration: t.sync, color: "#90caf9" });
+        if (t.sync && t.sync > 0) phases.push({ name: "Sync", duration: t.sync, color: "#90caf9" });
         if (t.perFunction?.length > 0) {
           const witgenTotal = t.perFunction.reduce(
             (sum: number, fn: { time: number }) => sum + fn.time,
@@ -374,12 +309,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
             name: "Witgen",
             duration: witgenTotal,
             color: "#ffb74d",
-            breakdown: t.perFunction.map(
-              (fn: { functionName: string; time: number }) => ({
-                label: fn.functionName.split(":").pop() || fn.functionName,
-                duration: fn.time,
-              }),
-            ),
+            breakdown: t.perFunction.map((fn: { functionName: string; time: number }) => ({
+              label: fn.functionName.split(":").pop() || fn.functionName,
+              duration: fn.time,
+            })),
           });
         }
         if (t.proving && t.proving > 0)
@@ -404,8 +337,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
       const offchainOutput = extractOffchainOutput(
         provenTx.getOffchainEffects(),
-        provenTx.publicInputs.constants.anchorBlockHeader.globalVariables
-          .timestamp,
+        provenTx.publicInputs.constants.anchorBlockHeader.globalVariables.timestamp,
       );
 
       const tx = await provenTx.toTx();
@@ -413,9 +345,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       emit("sending", { aztecTxHash: txHash.toString() });
       const sendingStart = Date.now();
       if (await this.aztecNode.getTxEffect(txHash)) {
-        throw new Error(
-          `A settled tx with equal hash ${txHash.toString()} exists.`,
-        );
+        throw new Error(`A settled tx with equal hash ${txHash.toString()} exists.`);
       }
       await this.aztecNode.sendTx(tx);
       phases.push({

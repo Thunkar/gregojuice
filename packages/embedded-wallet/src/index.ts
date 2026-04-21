@@ -8,12 +8,7 @@ export {
   createSigningKeyCapsule,
   type SigningPublicKey,
 } from "./initializerless-account";
-export {
-  txProgress,
-  type TxPhase,
-  type PhaseTiming,
-  type TxProgressEvent,
-} from "./tx-progress";
+export { txProgress, type TxPhase, type PhaseTiming, type TxProgressEvent } from "./tx-progress";
 export {
   computeContractSalt as computeImmutablesSalt,
   createImmutablesCapsule,

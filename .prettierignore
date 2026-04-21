@@ -1,0 +1,21 @@
+# Build outputs
+**/dist/
+**/target/
+**/artifacts/
+**/generated/
+**/out/
+**/.turbo/
+**/.state/
+**/node_modules/
+**/*.tsbuildinfo
+
+# Lock + generated
+yarn.lock
+**/codegenCache.json
+
+# Vendored / third-party
+packages/contracts/ethereum/solidity/lib/
+
+# HTML/JSON artifacts we don't want prettier to rewrite
+packages/*/dist/**
+apps/*/dist/**

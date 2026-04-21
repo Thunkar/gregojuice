@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Skip stale runs when a PR gets pushed rapidly.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Fast gate: format + lint + build. Building with `tsc -b` gives us
+  # typechecking for free while also producing the artifacts that the
+  # integration + e2e jobs need — they pick them up from the turbo cache
+  # without redoing any work.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Format check
+        run: yarn format
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Build
+        run: yarn build
+
+  # Integration tests need a running local-network. Vitest runs the
+  # @gregojuice/aztec + @gregojuice/embedded-wallet suites against it.
+  integration:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Build workspace
+        run: yarn build
+
+      - name: Start local-network
+        run: |
+          aztec start --local-network > /tmp/aztec-network.log 2>&1 &
+          echo "AZTEC_PID=$!" >> $GITHUB_ENV
+
+      - name: Wait for network readiness
+        run: |
+          for i in $(seq 1 90); do
+            # L1 (anvil) — plain eth_blockNumber call.
+            # L2 (aztec node) — a valid JSON-RPC ping. `-d '{}'` returns
+            # HTTP 400 which `curl -f` treats as failure, so use an actual
+            # method the node exposes (node_getNodeInfo).
+            if curl -sf -X POST -H 'Content-Type: application/json' \
+                -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+                http://localhost:8545 > /dev/null \
+              && curl -sf -X POST -H 'Content-Type: application/json' \
+                -d '{"jsonrpc":"2.0","method":"node_getNodeInfo","params":[],"id":1}' \
+                http://localhost:8080 > /dev/null; then
+              echo "local-network is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "local-network did not become ready"
+          tail -200 /tmp/aztec-network.log || true
+          exit 1
+
+      - name: Run @gregojuice/aztec integration tests
+        run: yarn workspace @gregojuice/aztec test
+        env:
+          AZTEC_NODE_URL: http://localhost:8080
+          ETHEREUM_HOST: http://localhost:8545
+
+      - name: Run @gregojuice/embedded-wallet integration tests
+        run: yarn workspace @gregojuice/embedded-wallet test
+        env:
+          AZTEC_NODE_URL: http://localhost:8080
+          ETHEREUM_HOST: http://localhost:8545
+
+      - name: Stop local-network
+        if: always()
+        run: |
+          if [ -n "${AZTEC_PID:-}" ]; then
+            kill "$AZTEC_PID" 2>/dev/null || true
+          fi
+
+      - name: Upload network logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aztec-network-log
+          path: /tmp/aztec-network.log
+          retention-days: 7
+
+  # Playwright e2e tests. Runs in parallel with integration — both gate on
+  # `build`, neither depends on the other.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      # System deps are apt-installed and not cacheable, but the fetch is
+      # fast when they're already present; the chromium binary itself lives
+      # in ~/.cache/ms-playwright and is cached by the setup action, so a
+      # warm `playwright install chromium` is effectively a no-op.
+      - name: Install Playwright system deps
+        run: yarn workspace @gregojuice/e2e exec playwright install-deps chromium
+
+      - name: Install Playwright browsers
+        run: yarn workspace @gregojuice/e2e exec playwright install chromium
+
+      - name: Build workspace
+        run: yarn build
+
+      - name: Run e2e tests
+        run: yarn workspace @gregojuice/e2e test
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7

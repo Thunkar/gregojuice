@@ -4,18 +4,36 @@
   "type": "module",
   "packageManager": "yarn@4.5.2",
   "workspaces": [
-    "packages/*"
+    "apps/*",
+    "e2e",
+    "packages/*",
+    "packages/contracts/*"
   ],
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
     "clean": "turbo run clean",
     "test": "turbo run test",
-    "compile:contracts": "cd packages/contracts && aztec compile && aztec codegen ./target -o ./artifacts",
+    "lint": "turbo run lint",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "typecheck": "turbo run typecheck",
+    "compile:contracts": "cd packages/contracts/aztec/noir && aztec compile && aztec codegen ./target -o ./artifacts",
+    "bootstrap:local": "node scripts/bootstrap-local-networks.js",
+    "setup:local": "yarn bootstrap:local && bash scripts/setup-network.sh local",
+    "setup:testnet": "bash scripts/setup-network.sh testnet",
     "publish:packages": "./scripts/publish.sh"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "eslint": "^9.26.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.18",
+    "globals": "^15.14.0",
+    "prettier": "^3.5.3",
     "turbo": "^2",
-    "typescript": "~5.7.3"
+    "typescript": "~5.7.3",
+    "typescript-eslint": "^8.11.0"
   }
 }

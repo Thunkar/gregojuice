@@ -1,0 +1,51 @@
+{
+  "name": "@gregojuice/fpc-operator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "clean": "rm -rf ./dist .tsbuildinfo",
+    "lint": "eslint .",
+    "typecheck": "tsc -b --noEmit",
+    "preview": "vite preview",
+    "fund-admin:local": "node --experimental-transform-types scripts/fund-fpc-admin.ts --network local",
+    "fund-admin:testnet": "node --experimental-transform-types scripts/fund-fpc-admin.ts --network testnet",
+    "deploy-fpc:local": "node --experimental-transform-types scripts/deploy-fpc.ts --network local",
+    "deploy-fpc:testnet": "node --experimental-transform-types scripts/deploy-fpc.ts --network testnet"
+  },
+  "dependencies": {
+    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260420",
+    "@aztec/foundation": "v4.3.0-nightly.20260420",
+    "@aztec/l1-artifacts": "v4.3.0-nightly.20260420",
+    "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/wallet-sdk": "v4.3.0-nightly.20260420",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@gregojuice/aztec": "workspace:*",
+    "@gregojuice/common": "workspace:*",
+    "@gregojuice/embedded-wallet": "workspace:*",
+    "@mui/icons-material": "^6.3.1",
+    "@mui/material": "^6.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^14.3.8",
+    "viem": "^2.23.0"
+  },
+  "devDependencies": {
+    "@aztec/accounts": "v4.3.0-nightly.20260420",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
+    "@aztec/constants": "v4.3.0-nightly.20260420",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/pxe": "v4.3.0-nightly.20260420",
+    "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "@types/react": "^19.0.6",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react-swc": "^3.7.2",
+    "typescript": "~5.7.3",
+    "vite": "^7.1.4",
+    "vite-plugin-node-polyfills": "^0.24.0"
+  }
+}

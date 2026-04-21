@@ -19,7 +19,7 @@ import { Fr } from "@aztec/aztec.js/fields";
 import {
   SchnorrInitializerlessAccountContract,
   SchnorrInitializerlessAccountContractArtifact,
-} from "@gregojuice/contracts/artifacts/SchnorrInitializerlessAccount";
+} from "@gregojuice/aztec/artifacts/SchnorrInitializerlessAccount";
 import {
   computeContractSalt,
   createSchnorrInitializerlessAccount,
@@ -58,13 +58,8 @@ describe("SchnorrInitializerlessAccount", () => {
     const testAccounts = await getInitialTestAccountsData();
     [alice] = await Promise.all(
       testAccounts.slice(0, 1).map(async (account) => {
-        return (
-          await wallet.createSchnorrAccount(
-            account.secret,
-            account.salt,
-            account.signingKey,
-          )
-        ).address;
+        return (await wallet.createSchnorrAccount(account.secret, account.salt, account.signingKey))
+          .address;
       }),
     );
   });
@@ -72,27 +67,15 @@ describe("SchnorrInitializerlessAccount", () => {
   // -- Pure computation tests (no deployment) --
 
   it("should produce different addresses for different signing keys", async () => {
-    const result1 = await computeSchnorrAccountAddress(
-      SIGNING_KEY_1,
-      ACTUAL_SALT_1,
-    );
-    const result2 = await computeSchnorrAccountAddress(
-      SIGNING_KEY_2,
-      ACTUAL_SALT_1,
-    );
+    const result1 = await computeSchnorrAccountAddress(SIGNING_KEY_1, ACTUAL_SALT_1);
+    const result2 = await computeSchnorrAccountAddress(SIGNING_KEY_2, ACTUAL_SALT_1);
 
     expect(result1.toString()).not.toBe(result2.toString());
   });
 
   it("should produce different addresses for different actualSalt", async () => {
-    const result1 = await computeSchnorrAccountAddress(
-      SIGNING_KEY_1,
-      ACTUAL_SALT_1,
-    );
-    const result2 = await computeSchnorrAccountAddress(
-      SIGNING_KEY_1,
-      ACTUAL_SALT_2,
-    );
+    const result1 = await computeSchnorrAccountAddress(SIGNING_KEY_1, ACTUAL_SALT_1);
+    const result2 = await computeSchnorrAccountAddress(SIGNING_KEY_1, ACTUAL_SALT_2);
 
     expect(result1.toString()).not.toBe(result2.toString());
   });
@@ -107,17 +90,11 @@ describe("SchnorrInitializerlessAccount", () => {
     expect(salt.toBigInt()).toBe(salt2.toBigInt());
 
     // Different key → different salt
-    const differentSalt = await computeContractSalt(
-      ACTUAL_SALT_1,
-      SIGNING_KEY_2,
-    );
+    const differentSalt = await computeContractSalt(ACTUAL_SALT_1, SIGNING_KEY_2);
     expect(salt.toBigInt()).not.toBe(differentSalt.toBigInt());
 
     // Different actualSalt → different salt
-    const saltWithDifferentActual = await computeContractSalt(
-      ACTUAL_SALT_2,
-      SIGNING_KEY_1,
-    );
+    const saltWithDifferentActual = await computeContractSalt(ACTUAL_SALT_2, SIGNING_KEY_1);
     expect(salt.toBigInt()).not.toBe(saltWithDifferentActual.toBigInt());
   });
 
@@ -125,8 +102,7 @@ describe("SchnorrInitializerlessAccount", () => {
 
   it("should deploy account and read signing key back", async () => {
     const secretKey = Fr.random();
-    const { signingPublicKey } =
-      await createSchnorrInitializerlessAccount(secretKey);
+    const { signingPublicKey } = await createSchnorrInitializerlessAccount(secretKey);
     const serialized = await serializeSigningKey(signingPublicKey);
 
     const result = await deployWithImmutables(
@@ -139,16 +115,11 @@ describe("SchnorrInitializerlessAccount", () => {
     expect(result.instance.address).toBeDefined();
 
     // Read signing key back from capsule storage
-    const contract = SchnorrInitializerlessAccountContract.at(
-      result.instance.address,
-      wallet,
-    );
-    const { result: readResult } = await contract.methods
-      .get_signing_public_key()
-      .simulate({
-        from: alice,
-        additionalScopes: [result.instance.address],
-      });
+    const contract = SchnorrInitializerlessAccountContract.at(result.instance.address, wallet);
+    const { result: readResult } = await contract.methods.get_signing_public_key().simulate({
+      from: alice,
+      additionalScopes: [result.instance.address],
+    });
 
     expect(readResult[0]).toEqual(signingPublicKey.x.toBigInt());
     expect(readResult[1]).toEqual(signingPublicKey.y.toBigInt());
@@ -158,10 +129,8 @@ describe("SchnorrInitializerlessAccount", () => {
     const sk1 = Fr.random();
     const sk2 = Fr.random();
 
-    const { signingPublicKey: pk1 } =
-      await createSchnorrInitializerlessAccount(sk1);
-    const { signingPublicKey: pk2 } =
-      await createSchnorrInitializerlessAccount(sk2);
+    const { signingPublicKey: pk1 } = await createSchnorrInitializerlessAccount(sk1);
+    const { signingPublicKey: pk2 } = await createSchnorrInitializerlessAccount(sk2);
 
     const result1 = await deployWithImmutables(
       wallet,
@@ -176,17 +145,14 @@ describe("SchnorrInitializerlessAccount", () => {
       { secretKey: sk2 },
     );
 
-    expect(result1.instance.address.toString()).not.toBe(
-      result2.instance.address.toString(),
-    );
+    expect(result1.instance.address.toString()).not.toBe(result2.instance.address.toString());
   });
 
   it("should fail with wrong capsule data", async () => {
     // Register the contract WITHOUT persisting the capsule to the store.
     // This way, only the transient capsule is available — and it has wrong data.
     const secretKey = Fr.random();
-    const { signingPublicKey } =
-      await createSchnorrInitializerlessAccount(secretKey);
+    const { signingPublicKey } = await createSchnorrInitializerlessAccount(secretKey);
     const serialized = await serializeSigningKey(signingPublicKey);
 
     const { instance } = await createImmutablesInstance(
@@ -202,10 +168,7 @@ describe("SchnorrInitializerlessAccount", () => {
       secretKey,
     );
 
-    const contract = SchnorrInitializerlessAccountContract.at(
-      instance.address,
-      wallet,
-    );
+    const contract = SchnorrInitializerlessAccountContract.at(instance.address, wallet);
 
     // Wrong signing key — produces a different capsule that won't match the salt
     const wrongKey: SigningPublicKey = {

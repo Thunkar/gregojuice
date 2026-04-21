@@ -1,0 +1,33 @@
+{
+  "name": "@gregojuice/ethereum",
+  "version": "0.0.18",
+  "type": "module",
+  "main": "dist/lib/deterministic.js",
+  "types": "dist/lib/deterministic.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib/deterministic.d.ts",
+      "import": "./dist/lib/deterministic.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./dist ./generated ./solidity/out ./solidity/cache ./solidity/broadcast",
+    "build:forge": "cd solidity && forge build",
+    "build:codegen": "cd solidity && ./generate-artifacts.sh",
+    "build:ts": "tsc -p tsconfig.build.json",
+    "build": "yarn build:forge && yarn build:codegen && yarn build:ts",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "yarn build"
+  },
+  "peerDependencies": {
+    "viem": "^2"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.3",
+    "viem": "^2.23.0"
+  }
+}

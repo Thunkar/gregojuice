@@ -1,31 +1,36 @@
-name: Build, Compile Contracts & Deploy to Vercel
+name: Deploy to Vercel
 
 on:
+  # On push to main, deploy unconditionally (CI on main should be green).
   push:
     branches:
       - main
-  pull_request_target:
-    branches:
+  # On PRs, deploy preview after CI succeeds (triggered via workflow_run).
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches-ignore:
       - main
   workflow_dispatch:
     inputs:
       production:
-        description: 'Deploy to production'
+        description: "Deploy to production"
         required: false
         default: true
         type: boolean
 
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VITE_BRIDGE_CONTRACT_ADDRESS: ${{ vars.VITE_BRIDGE_CONTRACT_ADDRESS }}
 
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+    # For the workflow_run trigger, only proceed when CI passed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout repository
@@ -33,38 +38,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Extract Aztec version
-        id: aztec-version
-        run: |
-          VERSION=$(jq -r '.dependencies["@aztec/aztec.js"]' packages/bridge/package.json)
-          VERSION_NO_V=${VERSION#v}
-          echo "version=$VERSION_NO_V" >> $GITHUB_OUTPUT
-          echo "Aztec version: $VERSION_NO_V"
-
-      - name: Install Aztec CLI
-        run: |
-          export CI=1
-          export FOUNDRY_DIR="$HOME/.foundry"
-          echo "Running version-specific installer for ${{ steps.aztec-version.outputs.version }}..."
-          curl -fsSL "https://install.aztec.network/${{ steps.aztec-version.outputs.version }}/install" | VERSION="${{ steps.aztec-version.outputs.version }}" bash
-          echo "Installation completed"
-          ls -la ~/.aztec/versions/${{ steps.aztec-version.outputs.version }}/bin/
-
-      - name: Update path
-        run: |
-          echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/bin" >> $GITHUB_PATH
-          echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/node_modules/.bin" >> $GITHUB_PATH
+      - uses: ./.github/actions/setup
 
       - name: Build packages
         run: yarn build
@@ -76,7 +50,7 @@ jobs:
       - name: Pull Vercel Environment (Bridge)
         env:
           VERCEL_PROJECT_ID: ${{ secrets.BRIDGE_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/bridge
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/bridge
 
       - name: Build and deploy Bridge
         id: deploy-bridge
@@ -84,11 +58,11 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.BRIDGE_PROJECT_ID }}
         run: |
           if ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]) || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.production }}" == "true" ]); then
-            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/bridge
-            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/bridge)
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/bridge
+            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd apps/bridge)
           else
-            vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/bridge
-            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/bridge)
+            vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/bridge
+            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd apps/bridge)
           fi
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
@@ -96,7 +70,7 @@ jobs:
       - name: Pull Vercel Environment (FPC Operator)
         env:
           VERCEL_PROJECT_ID: ${{ secrets.FPC_PROJECT_ID }}
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/fpc-operator
 
       - name: Build and deploy FPC Operator
         id: deploy-fpc
@@ -105,23 +79,46 @@ jobs:
           VITE_BRIDGE_URL: ${{ vars.VITE_BRIDGE_URL }}
         run: |
           if ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]) || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.production }}" == "true" ]); then
-            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
-            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/fpc-operator)
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/fpc-operator
+            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd apps/fpc-operator)
           else
-            vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd packages/fpc-operator
-            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd packages/fpc-operator)
+            vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/fpc-operator
+            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd apps/fpc-operator)
+          fi
+          echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+
+      # ── Swap deployment ────────────────────────────────────────────────
+      - name: Pull Vercel Environment (Swap)
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.SWAP_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/swap
+
+      - name: Build and deploy Swap
+        id: deploy-swap
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.SWAP_PROJECT_ID }}
+          VITE_WEB_WALLET_URL: ${{ vars.VITE_WEB_WALLET_URL }}
+        run: |
+          if ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]) || ([ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ inputs.production }}" == "true" ]); then
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/swap
+            DEPLOY_URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd apps/swap)
+          else
+            vercel build --token=${{ secrets.VERCEL_TOKEN }} --cwd apps/swap
+            DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --archive=tgz --yes --cwd apps/swap)
           fi
           echo "url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
       # ── PR Comment ─────────────────────────────────────────────────────
       - name: Comment deployment URLs on PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
+            const prNumber = ${{ github.event.workflow_run.pull_requests[0].number || 'null' }};
+            if (!prNumber) return;
             github.rest.issues.createComment({
-              issue_number: context.issue.number,
+              issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚀 Deployed to Vercel!\n\n**Bridge:** ${{ steps.deploy-bridge.outputs.url }}\n**FPC Operator:** ${{ steps.deploy-fpc.outputs.url }}'
+              body: '🚀 Deployed to Vercel!\n\n**Bridge:** ${{ steps.deploy-bridge.outputs.url }}\n**FPC Operator:** ${{ steps.deploy-fpc.outputs.url }}\n**Swap:** ${{ steps.deploy-swap.outputs.url }}'
             })
