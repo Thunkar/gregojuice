@@ -12,7 +12,7 @@ import {
   ProofOfPasswordContract,
   ProofOfPasswordContractArtifact,
 } from "@gregojuice/aztec/artifacts/ProofOfPassword";
-import { BatchCall, NO_WAIT } from "@aztec/aztec.js/contracts";
+import { BatchCall, NO_WAIT, type DeployOptions, type WaitOpts } from "@aztec/aztec.js/contracts";
 import { waitForTx, type AztecNode } from "@aztec/aztec.js/node";
 
 import {
@@ -28,6 +28,7 @@ import {
   type PaymentMode,
   type PaymentMethod,
 } from "@gregojuice/common/testing";
+import { TxStatus } from "@aztec/stdlib/tx";
 
 const INITIAL_TOKEN_BALANCE = 1_000_000_000n;
 
@@ -135,7 +136,13 @@ async function deployContracts(
   const { isContractClassPubliclyRegistered: isTokenPubliclyRegistered } =
     await wallet.getContractClassMetadata(gregoCoinInstance.currentContractClassId);
 
-  const baseOpts = { from: deployer, fee: { paymentMethod }, contractAddressSalt };
+  const currentMinFees = await node.getCurrentMinFees();
+  const baseOpts: DeployOptions<WaitOpts> = {
+    from: deployer,
+    fee: { paymentMethod, gasSettings: { maxFeesPerGas: currentMinFees.mul(10) } },
+    contractAddressSalt,
+    wait: { timeout: 120, waitForStatus: TxStatus.PROPOSED },
+  };
 
   // In a fresh chain (local network) we deploy the first token so class registration
   // is done before the other deployments happen
@@ -191,7 +198,7 @@ async function deployContracts(
       gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
       gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
       ...extraMints,
-    ]).send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+    ]).send(baseOpts);
 
     const nonceForAuthwits = Fr.random();
     const [token0Authwit, token1Authwit] = await Promise.all(
@@ -223,13 +230,11 @@ async function deployContracts(
           nonceForAuthwits,
         )
         .with({ authWitnesses: [token0Authwit, token1Authwit] }),
-    ]).send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+    ]).send(baseOpts);
   }
 
   if (!popExists) {
-    await gregoCoin.methods
-      .set_minter(pop.address, true)
-      .send({ from: deployer, fee: { paymentMethod }, wait: { timeout: 120 } });
+    await gregoCoin.methods.set_minter(pop.address, true).send(baseOpts);
   }
 
   return {

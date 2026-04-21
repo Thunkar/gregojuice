@@ -55,21 +55,7 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
 
   const l1PrivateKey: Hex = params.l1PrivateKey ?? generatePrivateKey();
   const chain = createEthereumChain([l1RpcUrl], l1ChainId);
-  // Inject a `fees.estimateFeesPerGas` hook on the chain object so *every*
-  // tx viem submits through this client (approve, deposit, mint, anything
-  // the portal manager does internally) uses a gas price that can outbid
-  // whatever's stuck in the mempool from previous aborted runs. viem reads
-  // `chain.fees.estimateFeesPerGas` before falling back to its own RPC-based
-  // estimator, so patching the client object alone isn't enough —
-  // `prepareTransactionRequest` goes through the chain hook.
-  const aggressiveChain = withAggressiveFees(chain.chainInfo);
-  const l1Client = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, aggressiveChain);
-
-  // Also clear out any pre-existing stuck txs — the gas override keeps
-  // future txs out of the mempool queue, but anything already sitting at
-  // the next nonce still needs to be evicted.
-  await cancelStuckPendingTxs(l1Client);
-
+  const l1Client = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, chain.chainInfo);
   const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, createLogger("bridging"));
 
   const tokenManager = portalManager.getTokenManager();
@@ -100,88 +86,6 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
 
   const claim = await portalManager.bridgeTokensPublic(recipient, amountArg, minted);
   return { claim, l1Address: signerAddress, minted };
-}
-
-/**
- * Returns a shallow copy of the chain object with a `fees.estimateFeesPerGas`
- * hook that always overbids the current base fee. viem's
- * `prepareTransactionRequest` calls `chain.fees.estimateFeesPerGas` (if
- * defined) before falling back to its own RPC-based estimator, so this is
- * the only way to force every contract write through the client to use a
- * high gas price without touching the portal manager's internals.
- */
-function withAggressiveFees<
-  C extends NonNullable<Parameters<typeof createExtendedL1Client>[2]>,
->(chainInfo: C): C {
-  const floorPriority = 2_000_000_000n; // 2 gwei
-  return {
-    ...chainInfo,
-    fees: {
-      ...(chainInfo.fees ?? {}),
-      estimateFeesPerGas: async ({
-        block,
-      }: {
-        block: { baseFeePerGas: bigint | null };
-      }) => {
-        // Sepolia public nodes often report near-zero priority tips, which
-        // loses to anything already in the mempool. Overbid: 10× base fee
-        // on top of a 2 gwei floor priority tip.
-        const baseFee = block.baseFeePerGas ?? 0n;
-        const maxPriorityFeePerGas = floorPriority;
-        const maxFeePerGas = baseFee * 10n + maxPriorityFeePerGas;
-        return { maxFeePerGas, maxPriorityFeePerGas };
-      },
-    },
-  };
-}
-
-/**
- * If the L1 signer has stuck pending txs (pending nonce > latest nonce),
- * evict them by sending self-transfers at each stuck nonce with a gas price
- * 10× the base fee. This prevents `replacement transaction underpriced`
- * errors in the subsequent portal manager flow.
- *
- * Real accounts running against public RPCs often carry stuck txs from
- * earlier failed runs; viem's default fee estimation on Sepolia frequently
- * underprices new txs compared to whatever is sitting in the mempool.
- */
-async function cancelStuckPendingTxs(l1Client: ReturnType<typeof createExtendedL1Client>) {
-  const addr = l1Client.account.address;
-  const [latest, pending] = await Promise.all([
-    l1Client.getTransactionCount({ address: addr, blockTag: "latest" }),
-    l1Client.getTransactionCount({ address: addr, blockTag: "pending" }),
-  ]);
-
-  if (pending <= latest) return;
-
-  const block = await l1Client.getBlock();
-  const baseFee = block.baseFeePerGas ?? 0n;
-  // 10× base fee + 2 gwei priority — comfortably above whatever stuck txs paid.
-  const maxPriorityFeePerGas = 2_000_000_000n;
-  const maxFeePerGas = baseFee * 10n + maxPriorityFeePerGas;
-
-  for (let nonce = latest; nonce < pending; nonce++) {
-    await l1Client.sendTransaction({
-      to: addr,
-      value: 0n,
-      nonce,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-      gas: 21000n,
-    } as unknown as Parameters<typeof l1Client.sendTransaction>[0]);
-  }
-
-  // Wait until the pending pool catches up to the cancellations.
-  const deadline = Date.now() + 60_000;
-  while (Date.now() < deadline) {
-    const p = await l1Client.getTransactionCount({ address: addr, blockTag: "pending" });
-    const l = await l1Client.getTransactionCount({ address: addr, blockTag: "latest" });
-    if (p === l) return;
-    await new Promise((r) => setTimeout(r, 2_000));
-  }
-  throw new Error(
-    `Stuck pending txs on L1 signer ${addr} did not clear after 60s. Try again later or use a different key.`,
-  );
 }
 
 export interface WaitForClaimParams {
