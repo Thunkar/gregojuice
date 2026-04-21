@@ -1,0 +1,85 @@
+name: Setup workspace
+description: >
+  Install Node + corepack, restore cached yarn + aztec deps, install what's
+  missing, compile contract artifacts, and extend PATH with the aztec CLI.
+  Every job that needs a ready-to-use monorepo starts with this action.
+
+outputs:
+  aztec-version:
+    description: Aztec version string extracted from apps/bridge/package.json.
+    value: ${{ steps.aztec-version.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    # Cache yarn's store + node_modules. `yarn install --immutable` is a no-op
+    # when the lockfile + cache match, so a cache hit drops install to <10s.
+    - name: Restore yarn cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          .yarn/cache
+          .yarn/install-state.gz
+        key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+        restore-keys: |
+          yarn-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: yarn install --immutable
+
+    - name: Extract Aztec version
+      id: aztec-version
+      shell: bash
+      run: |
+        VERSION=$(jq -r '.dependencies["@aztec/aztec.js"]' apps/bridge/package.json)
+        VERSION_NO_V=${VERSION#v}
+        echo "version=$VERSION_NO_V" >> $GITHUB_OUTPUT
+
+    # Cache the Aztec CLI install dir. Install script is idempotent but slow —
+    # hitting this cache saves ~60-90s per job.
+    - name: Cache Aztec CLI
+      id: aztec-cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.aztec/versions/${{ steps.aztec-version.outputs.version }}
+        key: aztec-${{ runner.os }}-${{ steps.aztec-version.outputs.version }}
+
+    - name: Install Aztec CLI
+      if: steps.aztec-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        export CI=1
+        export FOUNDRY_DIR="$HOME/.foundry"
+        curl -fsSL "https://install.aztec.network/${{ steps.aztec-version.outputs.version }}/install" | VERSION="${{ steps.aztec-version.outputs.version }}" bash
+
+    - name: Update PATH
+      shell: bash
+      run: |
+        echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/bin" >> $GITHUB_PATH
+        echo "$HOME/.aztec/versions/${{ steps.aztec-version.outputs.version }}/node_modules/.bin" >> $GITHUB_PATH
+
+    # Cache compiled contract artifacts. Keyed on the noir source + Nargo.toml
+    # so any contract change busts the cache cleanly.
+    - name: Cache contract artifacts
+      id: contracts-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          packages/contracts/aztec/noir/target
+          packages/contracts/aztec/noir/artifacts
+        key: contracts-${{ runner.os }}-${{ steps.aztec-version.outputs.version }}-${{ hashFiles('packages/contracts/aztec/noir/**/*.nr', 'packages/contracts/aztec/noir/**/Nargo.toml') }}
+
+    - name: Compile contracts
+      if: steps.contracts-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: yarn workspace @gregojuice/aztec build

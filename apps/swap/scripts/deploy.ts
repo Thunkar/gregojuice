@@ -91,11 +91,14 @@ async function deployContracts(
   );
   const liquidityTokenDeploy = TokenContract.deploy(wallet, deployer, "LiquidityToken", "LQT", 18);
 
-  const gregoCoinInstance = await gregoCoinDeploy.getInstance({ contractAddressSalt });
-  const gregoCoinPremiumInstance = await gregoCoinPremiumDeploy.getInstance({
-    contractAddressSalt,
-  });
-  const liquidityTokenInstance = await liquidityTokenDeploy.getInstance({ contractAddressSalt });
+  // `deployer` has to be passed explicitly to getInstance — it defaults to
+  // AztecAddress.ZERO, which would produce an address different from the
+  // one the eventual .send({ from: deployer }) writes to chain. See
+  // DeployMethod.getInstance in aztec.js for the default.
+  const instanceOpts = { contractAddressSalt, deployer };
+  const gregoCoinInstance = await gregoCoinDeploy.getInstance(instanceOpts);
+  const gregoCoinPremiumInstance = await gregoCoinPremiumDeploy.getInstance(instanceOpts);
+  const liquidityTokenInstance = await liquidityTokenDeploy.getInstance(instanceOpts);
 
   const ammDeploy = AMMContract.deploy(
     wallet,
@@ -103,10 +106,10 @@ async function deployContracts(
     gregoCoinPremiumInstance.address,
     liquidityTokenInstance.address,
   );
-  const ammInstance = await ammDeploy.getInstance({ contractAddressSalt });
+  const ammInstance = await ammDeploy.getInstance(instanceOpts);
 
   const popDeploy = ProofOfPasswordContract.deploy(wallet, gregoCoinInstance.address, password);
-  const popInstance = await popDeploy.getInstance({ contractAddressSalt });
+  const popInstance = await popDeploy.getInstance(instanceOpts);
 
   await Promise.all([
     wallet.registerContract(gregoCoinInstance, TokenContractArtifact),
@@ -129,6 +132,17 @@ async function deployContracts(
       node.getContract(popInstance.address),
     ]);
 
+  const { isContractClassPubliclyRegistered: isTokenPubliclyRegistered } =
+    await wallet.getContractClassMetadata(gregoCoinInstance.currentContractClassId);
+
+  const baseOpts = { from: deployer, fee: { paymentMethod }, contractAddressSalt };
+
+  // In a fresh chain (local network) we deploy the first token so class registration
+  // is done before the other deployments happen
+  if (!isTokenPubliclyRegistered) {
+    await gregoCoinDeploy.send(baseOpts);
+  }
+
   // Fire every missing deploy in parallel with NO_WAIT so simulate+prove+
   // submit pipelines, then await all tx hashes at the end. The deploys
   // don't depend on each other being *mined* — AMM/PoP need the token
@@ -138,9 +152,10 @@ async function deployContracts(
   // picks the TxSendResultImmediate overload (which exposes `txHash`). A
   // wrapped helper would widen the option type and fall back to the default
   // `DeployResultMined` overload.
-  const baseOpts = { from: deployer, fee: { paymentMethod }, contractAddressSalt };
   const pending = [
-    gregoCoinExists ? null : gregoCoinDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+    gregoCoinExists || !isTokenPubliclyRegistered
+      ? null
+      : gregoCoinDeploy.send({ ...baseOpts, wait: NO_WAIT }),
     gregoCoinPremiumExists ? null : gregoCoinPremiumDeploy.send({ ...baseOpts, wait: NO_WAIT }),
     liquidityTokenExists ? null : liquidityTokenDeploy.send({ ...baseOpts, wait: NO_WAIT }),
     ammExists ? null : ammDeploy.send({ ...baseOpts, wait: NO_WAIT }),

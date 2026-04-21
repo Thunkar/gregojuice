@@ -55,12 +55,15 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
 
   const l1PrivateKey: Hex = params.l1PrivateKey ?? generatePrivateKey();
   const chain = createEthereumChain([l1RpcUrl], l1ChainId);
-  const baseClient = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, chain.chainInfo);
-  // Override viem's fee estimator so *every* tx submitted through this
-  // client (approve, deposit, mint, anything the portal manager does
-  // internally) uses a gas price that can outbid whatever's stuck in the
-  // mempool from previous aborted runs.
-  const l1Client = withAggressiveGas(baseClient);
+  // Inject a `fees.estimateFeesPerGas` hook on the chain object so *every*
+  // tx viem submits through this client (approve, deposit, mint, anything
+  // the portal manager does internally) uses a gas price that can outbid
+  // whatever's stuck in the mempool from previous aborted runs. viem reads
+  // `chain.fees.estimateFeesPerGas` before falling back to its own RPC-based
+  // estimator, so patching the client object alone isn't enough —
+  // `prepareTransactionRequest` goes through the chain hook.
+  const aggressiveChain = withAggressiveFees(chain.chainInfo);
+  const l1Client = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, aggressiveChain);
 
   // Also clear out any pre-existing stuck txs — the gas override keeps
   // future txs out of the mempool queue, but anything already sitting at
@@ -100,33 +103,36 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
 }
 
 /**
- * Wraps a viem wallet client so `estimateFeesPerGas` returns a generous
- * overbid of the current base fee. Every tx submitted through the returned
- * client (directly or via contracts) picks up these gas values by default,
- * which keeps us ahead of whatever public-RPC fee estimator returned for
- * earlier stuck txs.
+ * Returns a shallow copy of the chain object with a `fees.estimateFeesPerGas`
+ * hook that always overbids the current base fee. viem's
+ * `prepareTransactionRequest` calls `chain.fees.estimateFeesPerGas` (if
+ * defined) before falling back to its own RPC-based estimator, so this is
+ * the only way to force every contract write through the client to use a
+ * high gas price without touching the portal manager's internals.
  */
-function withAggressiveGas<T extends ReturnType<typeof createExtendedL1Client>>(client: T): T {
-  const original = client.estimateFeesPerGas.bind(client);
-  (client as unknown as { estimateFeesPerGas: typeof original }).estimateFeesPerGas = (async (
-    args?: Parameters<typeof original>[0],
-  ) => {
-    // viem's default applies a chain-specific multiplier on top of the base
-    // fee and asks the RPC for a priority tip. On Sepolia public nodes the
-    // tip is frequently reported as near-zero, which loses to anything
-    // already in the mempool. Override to baseFee × 10 + 2 gwei priority.
-    const defaults = await original(args);
-    const block = await client.getBlock();
-    const baseFee = block.baseFeePerGas ?? 0n;
-    const floorPriority = 2_000_000_000n; // 2 gwei
-    const maxPriorityFeePerGas =
-      defaults.maxPriorityFeePerGas && defaults.maxPriorityFeePerGas > floorPriority
-        ? defaults.maxPriorityFeePerGas
-        : floorPriority;
-    const maxFeePerGas = baseFee * 10n + maxPriorityFeePerGas;
-    return { maxFeePerGas, maxPriorityFeePerGas };
-  }) as typeof original;
-  return client;
+function withAggressiveFees<
+  C extends NonNullable<Parameters<typeof createExtendedL1Client>[2]>,
+>(chainInfo: C): C {
+  const floorPriority = 2_000_000_000n; // 2 gwei
+  return {
+    ...chainInfo,
+    fees: {
+      ...(chainInfo.fees ?? {}),
+      estimateFeesPerGas: async ({
+        block,
+      }: {
+        block: { baseFeePerGas: bigint | null };
+      }) => {
+        // Sepolia public nodes often report near-zero priority tips, which
+        // loses to anything already in the mempool. Overbid: 10× base fee
+        // on top of a 2 gwei floor priority tip.
+        const baseFee = block.baseFeePerGas ?? 0n;
+        const maxPriorityFeePerGas = floorPriority;
+        const maxFeePerGas = baseFee * 10n + maxPriorityFeePerGas;
+        return { maxFeePerGas, maxPriorityFeePerGas };
+      },
+    },
+  };
 }
 
 /**
