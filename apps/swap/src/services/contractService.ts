@@ -3,25 +3,20 @@
  * Pure functions for contract-related operations
  */
 
-import type {
-  BatchedMethod,
-  Wallet,
-  TxSimulationResultWithAppOffset,
-} from "@aztec/aztec.js/wallet";
+import type { Wallet } from "@aztec/aztec.js/wallet";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
 import { AztecAddress as AztecAddressClass } from "@aztec/aztec.js/addresses";
 import { Fr } from "@aztec/aztec.js/fields";
+import type { ContractArtifact } from "@aztec/aztec.js/abi";
 import { FunctionSelector } from "@aztec/aztec.js/abi";
+import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import {
   BatchCall,
   getContractInstanceFromInstantiationParams,
   type OffchainMessage,
 } from "@aztec/aztec.js/contracts";
 import { poseidon2Hash } from "@aztec/foundation/crypto/poseidon";
-import { type FunctionCall, decodeFromAbi } from "@aztec/stdlib/abi";
-import { ExecutionPayload } from "@aztec/stdlib/tx";
-import { UtilityExecutionResult } from "@aztec/stdlib/tx";
 import type { TxReceipt } from "@aztec/stdlib/tx";
 import type { TokenContract } from "@gregojuice/aztec/artifacts/Token";
 import type { AMMContract } from "@gregojuice/aztec/artifacts/AMM";
@@ -113,7 +108,10 @@ export async function registerSwapContracts(
   ]);
 
   // Build registration batch for unregistered contracts only
-  const registrationBatch: { name: "registerContract"; args: [any, any, any] }[] = [];
+  const registrationBatch: {
+    name: "registerContract";
+    args: [ContractInstanceWithAddress, ContractArtifact, Fr | undefined];
+  }[] = [];
 
   if (ammInstance) {
     registrationBatch.push({
@@ -202,7 +200,10 @@ export async function registerDripContracts(
   const popMetadata = metadataResults[0];
 
   // Build registration batch for unregistered contracts only
-  const registrationBatch: { name: "registerContract"; args: [any, any, any] }[] = [];
+  const registrationBatch: {
+    name: "registerContract";
+    args: [ContractInstanceWithAddress, ContractArtifact, Fr | undefined];
+  }[] = [];
 
   if (!popMetadata.result.instance) {
     const instance = await node.getContract(popAddress);

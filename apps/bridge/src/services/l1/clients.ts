@@ -13,7 +13,6 @@ import {
 import { sepolia, mainnet, foundry } from "viem/chains";
 import { computeSecretHash } from "@aztec/aztec.js/crypto";
 import { Fr } from "@aztec/foundation/curves/bn254";
-import { BRIDGE_CONTRACT_ABI } from "@gregojuice/ethereum";
 
 // ── ABIs ─────────────────────────────────────────────────────────────
 

@@ -22,19 +22,13 @@ export interface BridgeFeeJuiceParams {
   /** Aztec recipient. */
   recipient: AztecAddress;
   /**
-   * Amount in wei to bridge. Required when `mint=false`; ignored when `mint=true`
-   * (faucet handler dictates the amount via `mintAmount()`).
+   * Desired amount in wei to bridge. Used only on the non-faucet path; when
+   * the faucet path kicks in, the handler's `mintAmount()` is authoritative.
    */
   amount?: bigint;
   /**
-   * When true, the portal manager mints tokens via the network's fee-asset
-   * handler. Only valid on networks that expose one (faucet-mode testnets).
-   */
-  mint: boolean;
-  /**
-   * L1 private key to sign the bridge tx. When omitted *and* `mint=true`, a
-   * fresh ephemeral key is generated — the faucet does not require the caller
-   * to hold any balance.
+   * L1 private key to sign the bridge tx. When omitted, a fresh ephemeral
+   * key is generated — only useful when the faucet handler is present.
    */
   l1PrivateKey?: Hex;
 }
@@ -44,30 +38,110 @@ export interface BridgeFeeJuiceResult {
   claim: Awaited<ReturnType<L1FeeJuicePortalManager["bridgeTokensPublic"]>>;
   /** The L1 address that actually paid for the tx — useful for logging. */
   l1Address: string;
+  /** Whether the faucet/mint path was used. */
+  minted: boolean;
 }
 
 /**
- * Bridges fee juice to an L2 recipient. Returns the claim credentials so the
- * caller can finalise on L2 (see `waitForL1ToL2AndClaim`).
+ * Bridges fee juice to an L2 recipient. Mirrors the bridge UI's decision:
+ *   - faucet handler exists AND L1 signer has no FJ → mint via the handler
+ *   - otherwise → transfer the caller's existing FJ balance to the portal
+ *
+ * Throws only if neither path is viable (handler missing AND signer has no FJ,
+ * or non-faucet path requested with no `amount` specified).
  */
 export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<BridgeFeeJuiceResult> {
-  const { node, l1RpcUrl, l1ChainId, recipient, mint } = params;
-  const amount = params.amount;
-
-  if (!mint && amount === undefined) {
-    throw new Error("bridgeFeeJuice: `amount` is required when `mint=false`");
-  }
+  const { node, l1RpcUrl, l1ChainId, recipient } = params;
 
   const l1PrivateKey: Hex = params.l1PrivateKey ?? generatePrivateKey();
   const chain = createEthereumChain([l1RpcUrl], l1ChainId);
   const l1Client = createExtendedL1Client(chain.rpcUrls, l1PrivateKey, chain.chainInfo);
+
+  // If the signer has stuck pending txs from previous runs, cancel them so
+  // the portal manager's mint/approve/bridge chain doesn't inherit an old,
+  // underpriced nonce. Uses a self-transfer at the stuck nonce with a high
+  // gas price to evict the stuck tx.
+  await cancelStuckPendingTxs(l1Client);
+
   const portalManager = await L1FeeJuicePortalManager.new(node, l1Client, createLogger("bridging"));
 
-  // On faucet-mode bridges the handler's mintAmount() is authoritative. Pass
-  // undefined so the manager fetches it for us.
-  const amountArg = mint ? undefined : amount;
-  const claim = await portalManager.bridgeTokensPublic(recipient, amountArg, mint);
-  return { claim, l1Address: l1Client.account.address };
+  const tokenManager = portalManager.getTokenManager();
+  const hasFaucet = tokenManager.handlerAddress !== undefined;
+  const signerAddress = l1Client.account.address;
+  const l1Balance = await tokenManager.getL1TokenBalance(signerAddress);
+
+  // Mirror the UI: faucetLocked = handler exists AND user has no balance.
+  const minted = hasFaucet && l1Balance === 0n;
+  if (!minted && !hasFaucet && l1Balance === 0n) {
+    throw new Error(
+      `L1 signer ${signerAddress} has no FJ balance and no fee-asset handler is available for minting.`,
+    );
+  }
+
+  let amountArg: bigint | undefined;
+  if (minted) {
+    // Faucet path: handler's mintAmount() dictates the amount.
+    amountArg = undefined;
+  } else {
+    if (params.amount === undefined) {
+      throw new Error(
+        `bridgeFeeJuice: \`amount\` is required when the faucet path is not used (L1 signer holds ${l1Balance} FJ).`,
+      );
+    }
+    amountArg = params.amount;
+  }
+
+  const claim = await portalManager.bridgeTokensPublic(recipient, amountArg, minted);
+  return { claim, l1Address: signerAddress, minted };
+}
+
+/**
+ * If the L1 signer has stuck pending txs (pending nonce > latest nonce),
+ * evict them by sending self-transfers at each stuck nonce with a gas price
+ * 10× the base fee. This prevents `replacement transaction underpriced`
+ * errors in the subsequent portal manager flow.
+ *
+ * Real accounts running against public RPCs often carry stuck txs from
+ * earlier failed runs; viem's default fee estimation on Sepolia frequently
+ * underprices new txs compared to whatever is sitting in the mempool.
+ */
+async function cancelStuckPendingTxs(l1Client: ReturnType<typeof createExtendedL1Client>) {
+  const addr = l1Client.account.address;
+  const [latest, pending] = await Promise.all([
+    l1Client.getTransactionCount({ address: addr, blockTag: "latest" }),
+    l1Client.getTransactionCount({ address: addr, blockTag: "pending" }),
+  ]);
+
+  if (pending <= latest) return;
+
+  const block = await l1Client.getBlock();
+  const baseFee = block.baseFeePerGas ?? 0n;
+  // 10× base fee + 2 gwei priority — comfortably above whatever stuck txs paid.
+  const maxPriorityFeePerGas = 2_000_000_000n;
+  const maxFeePerGas = baseFee * 10n + maxPriorityFeePerGas;
+
+  for (let nonce = latest; nonce < pending; nonce++) {
+    await l1Client.sendTransaction({
+      to: addr,
+      value: 0n,
+      nonce,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+      gas: 21000n,
+    } as unknown as Parameters<typeof l1Client.sendTransaction>[0]);
+  }
+
+  // Wait until the pending pool catches up to the cancellations.
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const p = await l1Client.getTransactionCount({ address: addr, blockTag: "pending" });
+    const l = await l1Client.getTransactionCount({ address: addr, blockTag: "latest" });
+    if (p === l) return;
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  throw new Error(
+    `Stuck pending txs on L1 signer ${addr} did not clear after 60s. Try again later or use a different key.`,
+  );
 }
 
 export interface WaitForClaimParams {
@@ -103,9 +177,24 @@ export async function waitForL1ToL2Message(params: WaitForClaimParams): Promise<
 
   // Poll mode — import lazily to keep the cheat-code dependency tree optional.
   const { isL1ToL2MessageReady } = await import("@aztec/aztec.js/messaging");
-  const deadline = Date.now() + (params.timeoutMs ?? 30 * 60_000);
+  const startedAt = Date.now();
+  const timeoutMs = params.timeoutMs ?? 30 * 60_000;
+  const deadline = startedAt + timeoutMs;
+  console.error(
+    `Waiting for L1→L2 message ${messageHash.toString()} (up to ${Math.round(timeoutMs / 60_000)} min)...`,
+  );
+  let lastLog = startedAt;
   while (Date.now() < deadline) {
-    if (await isL1ToL2MessageReady(node, messageHash)) return;
+    if (await isL1ToL2MessageReady(node, messageHash)) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      console.error(`  L1→L2 message ready after ${elapsed}s.`);
+      return;
+    }
+    if (Date.now() - lastLog > 30_000) {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      console.error(`  still waiting (${elapsed}s elapsed)...`);
+      lastLog = Date.now();
+    }
     await new Promise((r) => setTimeout(r, 5_000));
   }
   throw new Error(`L1→L2 message ${messageHash.toString()} did not become available in time`);

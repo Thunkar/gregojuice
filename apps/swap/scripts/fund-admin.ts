@@ -49,19 +49,19 @@ async function main() {
   if (initializationStatus === ContractInitializationStatus.INITIALIZED) {
     console.error("Admin account already initialised on-chain, skipping bridge + deploy.");
   } else {
-    const { l1FunderKey, mint } = resolveL1Funder(network);
-    console.error(`Bridging ${mint ? "faucet" : FUND_AMOUNT} FJ to ${adminAddress.toString()}...`);
-    const { claim, l1Address } = await bridge({
+    console.error(`Bridging FJ to ${adminAddress.toString()}...`);
+    const { claim, l1Address, minted } = await bridge({
       node,
       recipient: adminAddress,
       l1RpcUrl: L1_DEFAULTS[network].l1RpcUrl,
       l1ChainId: L1_DEFAULTS[network].l1ChainId,
-      amount: mint ? undefined : FUND_AMOUNT,
-      mint,
-      l1PrivateKey: l1FunderKey,
+      amount: FUND_AMOUNT,
+      l1PrivateKey: resolveL1Funder(network),
       mode: bridgeMode(network),
     });
-    console.error(`Bridged ${claim.claimAmount} FJ from L1 address ${l1Address}.`);
+    console.error(
+      `Bridged ${claim.claimAmount} FJ from L1 address ${l1Address} (minted=${minted}).`,
+    );
 
     // Claim + deploy in one private tx: FeeJuicePaymentMethodWithClaim prepends
     // a `claim_and_end_setup` call before the account-deploy execution. The

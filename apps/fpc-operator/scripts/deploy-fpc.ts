@@ -83,9 +83,8 @@ async function main() {
     console.error(`FPC deployed at ${fpcAddress.toString()}`);
 
     // Bridge FJ to the freshly-deployed FPC so it can pay for sponsored calls.
-    const { l1FunderKey, mint } = resolveL1Funder(network);
-    console.error(`Bridging ${mint ? "faucet" : FUND_AMOUNT} FJ to FPC...`);
-    const { amount } = await bridgeAndClaim({
+    console.error(`Bridging FJ to FPC...`);
+    const { amount, minted } = await bridgeAndClaim({
       node,
       wallet,
       recipient: fpcAddress,
@@ -93,12 +92,11 @@ async function main() {
       claimFeeOpts: { paymentMethod },
       l1RpcUrl: L1_DEFAULTS[network].l1RpcUrl,
       l1ChainId: L1_DEFAULTS[network].l1ChainId,
-      amount: mint ? undefined : FUND_AMOUNT,
-      mint,
-      l1PrivateKey: l1FunderKey,
+      amount: FUND_AMOUNT,
+      l1PrivateKey: resolveL1Funder(network),
       mode: bridgeMode(network),
     });
-    console.error(`Bridged ${amount} FJ to FPC.`);
+    console.error(`Bridged ${amount} FJ to FPC (minted=${minted}).`);
   }
 
   // Write the local backup file (gitignored).
@@ -129,7 +127,6 @@ async function main() {
   console.log(`export FPC_SECRET=${fpcSecret.secretKey.toString()}`);
   console.log(`export FPC_SALT=${fpcSalt.toString()}`);
 }
-
 
 main().catch((err) => {
   console.error(err);

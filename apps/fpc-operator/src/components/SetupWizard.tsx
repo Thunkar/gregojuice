@@ -11,7 +11,6 @@ import {
   StepContent,
 } from "@mui/material";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import { shortAddress } from "@gregojuice/common";
 import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
 import { prepareFPC, deployFPC } from "../services/fpcService";

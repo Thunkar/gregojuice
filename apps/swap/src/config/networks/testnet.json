@@ -4,28 +4,16 @@
   "chainId": "11155111",
   "rollupVersion": "4127419662",
   "contracts": {
-    "gregoCoin": "0x0bb7e92d4e23984535a60984dfdb5bd4d7a5d92aed825b06dd53a6736cb40524",
-    "gregoCoinPremium": "0x181fe4114e443864f8a71da189544c195bc6982c4bab1407fd16f53c93d3ac0f",
-    "amm": "0x2b4ddd8a439bac34b9b319d348f177a081fab84d0e026e36681fb6ccaedbdafd",
-    "liquidityToken": "0x24bfd8325e21e4fcda70ae33ea6161082a7ba4fd30fbf63f9f66e20bf09c5548",
-    "pop": "0x2b5ee301889d8fc743ad784698078143524584d3e23eff3aaf3c111af68a36cd",
-    "sponsoredFPC": "0x254082b62f9108d044b8998f212bb145619d91bfcd049461d74babb840181257",
-    "salt": "0x1c1b303180f8a60f3f8d7fa1ada325a619e2972b83fb8da936be0a4bde382bb7"
+    "gregoCoin": "0x1c42339fd847cdf39c9acf0c9bd23a56edc35e56b2e9e8e229203d7a18e73ef1",
+    "gregoCoinPremium": "0x1efafa0dc8519f89a8b6fb232e4ba0aa75c2ab33b6cc97a313369b8f62f7ff01",
+    "amm": "0x2b1bb3a73b1d7f316c09575eeead0fec58acc61584cd54a7a34fa15fbcdb0d73",
+    "liquidityToken": "0x225e1d7d52e2608e1f36a2f1d88e798c3a77e33052be6208463558053825a348",
+    "pop": "0x20a6a6266fbf229b89a6c13c4af3f85185a28ce19a3f6a9cc274aa7c66ab32ba",
+    "sponsoredFPC": "0x02a481c5711fce148a5fb401b4969abc589f20ecf0ad8d62231a0917c1916d8c",
+    "salt": "0x0000000000000000000000000000000000000000000000000000000000000000"
   },
   "deployer": {
-    "address": "0x12952c3d8a4116782ee85b93c634afbd4cdf2beabedd8258e89737616c269c33"
+    "address": "0x15929371a2296539529feb1ee12fabbf452aed7e0b610cfd4effa06475775f79"
   },
-  "deployedAt": "2026-04-17T11:19:07.488Z",
-  "subscriptionFPC": {
-    "address": "0x2f72a0266d8610866d947ac5b6fa391ba2f7b629fe4513a4a46f775a13f9b543",
-    "secretKey": "0x09b3922c228caa2fd9459b69c2ad902c9169206885b4fbc4877650d229ad71fb",
-    "functions": {
-      "0x2b5ee301889d8fc743ad784698078143524584d3e23eff3aaf3c111af68a36cd": {
-        "0xa539bd29": 0
-      },
-      "0x2b4ddd8a439bac34b9b319d348f177a081fab84d0e026e36681fb6ccaedbdafd": {
-        "0xfd228669": 0
-      }
-    }
-  }
+  "deployedAt": "2026-04-21T11:53:37.838Z"
 }

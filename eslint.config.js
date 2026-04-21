@@ -30,6 +30,26 @@ export const baseConfig = tseslint.config(
     languageOptions: {
       ecmaVersion: 2025,
     },
+    rules: {
+      // Let callers mark intentionally-unused args/vars with a leading `_`.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+  {
+    // Profiling module intercepts arbitrary framework calls — `any` is the
+    // shape of the underlying API, so forcing stricter typing here is
+    // counterproductive.
+    files: ["**/profiling/**/*.ts", "**/profiling/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
   },
 );
 

@@ -29,13 +29,14 @@ export interface BridgeAndClaimParams {
    * caller knows what it's passing (e.g. `{ paymentMethod: sponsoredFeePaymentMethod }`).
    */
   claimFeeOpts?: unknown;
-  /** L1 RPC URL for the bridge tx. */
   l1RpcUrl: string;
   l1ChainId: number;
-  /** Bridge amount (wei). Ignored when `mint=true`. */
+  /**
+   * Desired bridge amount (wei). Ignored when the faucet/mint path is used
+   * (handler's mintAmount() is authoritative in that case).
+   */
   amount?: bigint;
-  mint: boolean;
-  /** L1 signer. When omitted and `mint=true` an ephemeral key is generated. */
+  /** Optional L1 signer. Generates an ephemeral key when unset. */
   l1PrivateKey?: Hex;
   /** Local networks need active time-warp; everyone else polls. */
   mode: BridgeTimingMode;
@@ -49,20 +50,20 @@ export interface BridgeAndClaimResult {
   amount: bigint;
   /** L1 address that funded the bridge tx. */
   l1Address: string;
+  /** Whether the faucet/mint path was taken. */
+  minted: boolean;
 }
 
 /**
  * Full flow: L1 bridge → wait for L1→L2 inclusion → L2 claim tx.
  *
  * Requires `claimFrom` to be a **deployed** L2 account. For funding a fresh
- * admin account that hasn't been deployed yet, use `bridge`
- * instead and pass the claim into `FeeJuicePaymentMethodWithClaim` so the
- * claim + account-deploy land in a single tx.
+ * admin account that hasn't been deployed yet, use `bridge` instead and pass
+ * the claim into `FeeJuicePaymentMethodWithClaim` so the claim + account-
+ * deploy land in a single tx.
  */
-export async function bridgeAndClaim(
-  params: BridgeAndClaimParams,
-): Promise<BridgeAndClaimResult> {
-  const { claim, l1Address } = await bridge(params);
+export async function bridgeAndClaim(params: BridgeAndClaimParams): Promise<BridgeAndClaimResult> {
+  const { claim, l1Address, minted } = await bridge(params);
 
   const feeJuice = FeeJuiceContract.at(params.wallet);
   await feeJuice.methods
@@ -72,7 +73,7 @@ export async function bridgeAndClaim(
       ...(params.claimFeeOpts ? { fee: params.claimFeeOpts } : {}),
     } as Parameters<ReturnType<typeof feeJuice.methods.claim>["send"]>[0]);
 
-  return { amount: BigInt(claim.claimAmount), l1Address };
+  return { amount: BigInt(claim.claimAmount), l1Address, minted };
 }
 
 export interface BridgeParams {
@@ -80,8 +81,8 @@ export interface BridgeParams {
   recipient: AztecAddress;
   l1RpcUrl: string;
   l1ChainId: number;
+  /** Desired amount (wei). Ignored on the faucet/mint path. */
   amount?: bigint;
-  mint: boolean;
   l1PrivateKey?: Hex;
   mode: BridgeTimingMode;
   warpOpts?: { nodeUrl?: string; l1RpcUrl?: string };
@@ -95,6 +96,8 @@ export interface BridgeResult {
    */
   claim: Awaited<ReturnType<typeof bridgeFeeJuice>>["claim"];
   l1Address: string;
+  /** Whether the faucet/mint path was taken. */
+  minted: boolean;
 }
 
 /**
@@ -104,16 +107,13 @@ export interface BridgeResult {
  * claim happens inside whatever tx the recipient is already sending (e.g. a
  * schnorr-account deploy).
  */
-export async function bridge(
-  params: BridgeParams,
-): Promise<BridgeResult> {
-  const { claim, l1Address } = await bridgeFeeJuice({
+export async function bridge(params: BridgeParams): Promise<BridgeResult> {
+  const { claim, l1Address, minted } = await bridgeFeeJuice({
     node: params.node,
     l1RpcUrl: params.l1RpcUrl,
     l1ChainId: params.l1ChainId,
     recipient: params.recipient,
     amount: params.amount,
-    mint: params.mint,
     l1PrivateKey: params.l1PrivateKey,
   });
 
@@ -126,5 +126,5 @@ export async function bridge(
     warpOpts: params.warpOpts,
   });
 
-  return { claim, l1Address };
+  return { claim, l1Address, minted };
 }

@@ -11,7 +11,16 @@ permissions:
   contents: read
 
 jobs:
+  # Quick fail-fast gate: run format/lint/typecheck before the ~60-min
+  # Playwright suite. Duplicates ci.yml's jobs (GitHub Actions has no
+  # cross-workflow dependency without `workflow_run` gymnastics); the cost
+  # is two extra cheap jobs per PR, the benefit is not burning an hour on
+  # a PR with a trivial lint error.
+  check:
+    uses: ./.github/workflows/ci.yml
+
   e2e:
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 60
 

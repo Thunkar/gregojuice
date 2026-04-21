@@ -56,10 +56,10 @@ export async function getWalletChainId(): Promise<number | null> {
  */
 export async function requestAccountSwitch(): Promise<Hex> {
   if (!window.ethereum) throw new Error("No EVM wallet found");
-  const permissions = (await window.ethereum.request({
+  await window.ethereum.request({
     method: "wallet_requestPermissions",
     params: [{ eth_accounts: {} }],
-  })) as Array<{ caveats?: Array<{ value: string[] }> }>;
+  });
   // After permission grant, read accounts to get the selected one
   const accounts = (await window.ethereum.request({
     method: "eth_accounts",

@@ -48,11 +48,14 @@ async function deriveAdminAddress(): Promise<AztecAddress> {
 
 async function computeFpcAddress(admin: AztecAddress, salt: Fr): Promise<AztecAddress> {
   const { publicKeys } = await deriveKeys(FPC_SECRET_KEY);
-  const instance = await getContractInstanceFromInstantiationParams(SubscriptionFPCContractArtifact, {
-    constructorArgs: [admin],
-    salt,
-    publicKeys,
-  });
+  const instance = await getContractInstanceFromInstantiationParams(
+    SubscriptionFPCContractArtifact,
+    {
+      constructorArgs: [admin],
+      salt,
+      publicKeys,
+    },
+  );
   return instance.address;
 }
 
@@ -147,7 +150,10 @@ export interface GasValues {
   teardownGasLimits: { daGas: number; l2Gas: number };
 }
 
-export function toGas(estimatedGas: any): GasValues {
+export function toGas(estimatedGas: {
+  gasLimits: { daGas: bigint | number; l2Gas: bigint | number };
+  teardownGasLimits: { daGas: bigint | number; l2Gas: bigint | number };
+}): GasValues {
   return {
     gasLimits: {
       daGas: Number(estimatedGas.gasLimits.daGas),

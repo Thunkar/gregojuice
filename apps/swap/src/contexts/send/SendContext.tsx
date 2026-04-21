@@ -84,7 +84,7 @@ export function SendProvider({ children }: SendProviderProps) {
         contractAddress,
         txHash: receipt.txHash.toString(),
         anchorBlockTimestamp: recipientMessage.anchorBlockTimestamp.toString(),
-        payload: recipientMessage.payload.map((f: any) => f.toString()),
+        payload: recipientMessage.payload.map((f: { toString(): string }) => f.toString()),
       };
 
       const link = encodeTransferLink(linkData);

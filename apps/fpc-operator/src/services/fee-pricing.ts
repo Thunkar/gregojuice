@@ -60,7 +60,13 @@ export class FeePricingService {
       return this.ethPerFeeAssetCache.value;
     }
     try {
-      const value = await (this.client as any).readContract({
+      // viem's typed `readContract` wants a narrower abi/function union; the
+      // cast-through-unknown keeps this helper abi-agnostic.
+      const value = await (
+        this.client as unknown as {
+          readContract: (args: unknown) => Promise<unknown>;
+        }
+      ).readContract({
         address: this.rollupAddress,
         abi: RollupAbi,
         functionName: "getEthPerFeeAsset",

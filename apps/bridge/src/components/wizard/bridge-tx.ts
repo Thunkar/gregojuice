@@ -7,7 +7,7 @@
  *   "batch"     — wallet already funded (embedded or external): bridge only user recipients
  */
 
-import { formatUnits, parseUnits, type Hex } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import { bridgeFeeJuice, bridgeMultiple, type L1Addresses } from "../../services";
 import type { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { EPHEMERAL_CLAIM_GAS_FJ } from "./constants";
@@ -68,8 +68,6 @@ export async function handleBridge(params: HandleBridgeParams): Promise<void> {
       setError("Amounts must be greater than 0");
       return;
     }
-
-    const totalAmount = parsedRecipients.reduce((sum, r) => sum + r.amount, 0n);
 
     // ── Build the full recipient list ─────────────────────────────────
     // "self": bridge to the claimer's own address (external wallet self-bridge)

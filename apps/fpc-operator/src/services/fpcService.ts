@@ -39,7 +39,9 @@ export function getStoredFPC(): StoredFPC | null {
         salt,
         deployed: localStorage.getItem(FPC_DEPLOYED_KEY) === "true",
       };
-  } catch {}
+  } catch {
+    // ignore malformed localStorage entries
+  }
   return null;
 }
 

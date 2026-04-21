@@ -12,7 +12,6 @@ import {
   StepContent,
   ToggleButtonGroup,
   ToggleButton,
-  IconButton,
   Chip,
   FormControl,
   InputLabel,
@@ -44,7 +43,6 @@ import {
   CalibrationError,
   type CalibrationResult as CalibrationData,
 } from "../services/calibration";
-import { FeePricingService } from "../services/fee-pricing";
 import {
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS,
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS,
@@ -69,7 +67,7 @@ interface AppSignUpProps {
 }
 
 export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSignUpProps) {
-  const { wallet, node, rollupAddress, l1ChainId, l1RpcUrl } = useWallet();
+  const { wallet, node } = useWallet();
   const {
     contracts: storedContracts,
     senders: storedSenders,
@@ -172,13 +170,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       return true;
     });
   }, [adminAddress, storedContracts, storedSenders, contractInstance, contractAlias, artifact]);
-
-  // Pricing for USD display
-  const pricingService = useMemo(() => {
-    const svc = new FeePricingService(l1RpcUrl ?? undefined, l1ChainId ?? undefined);
-    if (rollupAddress) svc.init(rollupAddress);
-    return svc;
-  }, [rollupAddress, l1ChainId, l1RpcUrl]);
 
   // ── Step handlers ───────────────────────────────────────────────────
 
@@ -325,7 +316,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     const standaloneDA = parseInt(manualStandaloneGas.daGas) || 0;
     const standaloneL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
 
-    let totalDA = standaloneDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
+    const totalDA = standaloneDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
     let totalL2 = standaloneL2 + FPC_SUBSCRIBE_OVERHEAD_L2_GAS;
 
     if (isPrivateFunction) {

@@ -10,7 +10,7 @@ import { resolve } from "path";
 const nodePolyfillsFix = (options?: PolyfillOptions | undefined): Plugin => {
   return {
     ...nodePolyfills(options),
-    /* @ts-ignore */
+    /* @ts-expect-error viem typing mismatch with vite-plugin-node-polyfills */
     resolveId(source: string) {
       const m = /^vite-plugin-node-polyfills\/shims\/(buffer|global|process)$/.exec(source);
       if (m) {

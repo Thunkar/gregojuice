@@ -42,7 +42,9 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
   let calibrationIndices: Record<string, number> = {};
   try {
     calibrationIndices = JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
-  } catch {}
+  } catch {
+    // ignore malformed cache
+  }
 
   const data: BackupData = {
     version: BACKUP_VERSION,

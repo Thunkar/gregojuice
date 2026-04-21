@@ -6,6 +6,8 @@ on:
     branches:
       - main
   workflow_dispatch:
+  # Let e2e.yml / integration.yml reuse this as a gate job.
+  workflow_call:
 
 permissions:
   contents: read

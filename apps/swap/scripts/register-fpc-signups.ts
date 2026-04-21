@@ -12,9 +12,9 @@
  *                      calibration simulations. Published by deploy-fpc on stdout.
  *
  * Side outputs:
- *   Writes `subscriptionFPC.{address, functions}` into the committed swap
- *   network config (`src/config/networks/<network>.json`). `functions` carries
- *   `{ configIndex, calibrationIndex? }` per contract:selector pair.
+ *   Writes `subscriptionFPC.{address, secretKey, functions}` into the
+ *   committed swap network config (`src/config/networks/<network>.json`).
+ *   `functions` maps `contractAddress → { functionSelector → configIndex }`.
  *
  * Calibration behaviour:
  *   - `local`    : skipped. Uses the hardcoded `maxFee` fallback.
@@ -138,7 +138,10 @@ async function main() {
   const fpc = new SubscriptionFPC(SubscriptionFPCContract.at(fpcAddress, wallet));
 
   const resolved = await resolveSignups(SIGNUPS, contracts);
-  const functions: Record<string, Record<string, { configIndex: number; calibrationIndex?: number }>> = {};
+  // Matches the shape the swap app expects at runtime:
+  // { [contractAddress]: { [functionSelector]: configIndex } }.
+  // See apps/swap/src/config/networks/index.ts → SubscriptionFPCConfig.
+  const functions: Record<string, Record<string, number>> = {};
 
   for (const signup of resolved) {
     console.error(`\nSigning up ${signup.aliasKey}.${signup.functionName}...`);
@@ -156,23 +159,17 @@ async function main() {
       )
       .send({ from: admin, fee: { paymentMethod } });
 
-    console.error(
-      `  sign_up ok — maxFee=${maxFee}, calibrationIndex=${signup.calibrationIndex ?? "n/a"}`,
-    );
+    console.error(`  sign_up ok — maxFee=${maxFee}`);
 
     const key = signup.contractAddress.toString();
     functions[key] = functions[key] ?? {};
-    functions[key][signup.selector.toString()] = {
-      configIndex: 0,
-      ...(signup.calibrationIndex !== undefined
-        ? { calibrationIndex: signup.calibrationIndex }
-        : {}),
-    };
+    functions[key][signup.selector.toString()] = 0;
   }
 
   config.subscriptionFPC = {
     ...(config.subscriptionFPC ?? {}),
     address: fpcAddress.toString(),
+    secretKey: fpcSecret.toString(),
     functions,
   };
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -225,7 +222,6 @@ interface ResolvedSignup extends SignupSpec {
   selector: FunctionSelector;
   maxUses: number;
   maxUsers: number;
-  calibrationIndex?: number;
 }
 
 async function resolveSignups(
@@ -298,8 +294,6 @@ async function pickMaxFee(params: {
     P75_MULTIPLIER,
   );
 
-  // `calibrate` used a throwaway calibrationIndex internally; we don't propagate
-  // it because we re-sign_up at configIndex=0 anyway.
   return maxFee > SIGNUP_POLICY.fallbackMaxFee ? maxFee : SIGNUP_POLICY.fallbackMaxFee;
 }
 

@@ -23,7 +23,7 @@ import { useNetwork } from "./contexts/NetworkContext";
 import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
 
 export function App() {
-  const { status, wallet, address, node, error: walletError } = useWallet();
+  const { wallet, address, node } = useWallet();
   const [fpc, setFpc] = useState<SubscriptionFPCContract | null>(null);
   const [fpcAddress, setFpcAddress] = useState<string | null>(null);
   const storedFpcData = getStoredFPC();

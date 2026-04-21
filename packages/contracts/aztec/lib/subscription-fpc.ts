@@ -269,6 +269,7 @@ export class SubscriptionFPC {
   // --- Helpers ---
 
   get helpers() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const fpc = this;
     return {
       /**

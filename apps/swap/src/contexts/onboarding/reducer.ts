@@ -283,7 +283,7 @@ export function getOnboardingSteps(
 
 export function getOnboardingStepsWithDrip(
   hasSimulationGrant: boolean,
-  useEmbeddedWallet: boolean = false,
+  _useEmbeddedWallet: boolean = false,
 ): OnboardingStep[] {
   const steps: OnboardingStep[] = [
     { label: "Choose Wallet", description: "Select how you want to connect" },

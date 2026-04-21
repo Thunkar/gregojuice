@@ -17,7 +17,11 @@
 async function boot() {
   if (import.meta.env.DEV) {
     await import("zone.js");
-    const Zone = (globalThis as any).Zone;
+    const Zone = (
+      globalThis as typeof globalThis & {
+        Zone?: { current: { name: string } };
+      }
+    ).Zone;
     // eslint-disable-next-line no-console
     console.info(
       "[profiler] zone.js loaded:",

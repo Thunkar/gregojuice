@@ -43,23 +43,19 @@ export const LOCAL_L1_FUNDER_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 /**
- * Picks the L1 funder key + bridge mint flag for the target network.
+ * Picks the L1 funder key for the target network. `bridgeFeeJuice` itself
+ * decides whether to mint via the faucet based on the signer's FJ balance —
+ * this helper just chooses which key signs the tx.
  *
- *   L1_FUNDER_KEY env set   → use it, skip the mint (caller holds FJ on L1).
- *   local, env unset        → anvil dev key signs the tx (it has ETH for gas),
- *                             but we mint FJ via the fee-asset handler so the
- *                             dev key doesn't need a pre-funded FJ balance.
- *   non-local, env unset    → generate an ephemeral L1 key and mint via the
- *                             faucet (no external L1 funding required).
+ *   L1_FUNDER_KEY env set → use it.
+ *   local, env unset      → anvil's first dev key (has ETH for gas).
+ *   testnet, env unset    → undefined (bridgeFeeJuice generates a random key).
  */
-export function resolveL1Funder(network: NetworkName): {
-  l1FunderKey: `0x${string}` | undefined;
-  mint: boolean;
-} {
+export function resolveL1Funder(network: NetworkName): `0x${string}` | undefined {
   const env = process.env.L1_FUNDER_KEY as `0x${string}` | undefined;
-  if (env) return { l1FunderKey: env, mint: false };
-  if (network === "local") return { l1FunderKey: LOCAL_L1_FUNDER_KEY as `0x${string}`, mint: true };
-  return { l1FunderKey: undefined, mint: true };
+  if (env) return env;
+  if (network === "local") return LOCAL_L1_FUNDER_KEY as `0x${string}`;
+  return undefined;
 }
 
 /**

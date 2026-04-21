@@ -14,7 +14,6 @@ import { useWallet } from "../wallet";
 import { useNetwork } from "../network";
 import * as contractService from "../../services/contractService";
 import { useContractsReducer } from "./reducer";
-import { stat } from "fs";
 
 interface ContractsContextType {
   isLoadingContracts: boolean;

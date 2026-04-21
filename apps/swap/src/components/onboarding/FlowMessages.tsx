@@ -12,7 +12,7 @@ interface FlowMessagesProps {
   useEmbeddedWallet?: boolean;
 }
 
-export function FlowMessages({ status, hasSimulationGrant, useEmbeddedWallet }: FlowMessagesProps) {
+export function FlowMessages({ status, useEmbeddedWallet }: FlowMessagesProps) {
   // Show info message during drip registration (when balance is 0)
   if (status === "registering_drip") {
     return (
