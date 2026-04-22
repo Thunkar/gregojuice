@@ -10,11 +10,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # Silence cache-hit replays from turbo — only print output for fresh work
-  # or failures. Keeps the CI log readable when half the tasks are cached.
-  TURBO_LOG_ORDER: stream
-  TURBO_OUTPUT_LOGS: new-only
 
 # Skip stale runs when a PR gets pushed rapidly.
 concurrency:
@@ -36,13 +31,32 @@ jobs:
         run: yarn format
 
       - name: Build
-        run: yarn build
+        run: yarn build --output-logs=new-only
 
       - name: Typecheck
-        run: yarn typecheck
+        run: yarn typecheck --output-logs=new-only
 
       - name: Lint
-        run: yarn lint
+        run: yarn lint --output-logs=new-only
+
+      # Container jobs can't see actions/cache entries written by host-runner
+      # jobs (separate scope). Publish the build outputs as a workflow
+      # artifact so the e2e job can download them — artifacts cross the
+      # container boundary cleanly.
+      - name: Upload build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-outputs
+          path: |
+            apps/*/dist
+            packages/*/dist
+            packages/contracts/*/dist
+            packages/contracts/aztec/noir/artifacts
+            packages/contracts/aztec/noir/target
+            packages/contracts/ethereum/generated
+            packages/contracts/ethereum/solidity/out
+          retention-days: 1
+          include-hidden-files: false
 
   integration:
     runs-on: ubuntu-latest
@@ -91,6 +105,12 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-suffix: playwright-container
+
+      - name: Download build outputs
+        uses: actions/download-artifact@v4
+        with:
+          name: build-outputs
+          path: .
 
       - name: Run e2e tests
         run: yarn workspace @gregojuice/e2e test
