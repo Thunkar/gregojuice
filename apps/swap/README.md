@@ -5,7 +5,7 @@ Private token AMM on Aztec. Users swap GregoCoin (GRG) ↔ GregoCoinPremium (GRG
 ## Dev
 
 ```bash
-yarn workspace @gregojuice/swap dev     # http://localhost:5175
+yarn workspace @gregojuice/swap dev
 ```
 
 Requires:

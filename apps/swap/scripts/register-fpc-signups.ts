@@ -45,7 +45,11 @@ import {
   setupWallet,
   loadOrCreateSecret,
   getAdmin,
+  getSalt,
+  writeFpcAdminBackup,
+  resolveFpcAdminBackupPath,
   type NetworkName,
+  type SignedUpApp,
 } from "@gregojuice/common/testing";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import type { EmbeddedWallet } from "@aztec/wallets/embedded";
@@ -159,6 +163,11 @@ async function main() {
   // See apps/swap/src/config/networks/index.ts → SubscriptionFPCConfig.
   const functions: Record<string, Record<string, number>> = {};
 
+  // Rows destined for the fpc-operator backup's `apps` array — same shape
+  // the UI's Backup/Restore tab produces, so a script-written backup can be
+  // imported back into the UI to hydrate the dashboard.
+  const backupApps: SignedUpApp[] = [];
+
   for (const signup of resolved) {
     console.error(`\nSigning up ${signup.aliasKey}.${signup.functionName}...`);
 
@@ -180,6 +189,16 @@ async function main() {
     const key = signup.contractAddress.toString();
     functions[key] = functions[key] ?? {};
     functions[key][signup.selector.toString()] = 0;
+
+    backupApps.push({
+      appAddress: key,
+      functionSelector: signup.selector.toString(),
+      configIndex: 0,
+      maxUses: signup.maxUses,
+      maxFee: maxFee.toString(),
+      maxUsers: signup.maxUsers,
+      createdAt: Date.now(),
+    });
   }
 
   config.subscriptionFPC = {
@@ -190,6 +209,27 @@ async function main() {
   };
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   console.error(`\nUpdated ${configPath} with subscriptionFPC.functions.`);
+
+  // Layer the apps onto the fpc-operator backup file. Leaves `admin`/`fpc`
+  // sections from `deploy-fpc.ts` intact via the helper's merge semantics.
+  const backupPath = resolveFpcAdminBackupPath(network, import.meta.dirname);
+  writeFpcAdminBackup({
+    backupPath,
+    network,
+    admin: {
+      secretKey: secretKey.toString(),
+      salt: getSalt().toString(),
+      address: admin.toString(),
+    },
+    fpc: {
+      address: fpcAddress.toString(),
+      secretKey: fpcSecret.toString(),
+      salt: getSalt().toString(),
+      deployed: true,
+    },
+    apps: backupApps,
+  });
+  console.error(`Updated ${backupPath} with ${backupApps.length} signed-up apps.`);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

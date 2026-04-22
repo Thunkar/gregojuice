@@ -7,6 +7,8 @@ import {
   type Chain,
   type Hex,
 } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { foundry, mainnet, sepolia } from "viem/chains";
 import {
   BRIDGE_CONTRACT_BYTECODE,
   BRIDGE_CONTRACT_ABI,
@@ -73,6 +75,45 @@ export async function deployBridge(params: {
   });
   await publicClient.waitForTransactionReceipt({ hash });
   return address;
+}
+
+// ── Named-chain convenience ──────────────────────────────────────────
+
+/** Anvil's deterministic account #0 — NOT A SECRET. */
+export const ANVIL_DEV_KEY: Hex =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+export type ChainName = "sepolia" | "mainnet" | "anvil";
+
+const CHAINS: Record<ChainName, { chain: Chain; defaultRpc: string }> = {
+  sepolia: { chain: sepolia, defaultRpc: "https://sepolia.drpc.org" },
+  mainnet: { chain: mainnet, defaultRpc: "https://eth.drpc.org" },
+  anvil: { chain: foundry, defaultRpc: "http://localhost:8545" },
+};
+
+export interface DeployL1BridgeParams {
+  chainName: ChainName;
+  /** Defaults to the chain's public RPC (anvil: `http://localhost:8545`). */
+  rpcUrl?: string;
+  /** Defaults to `ANVIL_DEV_KEY` for `anvil`; required for every other chain. */
+  deployerKey?: Hex;
+}
+
+/**
+ * Deploys (or reuses) the bridge on a named chain. Idempotent via CREATE2:
+ * re-running returns the existing address without sending a new tx.
+ */
+export async function deployL1Bridge(params: DeployL1BridgeParams): Promise<Hex> {
+  const entry = CHAINS[params.chainName];
+  const key = params.deployerKey ?? (params.chainName === "anvil" ? ANVIL_DEV_KEY : undefined);
+  if (!key) {
+    throw new Error(`deployerKey is required for ${params.chainName}`);
+  }
+  return deployBridge({
+    rpcUrl: params.rpcUrl ?? entry.defaultRpc,
+    account: privateKeyToAccount(key),
+    chain: entry.chain,
+  });
 }
 
 // Re-export the generated ABI so a single import pulls everything a caller
