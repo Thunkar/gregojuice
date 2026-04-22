@@ -39,3 +39,13 @@ export {
 } from "./admin.ts";
 
 export { setupLocalNetwork, type LocalNetwork, type LocalNetworkOptions } from "./local-network.ts";
+
+export {
+  BACKUP_VERSION,
+  resolveFpcAdminBackupPath,
+  readFpcAdminBackup,
+  writeFpcAdminBackup,
+  type FpcAdminBackup,
+  type SignedUpApp,
+  type StoredFPC,
+} from "./fpc-admin-backup.ts";

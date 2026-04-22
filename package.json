@@ -22,7 +22,12 @@
     "bootstrap:local": "node scripts/bootstrap-local-networks.js",
     "setup:local": "yarn bootstrap:local && bash scripts/setup-network.sh local",
     "setup:testnet": "bash scripts/setup-network.sh testnet",
+    "deploy-l1-bridge": "node --experimental-transform-types scripts/deploy-l1-bridge.ts",
     "publish:packages": "./scripts/publish.sh"
+  },
+  "dependencies": {
+    "@gregojuice/ethereum": "workspace:*",
+    "viem": "^2.23.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

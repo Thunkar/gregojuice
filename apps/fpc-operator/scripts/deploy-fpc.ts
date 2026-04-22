@@ -18,8 +18,6 @@
  *   apps/fpc-operator/backups/<network>.fpc-admin.json — contains the admin
  *   secret key, salt, FPC secret key, salt, and address. Git-ignored.
  */
-import fs from "fs";
-import path from "path";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { bridgeAndClaim } from "@gregojuice/common/bridging";
 import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
@@ -34,6 +32,8 @@ import {
   loadOrCreateSecret,
   getAdmin,
   getSalt,
+  writeFpcAdminBackup,
+  resolveFpcAdminBackupPath,
 } from "@gregojuice/common/testing";
 
 const FUND_AMOUNT: bigint = BigInt("1000000000000000000000"); // 1000 FJ
@@ -103,13 +103,12 @@ async function main() {
     console.error(`Bridged ${amount} FJ to FPC (minted=${minted}).`);
   }
 
-  // Write the local backup file (gitignored).
-  const backupDir = path.join(import.meta.dirname, "../backups");
-  fs.mkdirSync(backupDir, { recursive: true });
-  const backupPath = path.join(backupDir, `${network}.fpc-admin.json`);
-  const backup = {
-    version: 1,
-    exportedAt: new Date().toISOString(),
+  // Write the local backup file in the fpc-operator UI's import format.
+  // Merges with any existing file so re-runs preserve the `apps` section
+  // that `register-fpc-signups` lays down afterwards.
+  const backupPath = resolveFpcAdminBackupPath(network, import.meta.dirname);
+  writeFpcAdminBackup({
+    backupPath,
     network,
     admin: {
       secretKey: fpcAdminSecret.secretKey.toString(),
@@ -122,8 +121,7 @@ async function main() {
       salt: fpcSalt.toString(),
       deployed: true,
     },
-  };
-  fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2));
+  });
   console.error(`Wrote backup to ${backupPath}`);
 
   // Stdout contract: exportable env lines for the orchestrator.

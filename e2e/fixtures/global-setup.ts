@@ -3,7 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FullConfig } from "@playwright/test";
 import { startLocalNetwork, type LocalNetwork } from "./local-network.ts";
-import { deployL1BridgeContract } from "./deploy-l1-bridge.ts";
+import { deployL1Bridge } from "@gregojuice/ethereum";
 import { deriveSwapAdmin } from "./derive-swap-admin.ts";
 import {
   resetStateDir,
@@ -86,7 +86,7 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   const l1RpcUrl = process.env.ETHEREUM_HOST ?? "http://localhost:8545";
 
   console.log("[e2e] deploying L1 bridge contract (CREATE2)...");
-  const l1BridgeAddress = await deployL1BridgeContract(l1RpcUrl);
+  const l1BridgeAddress = await deployL1Bridge({ chainName: "anvil", rpcUrl: l1RpcUrl });
   console.log(`[e2e] L1 bridge at ${l1BridgeAddress}`);
 
   console.log("[e2e] deriving swap-admin identity...");

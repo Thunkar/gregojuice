@@ -8363,6 +8363,7 @@ __metadata:
   resolution: "gregojuice@workspace:."
   dependencies:
     "@eslint/js": "npm:^9.18.0"
+    "@gregojuice/ethereum": "workspace:*"
     eslint: "npm:^9.26.0"
     eslint-config-prettier: "npm:^10.1.8"
     eslint-plugin-react-hooks: "npm:^5.1.0"
@@ -8372,6 +8373,7 @@ __metadata:
     turbo: "npm:^2"
     typescript: "npm:~5.7.3"
     typescript-eslint: "npm:^8.11.0"
+    viem: "npm:^2.23.0"
   languageName: unknown
   linkType: soft
 
