@@ -16,10 +16,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Fast gate: format + lint + build. Building with `tsc -b` gives us
-  # typechecking for free while also producing the artifacts that the
-  # integration + e2e jobs need — they pick them up from the turbo cache
-  # without redoing any work.
+  # Fast gate: format + build + lint + typecheck.
+  #
+  # `yarn build` runs first because every downstream task (lint, typecheck,
+  # the integration + e2e jobs) depends on the generated noir artifacts +
+  # TS dist outputs. Running `yarn lint` before `yarn build` would trigger
+  # turbo's `^build` dependency inside the lint task, compiling contracts
+  # just to lint them, and then `yarn build` would redo the leaf builds.
+  #
+  # After `yarn build` finishes, lint + typecheck replay from the turbo
+  # cache instantly. Building with `tsc -b` also gives us typechecking for
+  # free, so `yarn typecheck` is a no-op on a warm cache — cheap to keep
+  # as an explicit guard.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -30,11 +38,14 @@ jobs:
       - name: Format check
         run: yarn format
 
-      - name: Lint
-        run: yarn lint
-
       - name: Build
         run: yarn build
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      - name: Lint
+        run: yarn lint
 
   integration:
     runs-on: ubuntu-latest
