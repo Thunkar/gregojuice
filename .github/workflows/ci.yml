@@ -10,7 +10,6 @@ on:
 permissions:
   contents: read
 
-
 # Skip stale runs when a PR gets pushed rapidly.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
