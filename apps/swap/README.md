@@ -9,6 +9,7 @@ yarn workspace @gregojuice/swap dev     # http://localhost:5175
 ```
 
 Requires:
+
 - Aztec node reachable at the URL in `src/config/networks/local.json` (default: `http://localhost:8080`). Run `aztec start --local-network` in a separate terminal.
 - Contracts deployed + FPC registered. From repo root: `yarn setup:local`.
 
@@ -16,24 +17,24 @@ Requires:
 
 All run with `yarn workspace @gregojuice/swap <name>` (or `cd apps/swap && yarn <name>`). Each accepts `--network local|testnet`.
 
-| Script | Purpose |
-|---|---|
-| `deploy-admin:<network>` | Deploy the swap-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx. |
-| `deploy:<network>` | Deploy GregoCoin, GregoCoinPremium, LiquidityToken, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`. |
-| `mint:<network>` | Mint GRG/GRGP to `--to <addr>` (repeatable) or `MINT_TO=<addr,addr>` env. |
-| `register-fpc-signups:<network>` | Signs up the swap app's sponsored functions on the FPC. On testnet, calibrates `maxFee` from the clustec P75. |
+| Script                           | Purpose                                                                                                                |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `deploy-admin:<network>`         | Deploy the swap-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx.        |
+| `deploy:<network>`               | Deploy GregoCoin, GregoCoinPremium, LiquidityToken, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`. |
+| `mint:<network>`                 | Mint GRG/GRGP to `--to <addr>` (repeatable) or `MINT_TO=<addr,addr>` env.                                              |
+| `register-fpc-signups:<network>` | Signs up the swap app's sponsored functions on the FPC. On testnet, calibrates `maxFee` from the clustec P75.          |
 
 `yarn setup:local` / `yarn setup:testnet` at the repo root runs this full chain + the fpc-operator side in order.
 
 ## Env vars
 
-| Var | Used by | Meaning |
-|---|---|---|
-| `SWAP_ADMIN_SECRET` | all scripts | Deterministic admin key. Generated + printed as an `export` line if unset. |
-| `SALT` | all scripts | Contract address salt. Default `Fr(0)`. Change to deploy to a different address. |
-| `PASSWORD` | `deploy`, `register-fpc-signups` | Seeds the ProofOfPassword contract. Default `"potato"`. |
-| `MINT_TO` | `deploy`, `mint` | Comma-separated addresses to mint initial balances to. |
-| `FPC_ADDRESS`, `FPC_ADMIN_SECRET`, `FPC_SECRET` | `register-fpc-signups` | FPC identity; set by `fpc-operator`'s `deploy-admin` + `deploy-fpc`. |
+| Var                                             | Used by                          | Meaning                                                                          |
+| ----------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `SWAP_ADMIN_SECRET`                             | all scripts                      | Deterministic admin key. Generated + printed as an `export` line if unset.       |
+| `SALT`                                          | all scripts                      | Contract address salt. Default `Fr(0)`. Change to deploy to a different address. |
+| `PASSWORD`                                      | `deploy`, `register-fpc-signups` | Seeds the ProofOfPassword contract. Default `"potato"`.                          |
+| `MINT_TO`                                       | `deploy`, `mint`                 | Comma-separated addresses to mint initial balances to.                           |
+| `FPC_ADDRESS`, `FPC_ADMIN_SECRET`, `FPC_SECRET` | `register-fpc-signups`           | FPC identity; set by `fpc-operator`'s `deploy-admin` + `deploy-fpc`.             |
 
 ## Config
 

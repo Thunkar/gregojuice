@@ -10,13 +10,13 @@ fpc-setup → bridge-fund → swap-deploy → fpc-signup → swap-flow
 
 Each project depends on the previous via Playwright's `dependencies` mechanism. State is checkpointed to `.state/<name>.json` so re-running one spec picks up where the last left off.
 
-| Spec | App | What it does |
-|---|---|---|
-| `01-fpc-setup` | fpc-operator | Drives the SetupWizard — bridges FJ (via embedded bridge iframe), deploys the FPC. |
-| `02-bridge-fund-swap-admin` | bridge | Drives the bridge UI end-to-end to fund swap-admin with real bridged FJ. Verifies the bridge path works. |
-| `03-swap-deploy` | node script | Runs `apps/swap/scripts/deploy.ts --payment feejuice` — deploys swap contracts, paying from swap-admin's freshly-bridged FJ. |
-| `04-fpc-signup` | fpc-operator | Mints swap tokens to FPC admin, calibrates + signs up sponsored functions. |
-| `05-swap-flow` | swap | Full user onboarding + swap + drip + send via the swap UI. |
+| Spec                        | App          | What it does                                                                                                                 |
+| --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `01-fpc-setup`              | fpc-operator | Drives the SetupWizard — bridges FJ (via embedded bridge iframe), deploys the FPC.                                           |
+| `02-bridge-fund-swap-admin` | bridge       | Drives the bridge UI end-to-end to fund swap-admin with real bridged FJ. Verifies the bridge path works.                     |
+| `03-swap-deploy`            | node script  | Runs `apps/swap/scripts/deploy.ts --payment feejuice` — deploys swap contracts, paying from swap-admin's freshly-bridged FJ. |
+| `04-fpc-signup`             | fpc-operator | Mints swap tokens to FPC admin, calibrates + signs up sponsored functions.                                                   |
+| `05-swap-flow`              | swap         | Full user onboarding + swap + drip + send via the swap UI.                                                                   |
 
 ## Running
 
@@ -28,12 +28,12 @@ yarn workspace @gregojuice/e2e test       # full suite — spins up local-networ
 
 Environment toggles:
 
-| Env | Effect |
-|---|---|
-| `E2E_HEADED=1` | Run headed browsers. |
-| `E2E_SLOW_MO=500` | Slow each action by N ms (implies headed). |
+| Env                  | Effect                                                                      |
+| -------------------- | --------------------------------------------------------------------------- |
+| `E2E_HEADED=1`       | Run headed browsers.                                                        |
+| `E2E_SLOW_MO=500`    | Slow each action by N ms (implies headed).                                  |
 | `E2E_SKIP_NETWORK=1` | Don't spawn `aztec start --local-network` — assumes one is already running. |
-| `E2E_RESET=1` | Wipe `.state/` before the run; equivalent to `yarn e2e:reset`. |
+| `E2E_RESET=1`        | Wipe `.state/` before the run; equivalent to `yarn e2e:reset`.              |
 
 ## Global setup/teardown
 

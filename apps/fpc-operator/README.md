@@ -21,18 +21,18 @@ Requires an Aztec node (local sandbox or testnet RPC).
 
 All run with `yarn workspace @gregojuice/fpc-operator <name>`. Each accepts `--network local|testnet`.
 
-| Script | Purpose |
-|---|---|
-| `deploy-admin:<network>` | Deploy the FPC-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx. |
-| `deploy-fpc:<network>` | Deploy the SubscriptionFPC contract, then bridge FJ to it so it can sponsor gas. Writes a gitignored backup JSON to `backups/<network>.fpc-admin.json`. |
+| Script                   | Purpose                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deploy-admin:<network>` | Deploy the FPC-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx.                                          |
+| `deploy-fpc:<network>`   | Deploy the SubscriptionFPC contract, then bridge FJ to it so it can sponsor gas. Writes a gitignored backup JSON to `backups/<network>.fpc-admin.json`. |
 
 Run via `yarn setup:local` / `yarn setup:testnet` at the repo root (orchestrates admins + contracts + FPC + sign_ups).
 
 ## Env vars
 
-| Var | Used by | Meaning |
-|---|---|---|
-| `FPC_ADMIN_SECRET` | both scripts | Deterministic admin key. Generated + printed if unset. |
-| `FPC_SECRET` | `deploy-fpc` | FPC contract key secret (used so the PXE can decode FPC-owned notes). Generated if unset. |
-| `SALT` | both | Contract address salt. Default `Fr(0)`. |
-| `L1_FUNDER_KEY` | `deploy-fpc` (testnet) | Optional L1 private key holding FJ. Unset → faucet mints. |
+| Var                | Used by                | Meaning                                                                                   |
+| ------------------ | ---------------------- | ----------------------------------------------------------------------------------------- |
+| `FPC_ADMIN_SECRET` | both scripts           | Deterministic admin key. Generated + printed if unset.                                    |
+| `FPC_SECRET`       | `deploy-fpc`           | FPC contract key secret (used so the PXE can decode FPC-owned notes). Generated if unset. |
+| `SALT`             | both                   | Contract address salt. Default `Fr(0)`.                                                   |
+| `L1_FUNDER_KEY`    | `deploy-fpc` (testnet) | Optional L1 private key holding FJ. Unset → faucet mints.                                 |

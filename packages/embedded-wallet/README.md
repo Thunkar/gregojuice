@@ -4,10 +4,10 @@ Embeddable Aztec wallet backed by `SchnorrInitializerlessAccount`. Thin layer on
 
 ## Subpath exports
 
-| Import | Contents |
-|---|---|
-| `@gregojuice/embedded-wallet` | Core wallet logic: `createSchnorrInitializerlessAccount`, `deployWithImmutables`, `computeContractSalt`, capsule helpers. No React. |
-| `@gregojuice/embedded-wallet/ui` | React components + hooks: `EmbeddedWalletProvider`, `useEmbeddedWallet`, connect button, onboarding modal. |
+| Import                           | Contents                                                                                                                            |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `@gregojuice/embedded-wallet`    | Core wallet logic: `createSchnorrInitializerlessAccount`, `deployWithImmutables`, `computeContractSalt`, capsule helpers. No React. |
+| `@gregojuice/embedded-wallet/ui` | React components + hooks: `EmbeddedWalletProvider`, `useEmbeddedWallet`, connect button, onboarding modal.                          |
 
 ## Why "initializerless"?
 
@@ -17,10 +17,10 @@ Helpers you'll actually use:
 
 ```ts
 import {
-  createSchnorrInitializerlessAccount,  // secretKey → { signingKey, signingPublicKey, actualSalt }
-  computeImmutablesAddress,             // predict address without touching a wallet
-  deployWithImmutables,                 // register + deploy through an EmbeddedWallet
-  createSigningKeyCapsule,              // build the capsule every call needs
+  createSchnorrInitializerlessAccount, // secretKey → { signingKey, signingPublicKey, actualSalt }
+  computeImmutablesAddress, // predict address without touching a wallet
+  deployWithImmutables, // register + deploy through an EmbeddedWallet
+  createSigningKeyCapsule, // build the capsule every call needs
 } from "@gregojuice/embedded-wallet";
 ```
 

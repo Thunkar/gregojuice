@@ -4,6 +4,16 @@ description: >
   missing, compile contract artifacts, and extend PATH with the aztec CLI.
   Every job that needs a ready-to-use monorepo starts with this action.
 
+inputs:
+  cache-suffix:
+    description: >
+      Optional suffix appended to toolchain-sensitive cache keys (yarn +
+      turbo). Set this when the job runs in a container with a different
+      libc/toolchain than the default host runner — otherwise native addons
+      in cached node_modules can cross-contaminate between jobs.
+    required: false
+    default: ""
+
 outputs:
   aztec-version:
     description: Aztec version string extracted from apps/bridge/package.json.
@@ -45,9 +55,9 @@ runs:
         # action's paths change — otherwise actions/cache reuses whatever's
         # under the matching key even if it was saved under a narrower path
         # set, leaving native addons to rebuild every time.
-        key: yarn-v2-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+        key: yarn-v2-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-${{ hashFiles('yarn.lock') }}
         restore-keys: |
-          yarn-v2-${{ runner.os }}-
+          yarn-v2-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-
 
     - name: Install dependencies
       shell: bash
@@ -132,6 +142,6 @@ runs:
           packages/contracts/*/dist
           packages/contracts/ethereum/generated
           packages/contracts/ethereum/solidity/out
-        key: turbo-${{ runner.os }}-${{ github.sha }}
+        key: turbo-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-${{ github.sha }}
         restore-keys: |
-          turbo-${{ runner.os }}-
+          turbo-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-

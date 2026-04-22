@@ -4,14 +4,14 @@ Noir contracts for the gregojuice ecosystem + generated TypeScript artifacts + a
 
 ## Contracts
 
-| Contract | Purpose |
-|---|---|
-| `Token` | Standard Aztec token with private + public balances. Used for GregoCoin (GRG), GregoCoinPremium (GRGP), LiquidityToken (LQT). |
-| `AMM` | Uniswap-v2-style constant-product AMM over two Token contracts. Mints LiquidityToken shares. |
-| `ProofOfPassword` | Faucet gated by a password hash. `check_password_and_mint` mints GRG to the caller if the password hashes to the stored value. |
-| `SubscriptionFPC` | Fee Payment Contract. Admin pre-registers `(contract, function)` tuples with a `maxFee`; users "subscribe" and the FPC pays their gas. |
-| `SchnorrInitializerlessAccount` | Schnorr account with no `initialize` entrypoint. Signing key comes from a capsule on every call. |
-| `EcdsaAccountDeployer` | ECDSA-signer variant. |
+| Contract                        | Purpose                                                                                                                                |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `Token`                         | Standard Aztec token with private + public balances. Used for GregoCoin (GRG), GregoCoinPremium (GRGP), LiquidityToken (LQT).          |
+| `AMM`                           | Uniswap-v2-style constant-product AMM over two Token contracts. Mints LiquidityToken shares.                                           |
+| `ProofOfPassword`               | Faucet gated by a password hash. `check_password_and_mint` mints GRG to the caller if the password hashes to the stored value.         |
+| `SubscriptionFPC`               | Fee Payment Contract. Admin pre-registers `(contract, function)` tuples with a `maxFee`; users "subscribe" and the FPC pays their gas. |
+| `SchnorrInitializerlessAccount` | Schnorr account with no `initialize` entrypoint. Signing key comes from a capsule on every call.                                       |
+| `EcdsaAccountDeployer`          | ECDSA-signer variant.                                                                                                                  |
 
 ## TS exports
 

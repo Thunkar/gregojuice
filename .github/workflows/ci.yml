@@ -78,7 +78,22 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.59.1-noble
     steps:
       - uses: actions/checkout@v4
+
+      # The Playwright image ships Node + browsers + X libs but strips the
+      # C/C++ toolchain, so native addons (bcrypto, lmdb, ...) can't build
+      # during `yarn install`. Add the toolchain before the setup action runs.
+      - name: Install native build toolchain
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential python3
+          rm -rf /var/lib/apt/lists/*
+
+      # Native addons (bcrypto/lmdb) built in this container link against a
+      # different libc than the host-runner jobs. Tag the cache so we never
+      # cross-hit those prebuilt binaries.
       - uses: ./.github/actions/setup
+        with:
+          cache-suffix: playwright-container
 
       - name: Build workspace
         run: yarn build
