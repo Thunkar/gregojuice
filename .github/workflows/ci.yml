@@ -85,7 +85,7 @@ jobs:
       - name: Install native build toolchain
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends build-essential python3
+          apt-get install -y --no-install-recommends build-essential python3 jq
           rm -rf /var/lib/apt/lists/*
 
       # Native addons (bcrypto/lmdb) built in this container link against a
