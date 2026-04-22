@@ -28,6 +28,14 @@ export {
   type SetupWalletResult,
 } from "./wallet-setup.ts";
 
-export { loadOrCreateSecret, getSalt, deriveSchnorrAdminAddress, getAdmin } from "./admin.ts";
+export {
+  loadOrCreateSecret,
+  getSalt,
+  deriveSchnorrAdminAddress,
+  getAdmin,
+  deployAdmin,
+  type AdminDeployMode,
+  type DeployAdminParams,
+} from "./admin.ts";
 
 export { setupLocalNetwork, type LocalNetwork, type LocalNetworkOptions } from "./local-network.ts";

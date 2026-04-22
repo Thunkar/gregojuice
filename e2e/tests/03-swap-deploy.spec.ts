@@ -16,14 +16,18 @@ import { getPublicFeeJuiceBalance } from "../fixtures/fee-juice-balance.ts";
 /**
  * Spec 03 — deploy the swap contracts as swap-admin, paying with native FJ.
  *
- * We run `apps/swap/scripts/deploy.ts` as a Node subprocess rather than
- * importing `runSwapDeploy` in-process. Reason: the deploy script imports
- * contract artifacts from `@gregojuice/aztec/artifacts/*`, whose source
- * `.ts` files use `public declare` class fields. Playwright's bundled
- * Babel transformer rejects those (requires a specific plugin order); plain
- * Node with `--experimental-transform-types` handles them fine. The
- * subprocess also neatly isolates the contract artifact imports from the
- * test worker.
+ * Two subprocess steps:
+ *   1. `deploy-admin.ts` — deploys swap-admin's schnorr account. Spec 02
+ *      bridged + claimed FJ to swap-admin's deterministic address, so
+ *      deploy-admin auto-detects the `prefunded` mode and uses a plain
+ *      `FeeJuicePaymentMethod` (no extra bridge).
+ *   2. `deploy.ts` — deploys the swap contracts with `--payment feejuice`,
+ *      paying from swap-admin's remaining FJ balance.
+ *
+ * Running the scripts as subprocesses keeps Playwright's bundled Babel
+ * transformer away from contract artifacts that use `public declare` class
+ * fields (which require a specific plugin order); plain Node with
+ * `--experimental-transform-types` handles them fine.
  *
  * Output is written to `apps/swap/src/config/networks/local.json`; we read
  * that back and mirror the relevant bits into the `swapDeployment` state file.
@@ -34,23 +38,16 @@ const REPO_ROOT = resolve(HERE, "../..");
 const SWAP_DIR = resolve(REPO_ROOT, "apps/swap");
 const SWAP_LOCAL_JSON = resolve(SWAP_DIR, "src/config/networks/local.json");
 
-function runDeploy(env: NodeJS.ProcessEnv): Promise<void> {
+function runSwapScript(name: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
   return new Promise((res, rej) => {
     const child = spawn(
       "node",
-      [
-        "--experimental-transform-types",
-        "scripts/deploy.ts",
-        "--network",
-        "local",
-        "--payment",
-        "feejuice",
-      ],
+      ["--experimental-transform-types", `scripts/${name}`, "--network", "local", ...args],
       { cwd: SWAP_DIR, env, stdio: "inherit" },
     );
     child.on("exit", (code) => {
       if (code === 0) res();
-      else rej(new Error(`deploy.ts exited with code ${code}`));
+      else rej(new Error(`${name} exited with code ${code}`));
     });
     child.on("error", rej);
   });
@@ -77,11 +74,17 @@ test.describe.serial("swap deploy", () => {
     // hardcoding their own copy.
     const password = process.env.PASSWORD ?? "potato";
 
-    await runDeploy({
+    const scriptEnv: NodeJS.ProcessEnv = {
       ...process.env,
       SWAP_ADMIN_SECRET: global.swapAdmin.secret,
       PASSWORD: password,
-    });
+    };
+
+    // Spec 02 bridged + claimed FJ to swap-admin, but didn't deploy the
+    // account contract. deploy-admin.ts detects the pre-funded FJ and
+    // deploys using it; deploy.ts then runs with the admin on-chain.
+    await runSwapScript("deploy-admin.ts", [], scriptEnv);
+    await runSwapScript("deploy.ts", ["--payment", "feejuice"], scriptEnv);
 
     const raw = await readFile(SWAP_LOCAL_JSON, "utf-8");
     const deployed = JSON.parse(raw) as {
