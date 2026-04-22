@@ -5,7 +5,7 @@ A wizard for bridging fee juice from L1 → L2 so a fresh Aztec address can pay 
 ## Dev
 
 ```bash
-yarn workspace @gregojuice/bridge dev     # http://localhost:5173
+yarn workspace @gregojuice/bridge dev
 ```
 
 Requires an Aztec node + L1 RPC at the URLs in `src/config/networks/local.json`. For local: `aztec start --local-network` provides both.

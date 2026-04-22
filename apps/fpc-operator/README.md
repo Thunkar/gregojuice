@@ -5,7 +5,7 @@ Operator dashboard for deploying and running a [SubscriptionFPC](../../packages/
 ## Dev
 
 ```bash
-yarn workspace @gregojuice/fpc-operator dev     # http://localhost:5174
+yarn workspace @gregojuice/fpc-operator dev
 ```
 
 Requires an Aztec node (local sandbox or testnet RPC).

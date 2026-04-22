@@ -4,11 +4,11 @@ Three Aztec apps and the libraries that glue them together, in one yarn-workspac
 
 ## Apps
 
-| App                                   | Port | What it does                                                                        |
-| ------------------------------------- | ---- | ----------------------------------------------------------------------------------- |
-| [**swap**](apps/swap)                 | 5175 | Private token AMM (GRG ↔ GRGP) with a proof-of-password faucet. End-user app.       |
-| [**bridge**](apps/bridge)             | 5173 | Wizard for bridging fee juice from L1 → L2 so an Aztec address can pay its own gas. |
-| [**fpc-operator**](apps/fpc-operator) | 5174 | Operator dashboard for deploying + administering a SubscriptionFPC.                 |
+| App                                   | What it does                                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| [**swap**](apps/swap)                 | Private token AMM (GRG ↔ GRGP) with a proof-of-password faucet. End-user app.       |
+| [**bridge**](apps/bridge)             | Wizard for bridging fee juice from L1 → L2 so an Aztec address can pay its own gas. |
+| [**fpc-operator**](apps/fpc-operator) | Operator dashboard for deploying + administering a SubscriptionFPC.                 |
 
 ## Packages
 
