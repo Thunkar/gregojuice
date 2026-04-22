@@ -2,12 +2,10 @@
   "name": "@gregojuice/common",
   "version": "0.0.1",
   "type": "module",
-  "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./ui": "./src/ui.ts",
+    "./ui": "./src/ui/index.ts",
     "./bridging": "./src/bridging/index.ts",
-    "./fee-stats": "./src/fee-stats.ts",
+    "./fees": "./src/fees/index.ts",
     "./testing": "./src/testing/index.ts"
   },
   "scripts": {

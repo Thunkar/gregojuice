@@ -4,7 +4,7 @@ import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import LogoutIcon from "@mui/icons-material/Logout";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import { shortAddress } from "@gregojuice/common";
+import { shortAddress } from "@gregojuice/common/ui";
 import { useWallet } from "../contexts/WalletContext";
 
 export function WalletChip() {

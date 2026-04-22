@@ -48,8 +48,10 @@ export default defineConfig(({ mode }) => {
           import.meta.dirname,
           "../../packages/embedded-wallet/src/index.ts",
         ),
-        "@gregojuice/common/ui": resolve(import.meta.dirname, "../../packages/common/src/ui.ts"),
-        "@gregojuice/common": resolve(import.meta.dirname, "../../packages/common/src/index.ts"),
+        "@gregojuice/common/ui": resolve(
+          import.meta.dirname,
+          "../../packages/common/src/ui/index.ts",
+        ),
         "@gregojuice/ethereum": resolve(
           import.meta.dirname,
           "../../packages/contracts/ethereum/lib/deterministic.ts",

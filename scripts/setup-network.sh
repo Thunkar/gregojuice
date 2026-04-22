@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Orchestrates a full swap-app deploy on the target network:
 #
-#   1. Fund the swap admin (generates SWAP_ADMIN_SECRET if not set).
+#   1. Deploy the swap admin (generates SWAP_ADMIN_SECRET if not set).
+#      On local: via SponsoredFPC. On testnet: bridge + claim + deploy.
 #   2. Deploy swap contracts with that admin.
-#   3. Fund the FPC admin (generates FPC_ADMIN_SECRET if not set).
-#   4. Deploy the SubscriptionFPC and fund it.
+#   3. Deploy the FPC admin (generates FPC_ADMIN_SECRET if not set). Same
+#      sponsoredfpc-vs-bridge split as step 1.
+#   4. Deploy the SubscriptionFPC and fund it with a bridged FJ balance.
 #   5. Register the swap-app signups on the FPC (calibrate on non-local).
 #
 # Each step's stdout contains `export KEY=VAL` lines for the next step; we
@@ -41,14 +43,14 @@ run_and_capture() {
   done <<< "${out}"
 }
 
-run_and_capture "Fund swap admin (${NETWORK})" \
-  yarn workspace @gregojuice/swap "fund-admin:${NETWORK}"
+run_and_capture "Deploy swap admin (${NETWORK})" \
+  yarn workspace @gregojuice/swap "deploy-admin:${NETWORK}"
 
 run_and_capture "Deploy swap contracts (${NETWORK})" \
   yarn workspace @gregojuice/swap "deploy:${NETWORK}"
 
-run_and_capture "Fund FPC admin (${NETWORK})" \
-  yarn workspace @gregojuice/fpc-operator "fund-admin:${NETWORK}"
+run_and_capture "Deploy FPC admin (${NETWORK})" \
+  yarn workspace @gregojuice/fpc-operator "deploy-admin:${NETWORK}"
 
 run_and_capture "Deploy FPC + fund FPC (${NETWORK})" \
   yarn workspace @gregojuice/fpc-operator "deploy-fpc:${NETWORK}"
@@ -66,3 +68,4 @@ echo_stage "Done"
 echo "Swap admin: ${SWAP_ADMIN_ADDRESS:-?}"
 echo "FPC admin:  ${FPC_ADMIN_ADDRESS:-?}"
 echo "FPC:        ${FPC_ADDRESS:-?}"
+echo "FPC secret: ${FPC_SECRET:-?}"

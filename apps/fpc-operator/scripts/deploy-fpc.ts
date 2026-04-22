@@ -4,7 +4,7 @@
  *
  * Expects:
  *   --network <local|testnet>
- *   FPC_ADMIN_SECRET — FPC admin secret (from `fund-fpc-admin`).
+ *   FPC_ADMIN_SECRET — FPC admin secret (from `deploy-admin`).
  *   FPC_SECRET       — FPC contract key secret. When provided AND the derived
  *                      contract is already on-chain, deploy is skipped.
  *                      Random if unset; printed back on stdout.
@@ -32,7 +32,7 @@ import {
   bridgeMode,
   setupWallet,
   loadOrCreateSecret,
-  getOrCreateAdmin,
+  getAdmin,
   getSalt,
 } from "@gregojuice/common/testing";
 
@@ -43,7 +43,7 @@ async function main() {
   const fpcAdminSecret = loadOrCreateSecret("FPC_ADMIN_SECRET");
   if (fpcAdminSecret.generated) {
     console.error(
-      "FPC_ADMIN_SECRET not set — refusing to generate one here. Run `fund-fpc-admin` first.",
+      "FPC_ADMIN_SECRET not set — refusing to generate one here. Run `deploy-admin` first.",
     );
     process.exit(1);
   }
@@ -54,7 +54,11 @@ async function main() {
   const fpcSalt = getSalt();
 
   const { node, wallet, paymentMethod } = await setupWallet(NETWORK_URLS[network], network);
-  const admin = await getOrCreateAdmin(wallet, fpcAdminSecret.secretKey, paymentMethod);
+  const admin = await getAdmin(
+    wallet,
+    fpcAdminSecret.secretKey,
+    `Run \`yarn fpc-operator deploy-admin:${network}\` first.`,
+  );
   console.error(`FPC admin: ${admin.toString()}`);
 
   // Compute the FPC's deterministic address up front so we can detect the

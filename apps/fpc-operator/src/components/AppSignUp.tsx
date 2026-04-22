@@ -21,7 +21,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { shortAddress } from "@gregojuice/common";
+import { shortAddress } from "@gregojuice/common/ui";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
 import { Fr } from "@aztec/aztec.js/fields";
 import { parseUnits } from "viem";

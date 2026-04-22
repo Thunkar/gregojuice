@@ -19,7 +19,7 @@ import {
   NETWORK_URLS,
   setupWallet,
   loadOrCreateSecret,
-  getOrCreateAdmin,
+  getAdmin,
 } from "@gregojuice/common/testing";
 
 const NETWORK = parseNetwork();
@@ -51,7 +51,11 @@ async function main() {
 
   console.log("Reconstructing deployer account...");
   const { secretKey } = loadOrCreateSecret("SWAP_ADMIN_SECRET");
-  const deployer = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
+  const deployer = await getAdmin(
+    wallet,
+    secretKey,
+    `Run \`yarn swap deploy-admin:${NETWORK}\` first.`,
+  );
   console.log(`Deployer: ${deployer.toString()}`);
 
   // Verify deployer matches config

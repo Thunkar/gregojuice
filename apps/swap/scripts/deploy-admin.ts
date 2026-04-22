@@ -1,19 +1,22 @@
 /**
- * Generates (or loads) the swap admin account secret, bridges fee juice to
- * its deterministic address, and deploys the schnorr account using the
- * bridged claim as the payment method (claim + deploy in one tx).
+ * Deploys the swap admin schnorr account, generating a fresh secret if the
+ * caller didn't supply one.
+ *
+ * - On `local`: deploys via SponsoredFPC — no bridge, no funding needed.
+ *   The admin doesn't pay for anything in the local dev flow (sponsored).
+ * - On `testnet`: bridges fee juice to the admin's deterministic address
+ *   and deploys using the freshly-claimed FJ as the payment method
+ *   (claim + deploy in one tx).
  *
  * Usage:
- *   yarn swap fund-admin --network <local|testnet>
+ *   yarn swap deploy-admin --network <local|testnet>
  *
  * Env vars:
  *   SWAP_ADMIN_SECRET — hex Fr for the admin secret. If unset, a new key is
  *                       generated and the script prints an `export SWAP_ADMIN_SECRET=…`
  *                       line on stdout before exiting.
- *   L1_FUNDER_KEY     — optional. L1 private key holding FJ on the target chain.
- *                       Defaults to anvil dev key on `local` (with mint=true via
- *                       the faucet handler). On `testnet`, when unset, a random
- *                       L1 key is generated and the faucet mints FJ for us.
+ *   L1_FUNDER_KEY     — testnet only. L1 private key holding FJ. When unset,
+ *                       a random L1 key is generated and the faucet mints FJ.
  */
 import { bridge } from "@gregojuice/common/bridging";
 import {
@@ -41,14 +44,34 @@ async function main() {
   const adminAddress = await deriveSchnorrAdminAddress(secretKey);
   console.error(`Swap admin address: ${adminAddress.toString()}`);
 
-  const { node, wallet } = await setupWallet(NETWORK_URLS[network], network);
+  const { node, wallet, paymentMethod: sponsoredPaymentMethod } = await setupWallet(
+    NETWORK_URLS[network],
+    network,
+    network === "local" ? "sponsoredfpc" : "feejuice",
+  );
   const signingKey = deriveSigningKey(secretKey);
   const accountManager = await wallet.createSchnorrAccount(secretKey, getSalt(), signingKey);
 
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
   if (initializationStatus === ContractInitializationStatus.INITIALIZED) {
-    console.error("Admin account already initialised on-chain, skipping bridge + deploy.");
+    console.error("Admin account already initialised on-chain, skipping deploy.");
+  } else if (network === "local") {
+    // SponsoredFPC pays — no bridge needed. Faster than bridging FJ just to
+    // fund an admin that never pays for anything in practice.
+    console.error("Deploying admin account via SponsoredFPC...");
+    const deployMethod = await accountManager.getDeployMethod();
+    await deployMethod.send({
+      from: NO_FROM,
+      fee: { paymentMethod: sponsoredPaymentMethod },
+      skipClassPublication: true,
+      skipInstancePublication: true,
+      wait: { timeout: 120 },
+    });
+    console.error("Admin account deployed.");
   } else {
+    // Testnet: SponsoredFPC doesn't exist. Bridge FJ and pay for the deploy
+    // with the freshly-claimed FJ via FeeJuicePaymentMethodWithClaim (claim
+    // + deploy in one private tx).
     console.error(`Bridging FJ to ${adminAddress.toString()}...`);
     const { claim, l1Address, minted } = await bridge({
       node,
@@ -63,9 +86,6 @@ async function main() {
       `Bridged ${claim.claimAmount} FJ from L1 address ${l1Address} (minted=${minted}).`,
     );
 
-    // Claim + deploy in one private tx: FeeJuicePaymentMethodWithClaim prepends
-    // a `claim_and_end_setup` call before the account-deploy execution. The
-    // fresh account pays for its own deploy from the freshly-claimed FJ.
     const paymentMethod = new FeeJuicePaymentMethodWithClaim(adminAddress, claim);
     const deployMethod = await accountManager.getDeployMethod();
     await deployMethod.send({

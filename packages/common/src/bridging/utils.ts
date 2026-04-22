@@ -1,19 +1,25 @@
 /**
- * Node-side fee-juice bridging. Mirrors the UI bridge app's faucet/non-faucet
- * split, but uses a provided L1 private key (or generates a random one on the
- * faucet path) instead of a browser wallet.
+ * Lower-level bridging primitives used to build the public `bridge` /
+ * `bridgeAndClaim` flows in `./index.ts`. Not intended for direct use by
+ * scripts — the flow helpers wrap these with the right arguments.
+ *
+ * Node-only: pulls in `@aztec/aztec.js/ethereum` + viem and relies on
+ * `process.env`.
  */
 import type { AztecNode } from "@aztec/aztec.js/node";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { L1FeeJuicePortalManager } from "@aztec/aztec.js/ethereum";
+import { isL1ToL2MessageReady } from "@aztec/aztec.js/messaging";
 import { createExtendedL1Client } from "@aztec/ethereum/client";
 import { createEthereumChain } from "@aztec/ethereum/chain";
 import { createLogger } from "@aztec/foundation/log";
+import { DateProvider } from "@aztec/foundation/timer";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import { generatePrivateKey } from "viem/accounts";
 import type { Hex } from "viem";
 
-import { advanceL1ToL2Message } from "./cheat-codes.ts";
+const POLL_INTERVAL_MS = 1000;
+const WARP_BY_SECONDS = 36n; // roughly one L2 slot
 
 export interface BridgeFeeJuiceParams {
   node: AztecNode;
@@ -63,17 +69,20 @@ export async function bridgeFeeJuice(params: BridgeFeeJuiceParams): Promise<Brid
   const signerAddress = l1Client.account.address;
   const l1Balance = await tokenManager.getL1TokenBalance(signerAddress);
 
-  // Mirror the UI: faucetLocked = handler exists AND user has no balance.
-  const minted = hasFaucet && l1Balance === 0n;
-  if (!minted && !hasFaucet && l1Balance === 0n) {
+  // Mint via the faucet unless the signer already holds "enough" FJ. 10 FJ is
+  // plenty for any single bridge we do here (admin funding tops out at 1000,
+  // but the usual case is «signer has dust from a previous run» which used
+  // to trip the `=== 0n` check and skip minting, causing ERC20InsufficientBalance.
+  const FAUCET_SKIP_THRESHOLD = 10n * 10n ** 18n;
+  const minted = hasFaucet && l1Balance < FAUCET_SKIP_THRESHOLD;
+  if (!minted && !hasFaucet && l1Balance < FAUCET_SKIP_THRESHOLD) {
     throw new Error(
-      `L1 signer ${signerAddress} has no FJ balance and no fee-asset handler is available for minting.`,
+      `L1 signer ${signerAddress} holds ${l1Balance} FJ (below threshold) and no fee-asset handler is available for minting.`,
     );
   }
 
   let amountArg: bigint | undefined;
   if (minted) {
-    // Faucet path: handler's mintAmount() dictates the amount.
     amountArg = undefined;
   } else {
     if (params.amount === undefined) {
@@ -119,8 +128,6 @@ export async function waitForL1ToL2Message(params: WaitForClaimParams): Promise<
     return;
   }
 
-  // Poll mode — import lazily to keep the cheat-code dependency tree optional.
-  const { isL1ToL2MessageReady } = await import("@aztec/aztec.js/messaging");
   const startedAt = Date.now();
   const timeoutMs = params.timeoutMs ?? 30 * 60_000;
   const deadline = startedAt + timeoutMs;
@@ -140,6 +147,37 @@ export async function waitForL1ToL2Message(params: WaitForClaimParams): Promise<
       lastLog = Date.now();
     }
     await new Promise((r) => setTimeout(r, 5_000));
+  }
+  throw new Error(`L1→L2 message ${messageHash.toString()} did not become available in time`);
+}
+
+/**
+ * Local-network helper: advances L1 + L2 time via admin RPCs until the given
+ * L1→L2 message shows up as available. Relies on `nodeDebug_mineBlock` and
+ * Anvil's `evm_setNextBlockTimestamp`, loaded lazily so browser-ish bundles
+ * that never hit warp mode can tree-shake them out.
+ */
+export async function advanceL1ToL2Message(
+  node: AztecNode,
+  messageHash: Fr,
+  opts: { nodeUrl?: string; l1RpcUrl?: string; timeoutMs?: number } = {},
+): Promise<void> {
+  const nodeUrl = opts.nodeUrl ?? process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
+  const l1RpcUrl = opts.l1RpcUrl ?? process.env.ETHEREUM_HOST ?? "http://localhost:8545";
+  const timeoutMs = opts.timeoutMs ?? 120_000;
+
+  const [{ createAztecNodeDebugClient }, { CheatCodes }] = await Promise.all([
+    import("@aztec/stdlib/interfaces/client"),
+    import("@aztec/aztec/testing"),
+  ]);
+  const nodeDebug = createAztecNodeDebugClient(nodeUrl);
+  const cheatCodes = await CheatCodes.create([l1RpcUrl], node, new DateProvider());
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await isL1ToL2MessageReady(node, messageHash)) return;
+    await cheatCodes.warpL2TimeAtLeastBy(nodeDebug, WARP_BY_SECONDS);
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
   throw new Error(`L1→L2 message ${messageHash.toString()} did not become available in time`);
 }

@@ -37,14 +37,14 @@ import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/Pro
 import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import { TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
 import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
-import { fetchFeeStats, computeMaxFeeFromP75 } from "@gregojuice/common/fee-stats";
+import { fetchFeeStats, computeMaxFeeFromP75 } from "@gregojuice/common/fees";
 
 import {
   parseNetwork,
   NETWORK_URLS,
   setupWallet,
   loadOrCreateSecret,
-  getOrCreateAdmin,
+  getAdmin,
   type NetworkName,
 } from "@gregojuice/common/testing";
 import type { AztecNode } from "@aztec/aztec.js/node";
@@ -57,8 +57,8 @@ const P75_MULTIPLIER = 2;
 const SIGNUP_POLICY = {
   maxUses: 100,
   maxUsers: 100,
-  /** Used when calibration is skipped (local) or as a floor. */
-  fallbackMaxFee: BigInt("1000000000000000000000"), // 1000 FJ
+  /** Used only when calibration is skipped (local dev flow). */
+  localMaxFee: BigInt("1000000000000000000000"), // 1000 FJ
 } as const;
 
 type SampleArgsBuilder = (ctx: {
@@ -123,9 +123,13 @@ async function main() {
 
   const { node, wallet, paymentMethod } = await setupWallet(NETWORK_URLS[network], network);
   // Signups must be sent by the FPC admin (who deployed the FPC), not the swap admin.
-  // The FPC admin is funded + deployed by `fpc-operator/scripts/fund-fpc-admin.ts`.
+  // The FPC admin is deployed by `fpc-operator/scripts/deploy-admin.ts`.
   const { secretKey } = loadOrCreateSecret("FPC_ADMIN_SECRET");
-  const admin = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
+  const admin = await getAdmin(
+    wallet,
+    secretKey,
+    `Run \`yarn swap deploy-admin:${network}\` first.`,
+  );
 
   // Hydrate the PXE with all swap contracts.
   const contracts = await registerSwapContracts(wallet, node, config.contracts);
@@ -276,7 +280,7 @@ async function pickMaxFee(params: {
 }): Promise<bigint> {
   const { network, fpc, wallet, admin, node, signup, contracts } = params;
   if (network === "local") {
-    return SIGNUP_POLICY.fallbackMaxFee;
+    return SIGNUP_POLICY.localMaxFee;
   }
 
   // Build a realistic sample call to measure gas on.
@@ -296,7 +300,7 @@ async function pickMaxFee(params: {
   });
 
   const stats = await fetchFeeStats(network, P75_BLOCK_RANGE);
-  const maxFee = computeMaxFeeFromP75(
+  return computeMaxFeeFromP75(
     { daGas: Number(estimatedGas.gasLimits.daGas), l2Gas: Number(estimatedGas.gasLimits.l2Gas) },
     {
       daGas: Number(estimatedGas.teardownGasLimits.daGas),
@@ -305,8 +309,6 @@ async function pickMaxFee(params: {
     stats,
     P75_MULTIPLIER,
   );
-
-  return maxFee > SIGNUP_POLICY.fallbackMaxFee ? maxFee : SIGNUP_POLICY.fallbackMaxFee;
 }
 
 main().catch((err) => {

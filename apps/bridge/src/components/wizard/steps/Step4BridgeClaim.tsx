@@ -12,7 +12,7 @@ import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import { formatUnits } from "viem";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { shortAddress } from "@gregojuice/common";
+import { shortAddress } from "@gregojuice/common/ui";
 import { BRIDGE_STEP_LABELS } from "../constants";
 import { useAztecWallet } from "../../../contexts/AztecWalletContext";
 import type { Recipient, BridgeStep, ClaimCredentials, MessageStatus } from "../types";

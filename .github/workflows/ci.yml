@@ -52,23 +52,22 @@ jobs:
 
   # Playwright e2e tests. Runs in parallel with integration — both gate on
   # `build`, neither depends on the other.
+  #
+  # Runs inside Playwright's official container image which ships chromium
+  # + all apt system deps preinstalled. Avoids `playwright install` /
+  # `install-deps` entirely — those were the biggest time sinks on warm
+  # runners. Keep the tag pinned to the exact version resolved in yarn.lock
+  # (@playwright/test@1.59.1) so the bundled browser matches what the test
+  # runner expects; bump both together when upgrading Playwright.
   e2e:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 60
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-noble
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-
-      # System deps are apt-installed and not cacheable, but the fetch is
-      # fast when they're already present; the chromium binary itself lives
-      # in ~/.cache/ms-playwright and is cached by the setup action, so a
-      # warm `playwright install chromium` is effectively a no-op.
-      - name: Install Playwright system deps
-        run: yarn workspace @gregojuice/e2e exec playwright install-deps chromium
-
-      - name: Install Playwright browsers
-        run: yarn workspace @gregojuice/e2e exec playwright install chromium
 
       - name: Build workspace
         run: yarn build

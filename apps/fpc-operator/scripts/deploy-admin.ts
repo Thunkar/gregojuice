@@ -1,7 +1,7 @@
 /**
- * Mirrors apps/swap/scripts/fund-admin.ts but for the FPC admin: bridges FJ
- * to the derived admin address and deploys the schnorr account using the
- * bridged claim as payment method (claim + deploy in one tx).
+ * Mirrors apps/swap/scripts/deploy-admin.ts but for the FPC admin.
+ * On local: deploys via SponsoredFPC (no bridge). On testnet: bridges FJ and
+ * deploys using the bridged claim as payment method (claim + deploy in one tx).
  */
 import { bridge } from "@gregojuice/common/bridging";
 import {
@@ -29,14 +29,31 @@ async function main() {
   const adminAddress = await deriveSchnorrAdminAddress(secretKey);
   console.error(`FPC admin address: ${adminAddress.toString()}`);
 
-  const { node, wallet } = await setupWallet(NETWORK_URLS[network], network);
+  const { node, wallet, paymentMethod: sponsoredPaymentMethod } = await setupWallet(
+    NETWORK_URLS[network],
+    network,
+    network === "local" ? "sponsoredfpc" : "feejuice",
+  );
   const signingKey = deriveSigningKey(secretKey);
   const accountManager = await wallet.createSchnorrAccount(secretKey, getSalt(), signingKey);
 
   const { initializationStatus } = await wallet.getContractMetadata(accountManager.address);
   if (initializationStatus === ContractInitializationStatus.INITIALIZED) {
-    console.error("FPC admin account already initialised on-chain, skipping bridge + deploy.");
+    console.error("FPC admin account already initialised on-chain, skipping deploy.");
+  } else if (network === "local") {
+    // SponsoredFPC pays — no bridge needed.
+    console.error("Deploying FPC admin account via SponsoredFPC...");
+    const deployMethod = await accountManager.getDeployMethod();
+    await deployMethod.send({
+      from: NO_FROM,
+      fee: { paymentMethod: sponsoredPaymentMethod },
+      skipClassPublication: true,
+      skipInstancePublication: true,
+      wait: { timeout: 120 },
+    });
+    console.error("FPC admin account deployed.");
   } else {
+    // Testnet: SponsoredFPC doesn't exist — bridge FJ and use it to fund the deploy.
     console.error(`Bridging FJ to ${adminAddress.toString()}...`);
     const { claim, l1Address, minted } = await bridge({
       node,

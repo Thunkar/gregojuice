@@ -17,7 +17,7 @@ import { prepareFPC, deployFPC } from "../services/fpcService";
 import { BridgeFunding } from "./BridgeFunding";
 import { BackupRestore } from "./BackupRestore";
 
-const STEPS = ["Initialize", "Fund Admin & FPC", "Deploy FPC"];
+const STEPS = ["Initialize", "Deploy Admin & FPC", "Deploy FPC"];
 
 interface SetupWizardProps {
   onComplete: (fpcAddress: string) => void;
@@ -119,7 +119,7 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
           </StepContent>
         </Step>
 
-        {/* Step 1: Fund admin + FPC together */}
+        {/* Step 1: Deploy admin + FPC together */}
         <Step data-testid="setup-step-fund">
           <StepLabel>{STEPS[1]}</StepLabel>
           <StepContent>

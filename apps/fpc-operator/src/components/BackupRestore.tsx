@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import { shortAddress } from "@gregojuice/common";
+import { shortAddress } from "@gregojuice/common/ui";
 import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
 import {

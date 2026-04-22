@@ -135,16 +135,3 @@ runs:
         key: turbo-${{ runner.os }}-${{ github.sha }}
         restore-keys: |
           turbo-${{ runner.os }}-
-
-    # Cache Playwright's browser download. ~200 MB. The e2e job installs
-    # chromium + dependencies via `playwright install --with-deps chromium`;
-    # the browser binary lives in ~/.cache/ms-playwright, system deps are
-    # apt-installed. Only the browser binary is cacheable cross-run.
-    - name: Cache Playwright browsers
-      id: playwright-cache
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
-        restore-keys: |
-          playwright-${{ runner.os }}-
