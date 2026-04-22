@@ -1,137 +1,41 @@
-# GregoSwap
+# @gregojuice/swap
 
-A decentralized token swap application built on the Aztec blockchain featuring private token swaps and a proof-of-password token faucet.
+Private token AMM on Aztec. Users swap GregoCoin (GRG) ↔ GregoCoinPremium (GRGP) privately; a proof-of-password contract gates a faucet that mints GRG in exchange for the right password. A SubscriptionFPC sponsors every user-facing call, so end users never pay gas themselves.
 
-## Features
-
-- **Private Token Swaps**: Swap between GregoCoin (GRG) and GregoCoinPremium (GRGP) using an Automated Market Maker (AMM)
-- **Token Faucet**: Claim free GregoCoin tokens using a proof-of-password mechanism
-- **Wallet Integration**: Connect with Aztec wallet extensions or use an embedded wallet
-- **Multi-Flow Onboarding**: Seamless onboarding experience that adapts based on user's token balance
-
-## Prerequisites
-
-Before you begin, ensure you have the following installed:
-
-- **Node.js**: Version 22 or higher
-- **Yarn**: Version 4.5.2 (via Corepack)
-- **Aztec CLI**: Required for compiling contracts and running local sandbox
-
-## Installation
-
-### 1. Install Dependencies
+## Dev
 
 ```bash
-yarn install
+yarn workspace @gregojuice/swap dev     # http://localhost:5175
 ```
 
-### 2. Install Aztec CLI
+Requires:
 
-```bash
-VERSION=4.0.0-nightly.20260205 bash -i <(curl -sL https://install.aztec.network/4.0.0-nightly.20260205/)
-```
+- Aztec node reachable at the URL in `src/config/networks/local.json` (default: `http://localhost:8080`). Run `aztec start --local-network` in a separate terminal.
+- Contracts deployed + FPC registered. From repo root: `yarn setup:local`.
 
-### 3. Set Aztec Version
+## Scripts
 
-The project uses Aztec version `v4.0.0-devnet.2-patch.3`. Set it using:
+All run with `yarn workspace @gregojuice/swap <name>` (or `cd apps/swap && yarn <name>`). Each accepts `--network local|testnet`.
 
-```bash
-aztec-up install 4.0.0-nightly.20260205
-```
+| Script                           | Purpose                                                                                                                |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `deploy-admin:<network>`         | Deploy the swap-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx.        |
+| `deploy:<network>`               | Deploy GregoCoin, GregoCoinPremium, LiquidityToken, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`. |
+| `mint:<network>`                 | Mint GRG/GRGP to `--to <addr>` (repeatable) or `MINT_TO=<addr,addr>` env.                                              |
+| `register-fpc-signups:<network>` | Signs up the swap app's sponsored functions on the FPC. On testnet, calibrates `maxFee` from the clustec P75.          |
 
-## Updating to Latest Nightly
+`yarn setup:local` / `yarn setup:testnet` at the repo root runs this full chain + the fpc-operator side in order.
 
-The update script lives at the repo root and bumps every workspace package + every Nargo.toml in one pass:
+## Env vars
 
-```bash
-node scripts/update.js                                   # auto-detect latest
-node scripts/update.js --version 4.3.0-nightly.20260420  # specific version
-node scripts/update.js --skip-aztec-up                   # skip Aztec CLI install
-node scripts/update.js --skip-compile                    # skip contract recompile
-```
+| Var                                             | Used by                          | Meaning                                                                          |
+| ----------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| `SWAP_ADMIN_SECRET`                             | all scripts                      | Deterministic admin key. Generated + printed as an `export` line if unset.       |
+| `SALT`                                          | all scripts                      | Contract address salt. Default `Fr(0)`. Change to deploy to a different address. |
+| `PASSWORD`                                      | `deploy`, `register-fpc-signups` | Seeds the ProofOfPassword contract. Default `"potato"`.                          |
+| `MINT_TO`                                       | `deploy`, `mint`                 | Comma-separated addresses to mint initial balances to.                           |
+| `FPC_ADDRESS`, `FPC_ADMIN_SECRET`, `FPC_SECRET` | `register-fpc-signups`           | FPC identity; set by `fpc-operator`'s `deploy-admin` + `deploy-fpc`.             |
 
-## Development Setup
+## Config
 
-### Running Locally with Aztec Sandbox
-
-#### 1. Start the Aztec Sandbox
-
-In a separate terminal, start the local Aztec sandbox:
-
-```bash
-aztec start --local-network
-```
-
-This will start a local Aztec node on `http://localhost:8080`.
-
-**Note**: Keep this terminal running while developing. The local node must be running for contract deployment and local testing.
-
-#### 2. Compile Contracts
-
-In your main terminal, compile the smart contracts:
-
-```bash
-yarn compile:contracts
-```
-
-This will:
-
-- Compile the Noir contracts in the `contracts/` directory
-- Generate TypeScript bindings for contract interaction
-- Output compiled artifacts to `contracts/target/`
-
-#### 3. Deploy Contracts Locally
-
-Set a password for the proof-of-password contract and deploy:
-
-```bash
-PASSWORD=your-secret-password PROVER_ENABLED=false yarn deploy:local
-```
-
-**Important**: Remember this password! You'll need it to claim tokens through the faucet.
-
-This will:
-
-- Deploy GregoCoin and GregoCoinPremium token contracts
-- Deploy the AMM (Automated Market Maker) contract
-- Deploy the ProofOfPassword contract
-- Generate a `deployed-addresses.json` file with contract addresses
-
-#### 4. Deploy the Subscription FPC
-
-GregoSwap uses a [SubscriptionFPC](https://github.com/Thunkar/gregojuice) (Fee Payment
-Contract) to sponsor user transactions: the drip, the swap, and the offchain send all
-run for free from the user's perspective, with the FPC paying gas in Fee Juice.
-
-If you are testing on a local network, you will need to bootstrap FPC infrastructure.
-
-After the base contracts are in place, you can deploy and configure the FPC with:
-
-```bash
-yarn deploy:fpc:local
-```
-
-This single command does everything needed to bring the FPC online against the local
-sandbox:
-
-- Deploys a fresh `SubscriptionFPC` with generated keys
-- Bridges fee juice from L1 (Anvil) to the FPC's L2 address so it can actually pay gas
-- Calls `sign_up` on the FPC for each sponsored function declared in
-  `scripts/deploy-subscription-fpc.ts` (currently: `PoP.check_password_and_mint`,
-  `AMM.swap_tokens_for_exact_tokens_from`, and
-  `Token.transfer_in_private_deliver_offchain` on both token contracts)
-- Claims the L1→L2 message on behalf of the FPC so its balance is usable
-- Writes the FPC address, secret key, and function-selector map into
-  `src/config/networks/local.json` under `subscriptionFPC`
-
-The script is idempotent over the underlying config: re-running it deploys a new FPC
-and overwrites the `subscriptionFPC` block. You can use a different config file via
-`NETWORK_CONFIG_PATH`.
-
-Note this is not needed to test on Testnet's or Mainnet's, since there the SubscriptionFPC infrastructure is already set up.
-
-#### 5. Start the Development Server
-
-```bash
-yarn dev
-```
+`src/config/networks/<network>.json` is regenerated by `deploy:<network>` and amended by `register-fpc-signups:<network>`. Committing the local.json is fine — it's a development artifact.

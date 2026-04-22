@@ -1,6 +1,6 @@
 import { Box, Select, MenuItem, Typography } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material";
-import type { NetworkContextValue, NetworkLike } from "./context";
+import type { NetworkContextValue, NetworkLike } from "./createNetworkContext.tsx";
 
 /**
  * Shared network switcher UI. Apps provide their `useNetwork` hook and can

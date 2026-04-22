@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { shortAddress } from "@gregojuice/common";
+import { shortAddress } from "@gregojuice/common/ui";
 import { theme } from "./theme";
 import { useWallet } from "./contexts/WalletContext";
 import { getStoredFPC, loadExistingFPC } from "./services/fpcService";

@@ -15,7 +15,7 @@ import { pumpL2Blocks } from "../fixtures/pump-l2-blocks.ts";
  * Spec 01 — fpc-dashboard setup.
  *
  * Drives the real fpc-dashboard UI through its SetupWizard:
- *   1. wait for step 1 "Fund Admin & FPC" to activate
+ *   1. wait for step 1 "Deploy Admin & FPC" to activate
  *   2. bridge iframe mints+bridges via faucet, advances L1→L2, claims
  *   3. click "Deploy FPC"
  *   4. land on the Dashboard, click Settings tab, verify Export Backup button

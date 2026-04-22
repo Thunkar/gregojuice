@@ -1,29 +1,44 @@
-# E2E Tests
+# @gregojuice/e2e
 
-Scaffolding for end-to-end tests across all apps (`swap`, `bridge`, `fpc-operator`).
+Playwright suite driving all three apps through a realistic user flow against a real local Aztec network.
 
-## Status
+## Pipeline
 
-- Network lifecycle (`fixtures/local-network.ts`): scaffolded — spawns `aztec start --local-network`, waits for Anvil (L1) + Aztec node (L2) to be ready, tears down at end of run.
-- Deploy lifecycle (`fixtures/deploy.ts`): stub — not implemented. Will run each app's deploy script against the network and write addresses into `apps/<app>/.e2e/local.json`.
-- Test flows: only smoke tests (`<app>.smoke.spec.ts`) that assert the app boots. Real onboarding + per-app flows come next.
+```
+fpc-setup → bridge-fund → swap-deploy → fpc-signup → swap-flow
+```
 
-## Running locally
+Each project depends on the previous via Playwright's `dependencies` mechanism. State is checkpointed to `.state/<name>.json` so re-running one spec picks up where the last left off.
 
-```sh
+| Spec                        | App          | What it does                                                                                                                 |
+| --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `01-fpc-setup`              | fpc-operator | Drives the SetupWizard — bridges FJ (via embedded bridge iframe), deploys the FPC.                                           |
+| `02-bridge-fund-swap-admin` | bridge       | Drives the bridge UI end-to-end to fund swap-admin with real bridged FJ. Verifies the bridge path works.                     |
+| `03-swap-deploy`            | node script  | Runs `apps/swap/scripts/deploy.ts --payment feejuice` — deploys swap contracts, paying from swap-admin's freshly-bridged FJ. |
+| `04-fpc-signup`             | fpc-operator | Mints swap tokens to FPC admin, calibrates + signs up sponsored functions.                                                   |
+| `05-swap-flow`              | swap         | Full user onboarding + swap + drip + send via the swap UI.                                                                   |
+
+## Running
+
+```bash
 # From repo root
-yarn build             # build workspace packages (aztec, ethereum, ...)
-yarn workspace @gregojuice/e2e test
+yarn build                                # packages must be built for artifact imports
+yarn workspace @gregojuice/e2e test       # full suite — spins up local-network in globalSetup
 ```
 
-The config starts a dev server per app (swap:5175, bridge:5173, fpc-operator:5174) and runs matching specs against each. Local-network lifecycle is owned by Playwright's `globalSetup`/`globalTeardown`.
+Environment toggles:
 
-Skip the network startup during local iteration (e.g. when you already have `aztec start --local-network` running in another terminal):
+| Env                  | Effect                                                                      |
+| -------------------- | --------------------------------------------------------------------------- |
+| `E2E_HEADED=1`       | Run headed browsers.                                                        |
+| `E2E_SLOW_MO=500`    | Slow each action by N ms (implies headed).                                  |
+| `E2E_SKIP_NETWORK=1` | Don't spawn `aztec start --local-network` — assumes one is already running. |
+| `E2E_RESET=1`        | Wipe `.state/` before the run; equivalent to `yarn e2e:reset`.              |
 
-```sh
-E2E_SKIP_NETWORK=1 yarn workspace @gregojuice/e2e test
-```
+## Global setup/teardown
+
+`fixtures/global-setup.ts` spawns `aztec start --local-network`, deploys the L1 bridge contract (CREATE2, idempotent), derives the swap-admin identity, and writes `.state/global.json`. `global-teardown.ts` kills the local-network process.
 
 ## CI
 
-Wired into `.github/workflows/e2e.yml`. Same job installs the pinned Aztec CLI used by `deploy.yml`, then runs the full build + e2e matrix. Playwright HTML report is uploaded on failure.
+`.github/workflows/ci.yml`'s `e2e` job runs inside Playwright's official container image (`mcr.microsoft.com/playwright:v1.59.1-noble`) which ships chromium + all apt system deps preinstalled. On failure, the Playwright HTML report uploads as an artifact.

@@ -4,6 +4,16 @@ description: >
   missing, compile contract artifacts, and extend PATH with the aztec CLI.
   Every job that needs a ready-to-use monorepo starts with this action.
 
+inputs:
+  cache-suffix:
+    description: >
+      Optional suffix appended to toolchain-sensitive cache keys (yarn +
+      turbo). Set this when the job runs in a container with a different
+      libc/toolchain than the default host runner — otherwise native addons
+      in cached node_modules can cross-contaminate between jobs.
+    required: false
+    default: ""
+
 outputs:
   aztec-version:
     description: Aztec version string extracted from apps/bridge/package.json.
@@ -21,15 +31,9 @@ runs:
       shell: bash
       run: corepack enable
 
-    # Cache everything yarn touches: the download store, the install state,
-    # and — crucially — every `node_modules` tree across the workspace. The
-    # previous setup only cached `.yarn/cache` (tarballs), which meant
-    # `yarn install` still re-extracted node_modules and ran `node-gyp`
-    # against every native addon (bcrypto, lmdb, esbuild, @swc/core, ...).
-    # That's ~80 seconds per job. Caching node_modules itself drops install
-    # to well under 10s on a hit.
-    #
-    # Key on yarn.lock so any dependency bump busts the cache automatically.
+    # Cache the yarn download store, install state, and every `node_modules`
+    # tree across the workspace. Keyed on yarn.lock so any dependency bump
+    # busts the cache automatically.
     - name: Restore yarn + node_modules cache
       uses: actions/cache@v4
       with:
@@ -41,13 +45,9 @@ runs:
           packages/*/node_modules
           packages/contracts/*/node_modules
           e2e/node_modules
-        # Bump the `v2` suffix to force-bust the cache whenever this
-        # action's paths change — otherwise actions/cache reuses whatever's
-        # under the matching key even if it was saved under a narrower path
-        # set, leaving native addons to rebuild every time.
-        key: yarn-v2-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+        key: yarn-v2-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-${{ hashFiles('yarn.lock') }}
         restore-keys: |
-          yarn-v2-${{ runner.os }}-
+          yarn-v2-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-
 
     - name: Install dependencies
       shell: bash
@@ -109,15 +109,10 @@ runs:
       shell: bash
       run: yarn workspace @gregojuice/aztec build
 
-    # Turbo's local cache. When hit, `yarn build` / `yarn typecheck` / `yarn
-    # lint` replay cached outputs instead of re-running. Keyed on source
-    # files the tasks read — turbo itself then hashes them internally, so
-    # this cache key is just "commit-shaped" to pick up any incremental
-    # work the last run on this branch did.
-    #
-    # `restore-keys` fallback lets a first CI run on a new branch restore
-    # the most recent main-branch turbo cache and do only an incremental
-    # rebuild on top.
+    # Turbo's local cache + build outputs. Not suffixed with `cache-suffix`:
+    # emitted artifacts are platform-independent, so any job can read what
+    # another wrote under the same SHA. `restore-keys` fallback lets a first
+    # run on a new branch pick up the most recent main-branch cache.
     - name: Cache turbo outputs
       uses: actions/cache@v4
       with:
@@ -135,16 +130,3 @@ runs:
         key: turbo-${{ runner.os }}-${{ github.sha }}
         restore-keys: |
           turbo-${{ runner.os }}-
-
-    # Cache Playwright's browser download. ~200 MB. The e2e job installs
-    # chromium + dependencies via `playwright install --with-deps chromium`;
-    # the browser binary lives in ~/.cache/ms-playwright, system deps are
-    # apt-installed. Only the browser binary is cacheable cross-run.
-    - name: Cache Playwright browsers
-      id: playwright-cache
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
-        restore-keys: |
-          playwright-${{ runner.os }}-

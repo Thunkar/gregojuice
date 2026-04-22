@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useReducer, useRef } from "react";
 import { formatUnits } from "viem";
-import { shortAddress } from "@gregojuice/common";
+import { shortAddress } from "@gregojuice/common/ui";
 import { useWallet } from "../../contexts/WalletContext";
 import { useNetwork } from "../../contexts/NetworkContext";
 import { useAztecWallet } from "../../contexts/AztecWalletContext";

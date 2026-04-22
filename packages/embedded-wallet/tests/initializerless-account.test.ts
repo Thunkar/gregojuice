@@ -8,11 +8,11 @@
  * - Different keys/salts produce different addresses
  */
 
-import { describe, it, expect, beforeAll } from "vitest";
-import { createAztecNodeClient, waitForNode } from "@aztec/aztec.js/node";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import { getInitialTestAccountsData } from "@aztec/accounts/testing";
+import { deployFundedSchnorrAccounts } from "@aztec/wallets/testing";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { Fr } from "@aztec/aztec.js/fields";
 
@@ -20,6 +20,7 @@ import {
   SchnorrInitializerlessAccountContract,
   SchnorrInitializerlessAccountContractArtifact,
 } from "@gregojuice/aztec/artifacts/SchnorrInitializerlessAccount";
+import { setupLocalNetwork, type LocalNetwork } from "@gregojuice/common/testing";
 import {
   computeContractSalt,
   createSchnorrInitializerlessAccount,
@@ -30,8 +31,6 @@ import {
   computeImmutablesAddress,
   createImmutablesInstance,
 } from "../src/index.js";
-
-const NODE_URL = process.env.AZTEC_NODE_URL ?? "http://localhost:8080";
 
 const SIGNING_KEY_1: SigningPublicKey = {
   x: new Fr(111n),
@@ -45,23 +44,29 @@ const ACTUAL_SALT_1 = new Fr(12345n);
 const ACTUAL_SALT_2 = new Fr(54321n);
 
 describe("SchnorrInitializerlessAccount", () => {
+  let network: LocalNetwork;
   let node: AztecNode;
   let wallet: EmbeddedWallet;
   let alice: AztecAddress;
 
   beforeAll(async () => {
-    node = createAztecNodeClient(NODE_URL);
-    await waitForNode(node);
+    // Derive alice's address up-front so we can pre-fund it at genesis —
+    // saves the bridge+claim round-trip before her deploy tx can pay gas.
+    const testAccounts = await getInitialTestAccountsData();
+    const [aliceAccount] = testAccounts;
+    alice = aliceAccount.address;
+
+    network = await setupLocalNetwork({ fundedAddresses: [alice] });
+    node = network.node;
 
     wallet = await EmbeddedWallet.create(node, { ephemeral: true });
+    // Deploy alice's schnorr account — the pre-funded genesis entry pays
+    // for the class+instance publication.
+    await deployFundedSchnorrAccounts(wallet, [aliceAccount]);
+  }, 120_000);
 
-    const testAccounts = await getInitialTestAccountsData();
-    [alice] = await Promise.all(
-      testAccounts.slice(0, 1).map(async (account) => {
-        return (await wallet.createSchnorrAccount(account.secret, account.salt, account.signingKey))
-          .address;
-      }),
-    );
+  afterAll(async () => {
+    await network?.stop();
   });
 
   // -- Pure computation tests (no deployment) --

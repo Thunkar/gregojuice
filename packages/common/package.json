@@ -2,12 +2,10 @@
   "name": "@gregojuice/common",
   "version": "0.0.1",
   "type": "module",
-  "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./ui": "./src/ui.ts",
+    "./ui": "./src/ui/index.ts",
     "./bridging": "./src/bridging/index.ts",
-    "./fee-stats": "./src/fee-stats.ts",
+    "./fees": "./src/fees/index.ts",
     "./testing": "./src/testing/index.ts"
   },
   "scripts": {
@@ -31,14 +29,19 @@
   "dependencies": {
     "@aztec/accounts": "v4.3.0-nightly.20260420",
     "@aztec/aztec": "v4.3.0-nightly.20260420",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
     "@aztec/aztec.js": "v4.3.0-nightly.20260420",
     "@aztec/constants": "v4.3.0-nightly.20260420",
     "@aztec/ethereum": "v4.3.0-nightly.20260420",
     "@aztec/foundation": "v4.3.0-nightly.20260420",
     "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/noir-protocol-circuits-types": "v4.3.0-nightly.20260420",
+    "@aztec/protocol-contracts": "v4.3.0-nightly.20260420",
     "@aztec/pxe": "v4.3.0-nightly.20260420",
     "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/telemetry-client": "v4.3.0-nightly.20260420",
     "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "@aztec/world-state": "v4.3.0-nightly.20260420",
     "viem": "^2.21.0"
   },
   "devDependencies": {

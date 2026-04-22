@@ -22,7 +22,7 @@ import {
   NETWORK_URLS,
   setupWallet,
   loadOrCreateSecret,
-  getOrCreateAdmin,
+  getAdmin,
   getSalt,
   type NetworkName,
   type PaymentMode,
@@ -169,7 +169,9 @@ async function deployContracts(
     popExists ? null : popDeploy.send({ ...baseOpts, wait: NO_WAIT }),
   ].filter((p): p is Exclude<typeof p, null> => p !== null);
   const sent = await Promise.all(pending);
-  await Promise.all(sent.map((r) => waitForTx(node, r.txHash)));
+  await Promise.all(
+    sent.map((r) => waitForTx(node, r.txHash, { waitForStatus: TxStatus.PROPOSED, timeout: 120 })),
+  );
 
   const gregoCoin = TokenContract.at(gregoCoinInstance.address, wallet);
   const gregoCoinPremium = TokenContract.at(gregoCoinPremiumInstance.address, wallet);
@@ -326,7 +328,11 @@ export async function runSwapDeploy(opts: SwapDeployOptions): Promise<SwapDeploy
   const { secretKey } = opts.deployerSecret
     ? { secretKey: Fr.fromString(opts.deployerSecret) }
     : loadOrCreateSecret("SWAP_ADMIN_SECRET");
-  const deployer = await getOrCreateAdmin(wallet, secretKey, paymentMethod);
+  const deployer = await getAdmin(
+    wallet,
+    secretKey,
+    `Run \`yarn swap deploy-admin:${opts.network}\` first.`,
+  );
 
   const contractDeploymentInfo = await deployContracts(
     wallet,

@@ -143,10 +143,6 @@ export class FeePricingService {
   }
 }
 
-// Re-exported from @gregojuice/common/fee-stats so callers that already
-// import from this module don't need to change their imports.
-export { fetchFeeStats, type FeeStats } from "@gregojuice/common/fee-stats";
-
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Convert human-readable FJ (e.g. "1.7") to raw bigint */
