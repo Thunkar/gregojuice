@@ -52,7 +52,10 @@ export interface FpcAdminBackup {
  * walking up from `cwd` until a `package.json` with a workspaces field is
  * found) as the anchor.
  */
-export function resolveFpcAdminBackupPath(network: string, startDir: string = process.cwd()): string {
+export function resolveFpcAdminBackupPath(
+  network: string,
+  startDir: string = process.cwd(),
+): string {
   let dir = path.resolve(startDir);
   while (dir !== path.dirname(dir)) {
     const pkg = path.join(dir, "package.json");
