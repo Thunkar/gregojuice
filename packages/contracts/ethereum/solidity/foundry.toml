@@ -3,13 +3,21 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
-# Pin the toolchain so `forge build` produces identical bytecode across every
-# environment (local dev, CI, Vercel). Bytecode drift breaks the deterministic
-# CREATE2 address — every consumer that hardcodes `getBridgeAddress()` would
-# point at a different on-chain contract. `optimizer=false` matches what's
-# already deployed at 0xC317FB32D65f7C19F77818eE2d6CE8bfa3030bA4; changing it
-# would break that address.
+# Fully-deterministic bytecode across every environment (local dev, CI,
+# Vercel). The runtime code is already deterministic for a pinned solc +
+# optimizer, but Solidity by default appends a CBOR metadata block that
+# includes an IPFS hash of the source file. That hash is sensitive to path
+# encoding / line endings / absolute-vs-relative source identifiers, which
+# drift between environments — same contract, same solc, different CREATE2
+# address.
+#
+# `bytecode_hash = "none"` strips the metadata hash from the emitted CBOR,
+# leaving only the solc version. Result: identical bytecode everywhere →
+# identical CREATE2 address. Nothing we do depends on the embedded
+# metadata (we don't publish sources via IPFS), so this is pure win.
 solc = "0.8.30"
 optimizer = false
+bytecode_hash = "none"
+cbor_metadata = false
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
