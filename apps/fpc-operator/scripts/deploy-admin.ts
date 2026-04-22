@@ -29,7 +29,11 @@ async function main() {
   const adminAddress = await deriveSchnorrAdminAddress(secretKey);
   console.error(`FPC admin address: ${adminAddress.toString()}`);
 
-  const { node, wallet, paymentMethod: sponsoredPaymentMethod } = await setupWallet(
+  const {
+    node,
+    wallet,
+    paymentMethod: sponsoredPaymentMethod,
+  } = await setupWallet(
     NETWORK_URLS[network],
     network,
     network === "local" ? "sponsoredfpc" : "feejuice",
