@@ -31,15 +31,9 @@ runs:
       shell: bash
       run: corepack enable
 
-    # Cache everything yarn touches: the download store, the install state,
-    # and — crucially — every `node_modules` tree across the workspace. The
-    # previous setup only cached `.yarn/cache` (tarballs), which meant
-    # `yarn install` still re-extracted node_modules and ran `node-gyp`
-    # against every native addon (bcrypto, lmdb, esbuild, @swc/core, ...).
-    # That's ~80 seconds per job. Caching node_modules itself drops install
-    # to well under 10s on a hit.
-    #
-    # Key on yarn.lock so any dependency bump busts the cache automatically.
+    # Cache the yarn download store, install state, and every `node_modules`
+    # tree across the workspace. Keyed on yarn.lock so any dependency bump
+    # busts the cache automatically.
     - name: Restore yarn + node_modules cache
       uses: actions/cache@v4
       with:
@@ -51,10 +45,6 @@ runs:
           packages/*/node_modules
           packages/contracts/*/node_modules
           e2e/node_modules
-        # Bump the `v2` suffix to force-bust the cache whenever this
-        # action's paths change — otherwise actions/cache reuses whatever's
-        # under the matching key even if it was saved under a narrower path
-        # set, leaving native addons to rebuild every time.
         key: yarn-v2-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-${{ hashFiles('yarn.lock') }}
         restore-keys: |
           yarn-v2-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-
@@ -119,17 +109,10 @@ runs:
       shell: bash
       run: yarn workspace @gregojuice/aztec build
 
-    # Turbo's local cache + build outputs.
-    #
-    # *Not* suffixed with `cache-suffix`: turbo hashes + emitted artifacts
-    # (dist/**, noir/artifacts/**, generated/**) are platform-independent,
-    # so the Playwright container can read what the host-runner `build` job
-    # wrote under the same SHA. The toolchain-sensitive bits (native addons
-    # in node_modules) live in the yarn cache above, which *is* suffixed.
-    #
-    # `restore-keys` fallback lets a first CI run on a new branch restore
-    # the most recent main-branch turbo cache and do only an incremental
-    # rebuild on top.
+    # Turbo's local cache + build outputs. Not suffixed with `cache-suffix`:
+    # emitted artifacts are platform-independent, so any job can read what
+    # another wrote under the same SHA. `restore-keys` fallback lets a first
+    # run on a new branch pick up the most recent main-branch cache.
     - name: Cache turbo outputs
       uses: actions/cache@v4
       with:

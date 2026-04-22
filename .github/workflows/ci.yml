@@ -10,24 +10,21 @@ on:
 permissions:
   contents: read
 
+env:
+  # Silence cache-hit replays from turbo — only print output for fresh work
+  # or failures. Keeps the CI log readable when half the tasks are cached.
+  TURBO_LOG_ORDER: stream
+  TURBO_OUTPUT_LOGS: new-only
+
 # Skip stale runs when a PR gets pushed rapidly.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Fast gate: format + build + lint + typecheck.
-  #
-  # `yarn build` runs first because every downstream task (lint, typecheck,
-  # the integration + e2e jobs) depends on the generated noir artifacts +
-  # TS dist outputs. Running `yarn lint` before `yarn build` would trigger
-  # turbo's `^build` dependency inside the lint task, compiling contracts
-  # just to lint them, and then `yarn build` would redo the leaf builds.
-  #
-  # After `yarn build` finishes, lint + typecheck replay from the turbo
-  # cache instantly. Building with `tsc -b` also gives us typechecking for
-  # free, so `yarn typecheck` is a no-op on a warm cache — cheap to keep
-  # as an explicit guard.
+  # Fast gate: format + build + typecheck + lint. `yarn build` runs first so
+  # lint/typecheck replay from the turbo cache instead of triggering their
+  # own `^build` dependency.
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -94,12 +91,6 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-suffix: playwright-container
-
-      # No explicit `yarn build` here: the turbo cache saved by the `build`
-      # job (shared across libc — see setup action) already contains every
-      # `dist/` + `noir/artifacts/` tree that the e2e specs import from.
-      # The spec files + fixtures are .ts and are executed directly via the
-      # Playwright test runner's native TS support.
 
       - name: Run e2e tests
         run: yarn workspace @gregojuice/e2e test
