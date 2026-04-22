@@ -15,12 +15,7 @@ import { NO_FROM } from "@aztec/aztec.js/account";
 import { getSchnorrAccountContractAddress } from "@aztec/accounts/schnorr";
 
 import { bridge } from "../bridging/index.ts";
-import {
-  L1_DEFAULTS,
-  bridgeMode,
-  resolveL1Funder,
-  type NetworkName,
-} from "./network-config.ts";
+import { L1_DEFAULTS, bridgeMode, resolveL1Funder, type NetworkName } from "./network-config.ts";
 import type { PaymentMethod } from "./wallet-setup.ts";
 
 /**
