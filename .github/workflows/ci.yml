@@ -95,8 +95,11 @@ jobs:
         with:
           cache-suffix: playwright-container
 
-      - name: Build workspace
-        run: yarn build
+      # No explicit `yarn build` here: the turbo cache saved by the `build`
+      # job (shared across libc — see setup action) already contains every
+      # `dist/` + `noir/artifacts/` tree that the e2e specs import from.
+      # The spec files + fixtures are .ts and are executed directly via the
+      # Playwright test runner's native TS support.
 
       - name: Run e2e tests
         run: yarn workspace @gregojuice/e2e test

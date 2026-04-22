@@ -119,11 +119,13 @@ runs:
       shell: bash
       run: yarn workspace @gregojuice/aztec build
 
-    # Turbo's local cache. When hit, `yarn build` / `yarn typecheck` / `yarn
-    # lint` replay cached outputs instead of re-running. Keyed on source
-    # files the tasks read — turbo itself then hashes them internally, so
-    # this cache key is just "commit-shaped" to pick up any incremental
-    # work the last run on this branch did.
+    # Turbo's local cache + build outputs.
+    #
+    # *Not* suffixed with `cache-suffix`: turbo hashes + emitted artifacts
+    # (dist/**, noir/artifacts/**, generated/**) are platform-independent,
+    # so the Playwright container can read what the host-runner `build` job
+    # wrote under the same SHA. The toolchain-sensitive bits (native addons
+    # in node_modules) live in the yarn cache above, which *is* suffixed.
     #
     # `restore-keys` fallback lets a first CI run on a new branch restore
     # the most recent main-branch turbo cache and do only an incremental
@@ -142,6 +144,6 @@ runs:
           packages/contracts/*/dist
           packages/contracts/ethereum/generated
           packages/contracts/ethereum/solidity/out
-        key: turbo-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-${{ github.sha }}
+        key: turbo-${{ runner.os }}-${{ github.sha }}
         restore-keys: |
-          turbo-${{ runner.os }}${{ inputs.cache-suffix && format('-{0}', inputs.cache-suffix) }}-
+          turbo-${{ runner.os }}-
