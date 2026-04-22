@@ -29,14 +29,19 @@
   "dependencies": {
     "@aztec/accounts": "v4.3.0-nightly.20260420",
     "@aztec/aztec": "v4.3.0-nightly.20260420",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
     "@aztec/aztec.js": "v4.3.0-nightly.20260420",
     "@aztec/constants": "v4.3.0-nightly.20260420",
     "@aztec/ethereum": "v4.3.0-nightly.20260420",
     "@aztec/foundation": "v4.3.0-nightly.20260420",
     "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/noir-protocol-circuits-types": "v4.3.0-nightly.20260420",
+    "@aztec/protocol-contracts": "v4.3.0-nightly.20260420",
     "@aztec/pxe": "v4.3.0-nightly.20260420",
     "@aztec/stdlib": "v4.3.0-nightly.20260420",
+    "@aztec/telemetry-client": "v4.3.0-nightly.20260420",
     "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "@aztec/world-state": "v4.3.0-nightly.20260420",
     "viem": "^2.21.0"
   },
   "devDependencies": {

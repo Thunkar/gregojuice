@@ -1400,7 +1400,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@aztec/sequencer-client@npm:4.3.0-nightly.20260420, @aztec/sequencer-client@npm:v4.3.0-nightly.20260420":
+"@aztec/sequencer-client@npm:4.3.0-nightly.20260420":
   version: 4.3.0-nightly.20260420
   resolution: "@aztec/sequencer-client@npm:4.3.0-nightly.20260420"
   dependencies:
@@ -2728,21 +2728,13 @@ __metadata:
   resolution: "@gregojuice/aztec@workspace:packages/contracts/aztec"
   dependencies:
     "@aztec/accounts": "npm:v4.3.0-nightly.20260420"
-    "@aztec/aztec": "npm:v4.3.0-nightly.20260420"
-    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260420"
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260420"
     "@aztec/constants": "npm:v4.3.0-nightly.20260420"
-    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260420"
-    "@aztec/ethereum": "npm:v4.3.0-nightly.20260420"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260420"
     "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260420"
-    "@aztec/noir-protocol-circuits-types": "npm:v4.3.0-nightly.20260420"
-    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260420"
-    "@aztec/sequencer-client": "npm:v4.3.0-nightly.20260420"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260420"
-    "@aztec/telemetry-client": "npm:v4.3.0-nightly.20260420"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260420"
-    "@aztec/world-state": "npm:v4.3.0-nightly.20260420"
+    "@gregojuice/common": "workspace:*"
     typescript: "npm:~5.7.3"
     vitest: "npm:^3"
   languageName: unknown
@@ -2783,14 +2775,19 @@ __metadata:
   dependencies:
     "@aztec/accounts": "npm:v4.3.0-nightly.20260420"
     "@aztec/aztec": "npm:v4.3.0-nightly.20260420"
+    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260420"
     "@aztec/aztec.js": "npm:v4.3.0-nightly.20260420"
     "@aztec/constants": "npm:v4.3.0-nightly.20260420"
     "@aztec/ethereum": "npm:v4.3.0-nightly.20260420"
     "@aztec/foundation": "npm:v4.3.0-nightly.20260420"
     "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260420"
+    "@aztec/noir-protocol-circuits-types": "npm:v4.3.0-nightly.20260420"
+    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260420"
     "@aztec/pxe": "npm:v4.3.0-nightly.20260420"
     "@aztec/stdlib": "npm:v4.3.0-nightly.20260420"
+    "@aztec/telemetry-client": "npm:v4.3.0-nightly.20260420"
     "@aztec/wallets": "npm:v4.3.0-nightly.20260420"
+    "@aztec/world-state": "npm:v4.3.0-nightly.20260420"
     "@mui/material": "npm:^6.3.1"
     "@types/react": "npm:^19.0.6"
     react: "npm:^18.3.1"
@@ -2834,6 +2831,7 @@ __metadata:
     "@aztec/wallets": "npm:v4.3.0-nightly.20260420"
     "@emotion/react": "npm:^11.14.0"
     "@gregojuice/aztec": "workspace:*"
+    "@gregojuice/common": "workspace:*"
     "@mui/icons-material": "npm:^6.3.1"
     "@mui/material": "npm:^6.3.1"
     "@types/react": "npm:^19.0.6"

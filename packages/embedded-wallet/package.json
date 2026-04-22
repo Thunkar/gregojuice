@@ -57,6 +57,7 @@
   "devDependencies": {
     "@aztec/accounts": "v4.3.0-nightly.20260420",
     "@emotion/react": "^11.14.0",
+    "@gregojuice/common": "workspace:*",
     "@mui/icons-material": "^6.3.1",
     "@mui/material": "^6.3.1",
     "@types/react": "^19.0.6",

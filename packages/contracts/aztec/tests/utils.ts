@@ -17,7 +17,7 @@ import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contra
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
 import { SubscriptionFPC } from "../lib/subscription-fpc.js";
 import { SubscriptionFPCContractArtifact } from "../noir/artifacts/SubscriptionFPC.js";
-import { setupLocalNetwork } from "./fixtures/local-network.js";
+import { setupLocalNetwork } from "@gregojuice/common/testing";
 
 /**
  * Fixed secret used for the SubscriptionFPC across all tests. Combined with
