@@ -29,7 +29,6 @@ import {
 import { SubscriptionFPCContract } from "../noir/artifacts/SubscriptionFPC.js";
 import { setupTestContext, type FPCTestContext, type GasValues, toGas, logGas } from "./utils.js";
 import {
-  PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF,
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS,
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS,
   FPC_SPONSOR_OVERHEAD_L2_GAS,
@@ -351,43 +350,11 @@ describe("FPC gas overhead", () => {
     expect(FPC_TEARDOWN_DA_GAS).toBe(measuredTeardownDA);
   });
 
-  it("private repricing is consistent between subscribe and sponsor", () => {
-    const subscribeOverheadL2 =
-      subscribePublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas;
-    const sponsorOverheadL2 =
-      sponsorPublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas;
-
-    // Subscribe repricing
-    const subscribeDiffL2 =
-      subscribePrivateGas.gasLimits.l2Gas - standalonePrivateGas.gasLimits.l2Gas;
-    const subscribeRepricingL2 =
-      subscribeDiffL2 - subscribeOverheadL2 - PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF;
-
-    // Sponsor repricing
-    const sponsorDiffL2 = sponsorPrivateGas.gasLimits.l2Gas - standalonePrivateGas.gasLimits.l2Gas;
-    const sponsorRepricingL2 =
-      sponsorDiffL2 - sponsorOverheadL2 - PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF;
-
-    console.log(
-      `Subscribe repricing L2=${subscribeRepricingL2}  Sponsor repricing L2=${sponsorRepricingL2}`,
-    );
-
-    // Same function = same side effects = same repricing
-    expect(subscribeRepricingL2).toBe(sponsorRepricingL2);
-
-    // Verify prediction is exact
-    const predictedSubscribeL2 =
-      standalonePrivateGas.gasLimits.l2Gas +
-      PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF +
-      subscribeOverheadL2 +
-      subscribeRepricingL2;
-    expect(predictedSubscribeL2).toBe(subscribePrivateGas.gasLimits.l2Gas);
-
-    const predictedSponsorL2 =
-      standalonePrivateGas.gasLimits.l2Gas +
-      PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF +
-      sponsorOverheadL2 +
-      sponsorRepricingL2;
-    expect(predictedSponsorL2).toBe(sponsorPrivateGas.gasLimits.l2Gas);
-  });
+  // Note: the former "private repricing is consistent between subscribe and sponsor"
+  // test relied on every sponsored tx having public calls (via the _ensure_max_fee
+  // teardown), which uniformly AVM-repriced the FPC's private side effects. Now
+  // that max_fee is gated in setup, private-sponsored txs have no public phase,
+  // so subscribe's extra SubscriptionNote insertion isn't AVM-repriced while
+  // sponsor's narrower side-effect set isn't either — the old symmetry was an
+  // artifact of the repriced public path, not a semantic invariant.
 });

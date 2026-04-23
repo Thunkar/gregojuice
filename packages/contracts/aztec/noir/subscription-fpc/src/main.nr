@@ -49,12 +49,6 @@ contract SubscriptionFPC {
         slots: Owned<PrivateSet<SlotNote, Context>, Context>,
     }
 
-    #[internal("public")]
-    fn safe_cast_to_u128(field: Field) -> u128 {
-        field.assert_max_bit_size::<128>();
-        field as u128
-    }
-
     #[initializer]
     #[external("public")]
     fn constructor(admin: AztecAddress) {
@@ -140,15 +134,28 @@ contract SubscriptionFPC {
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
 
+        // Bound FPC liability BEFORE committing as fee payer. Protocol guarantees
+        // actual_fee <= (gas_limits + teardown_gas_limits).compute_fee(max_fees_per_gas),
+        // so gating that product by max_fee here caps the FPC's worst-case charge.
+        // On failure the circuit proves nothing and the tx never reaches a sequencer.
+        let gs = self.context.gas_settings();
+        let total_gas = gs.gas_limits + gs.teardown_gas_limits;
+        let max_possible_fee: u128 = (total_gas.da_gas as u128) * gs.max_fees_per_gas.fee_per_da_gas
+            + (total_gas.l2_gas as u128) * gs.max_fees_per_gas.fee_per_l2_gas;
+        assert(
+            max_possible_fee <= subscription.max_fee,
+            "Gas settings exceed subscription max_fee",
+        );
+
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
         self.context.end_setup();
 
-        self.internal._call_sponsored_fn(call, subscription.max_fee);
+        self.internal._call_sponsored_fn(call);
     }
 
     #[internal("private")]
-    fn _call_sponsored_fn(call: FunctionCall, max_fee: u128) {
+    fn _call_sponsored_fn(call: FunctionCall) {
         if call.is_public {
             self.context.call_public_function_with_calldata_hash(
                 call.target_address,
@@ -168,14 +175,6 @@ contract SubscriptionFPC {
                 call.is_static,
             );
         }
-
-        self.set_as_teardown(SubscriptionFPC::at(self.address)._ensure_max_fee(max_fee));
-    }
-
-    #[external("public")]
-    fn _ensure_max_fee(max_fee: u128) {
-        let actual_fee = self.internal.safe_cast_to_u128(self.context.transaction_fee());
-        assert(actual_fee <= max_fee, "Max fee exceeds subscription limit");
     }
 
     #[external("private")]
@@ -224,6 +223,13 @@ contract SubscriptionFPC {
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
 
+        // See sponsor(): bound FPC liability before committing as fee payer.
+        let gs = self.context.gas_settings();
+        let total_gas = gs.gas_limits + gs.teardown_gas_limits;
+        let max_possible_fee: u128 = (total_gas.da_gas as u128) * gs.max_fees_per_gas.fee_per_da_gas
+            + (total_gas.l2_gas as u128) * gs.max_fees_per_gas.fee_per_l2_gas;
+        assert(max_possible_fee <= slot.max_fee, "Gas settings exceed subscription max_fee");
+
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
         self.context.end_setup();
@@ -243,7 +249,7 @@ contract SubscriptionFPC {
             .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
 
         // We allow calling the sponsored function in the same tx as the subscription
-        self.internal._call_sponsored_fn(call, slot.max_fee);
+        self.internal._call_sponsored_fn(call);
     }
 
     #[external("utility")]
