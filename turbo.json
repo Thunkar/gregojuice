@@ -11,10 +11,6 @@
         "generated/**"
       ]
     },
-    "build:e2e": {
-      "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
-    },
     "dev": {
       "cache": false,
       "persistent": true

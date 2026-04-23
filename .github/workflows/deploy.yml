@@ -111,6 +111,13 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      # Strip `local.json` from every app's network list before anything
+      # builds. The apps pick up whatever JSONs exist under config/networks/
+      # at build time — removing local.json keeps developer-only networks
+      # out of the deployed bundle.
+      - name: Remove local network configs
+        run: rm -f apps/*/src/config/networks/local.json
+
       - name: Build packages
         run: yarn build
 

@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:e2e": "vite build --mode e2e",
     "clean": "rm -rf ./dist .tsbuildinfo",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit",

@@ -1,11 +1,11 @@
 /**
- * Network configs are per-file under this directory. A network only appears
- * in the UI if its JSON exists at build time — `import.meta.glob` + `eager`
- * means the set is fixed when the Vite bundle is produced.
+ * Network configs are per-file under this directory. A network appears in
+ * the UI if its JSON exists at build time — `import.meta.glob` + `eager`
+ * fixes the set when the bundle is produced.
  *
- * Public networks (testnet, devnet, nextnet) are checked in. `local.json` is
- * gitignored and generated per-developer via `scripts/bootstrap-networks.js`
- * or by running the e2e setup chain.
+ * Network presence is a *build concern*: production deploys delete
+ * `local.json` before building, so the bundle only carries real networks.
+ * Local dev / e2e leave `local.json` in place and it becomes the default.
  */
 
 export interface NetworkConfig {
@@ -18,15 +18,19 @@ export interface NetworkConfig {
 
 const modules = import.meta.glob<{ default: NetworkConfig }>("./*.json", { eager: true });
 
-// Normally drop `local` in production builds. The `e2e` vite mode (see CI:
-// `vite build --mode e2e`) keeps it so the preview server can still hit
-// `aztec start --local-network` over chainId 31337.
-const keepLocal = import.meta.env.DEV || import.meta.env.MODE === "e2e";
+/** Preference order; unknown ids sort alphabetically at the end. */
+const PREFERRED_ORDER = ["local", "testnet"];
 
 const NETWORKS: NetworkConfig[] = Object.values(modules)
   .map((m) => m.default)
-  .filter((n) => n && typeof n.id === "string")
-  .filter((n) => keepLocal || n.id !== "local");
+  .filter((n): n is NetworkConfig => !!n && typeof n.id === "string")
+  .sort((a, b) => {
+    const ai = PREFERRED_ORDER.indexOf(a.id);
+    const bi = PREFERRED_ORDER.indexOf(b.id);
+    const aw = ai === -1 ? PREFERRED_ORDER.length : ai;
+    const bw = bi === -1 ? PREFERRED_ORDER.length : bi;
+    return aw - bw || a.id.localeCompare(b.id);
+  });
 
 export function getNetworks(): NetworkConfig[] {
   return NETWORKS;
@@ -38,5 +42,5 @@ export function getDefaultNetwork(): NetworkConfig {
       "No network configs found under src/config/networks/. Check at least one JSON exists.",
     );
   }
-  return NETWORKS.find((n) => n.id === "testnet") ?? NETWORKS[0];
+  return NETWORKS[0];
 }

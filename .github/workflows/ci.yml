@@ -125,12 +125,6 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: yarn workspace @gregojuice/e2e exec playwright install
 
-      # `build:e2e` runs `vite build --mode e2e`, which sets
-      # `import.meta.env.MODE === "e2e"` in the bundle. The apps key off that
-      # to keep `local.json` in their network list (prod bundles strip it).
-      - name: Build workspace (e2e mode)
-        run: yarn turbo run build:e2e --output-logs=new-only
-
       - name: Run e2e tests
         # --fail-on-flaky-tests makes Playwright exit 1 when a test passes only
         # on retry. Default behaviour marks flakies as "passed" which hides
