@@ -254,7 +254,10 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
 }
 
 test.describe.serial("fpc signs up sponsored apps", () => {
-  test.slow();
+  // Two signups × (calibrate ≤ 240s + submit ≤ 300s) is already 18 min in the
+  // worst case — `test.slow()`'s ×3 (15 min) cuts it too close on CI. Bump to
+  // 25 min for headroom on slow proof generation.
+  test.setTimeout(25 * 60_000);
 
   // Mint BEFORE the browser starts. If we ran this inside the test body
   // the `page` fixture would instantiate first, popping an empty browser
