@@ -4,17 +4,21 @@
  * When operators can't run a full simulation calibration, they can compute
  * the sponsored gas limits from a standalone simulation + these constants.
  *
- * For PUBLIC sponsored functions (tx has public calls → private side effects
- * are repriced at AVM rates):
- *   gasLimits     = standalone.gasLimits
- *                 + FPC_OVERHEAD
- *                 + repricePrivateSideEffects(noteHashes, nullifiers, l2ToL1Msgs)
- *   teardownLimits = FPC_TEARDOWN (currently zero — no FPC teardown function)
+ * For PUBLIC sponsored functions (sponsored fn side effects are already at
+ * AVM rates in the standalone measurement — nothing to reprice):
+ *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
+ *   teardownLimits = FPC_TEARDOWN (zero — max_fee is gated in setup, no teardown fn)
  *
- * For PRIVATE sponsored functions (tx has no public calls — the FPC's
- * max_fee gate runs entirely in private):
+ * For PRIVATE sponsored functions, post-fix the tx has no public calls at
+ * all (no forced teardown), so the sponsored fn's side effects stay at
+ * private rates — no repricing needed:
  *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
  *   teardownLimits = FPC_TEARDOWN
+ *
+ * (Note: FPC_OVERHEAD is measured from subscribePublicGas - standalonePublicGas,
+ * so it implicitly includes AVM-rate pricing of the FPC's own note ops. In a
+ * private-sponsored tx those ops would actually be at private rates, so this
+ * slightly over-estimates — safe for max_fee calibration, just looser.)
  *
  * These constants are derived from @aztec/constants and stay in sync automatically.
  * The FPC overhead itself is measured by the fpc-overhead test.
