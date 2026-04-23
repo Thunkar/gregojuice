@@ -40,7 +40,7 @@ export function createNodeClient(nodeUrl: string): AztecNode {
 export async function createEmbeddedWallet(
   node: AztecNode,
 ): Promise<{ wallet: EmbeddedWallet; address: AztecAddress }> {
-  const wallet = await EmbeddedWallet.create(node, { pxeConfig: { proverEnabled: true } });
+  const wallet = await EmbeddedWallet.create(node, { inspect: import.meta.env.DEV });
   let accountManager = await wallet.loadStoredAccount();
   if (!accountManager) {
     accountManager = await wallet.createInitializerlessAccount();

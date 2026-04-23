@@ -34,15 +34,15 @@
     "prepublishOnly": "yarn build:ts"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
-    "@aztec/foundation": "v4.3.0-nightly.20260420",
-    "@aztec/stdlib": "v4.3.0-nightly.20260420",
-    "@aztec/wallets": "v4.3.0-nightly.20260420"
+    "@aztec/aztec.js": "v4.3.0-nightly.20260423",
+    "@aztec/foundation": "v4.3.0-nightly.20260423",
+    "@aztec/stdlib": "v4.3.0-nightly.20260423",
+    "@aztec/wallets": "v4.3.0-nightly.20260423"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.3.0-nightly.20260420",
-    "@aztec/constants": "v4.3.0-nightly.20260420",
-    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
+    "@aztec/accounts": "v4.3.0-nightly.20260423",
+    "@aztec/constants": "v4.3.0-nightly.20260423",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260423",
     "@gregojuice/common": "workspace:*",
     "typescript": "~5.7.3",
     "vitest": "^3"

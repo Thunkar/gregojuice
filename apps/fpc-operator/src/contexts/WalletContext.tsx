@@ -46,9 +46,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const nodeClient = createAztecNodeClient(activeNetwork.aztecNodeUrl);
-        const w = await EmbeddedWallet.create(nodeClient, {
-          pxeConfig: { proverEnabled: true },
-        });
+        const w = await EmbeddedWallet.create(nodeClient, { inspect: import.meta.env.DEV });
 
         let accountManager = await w.loadStoredAccount();
         if (!accountManager) {

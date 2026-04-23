@@ -76,7 +76,7 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
 
   const initEmbeddedWallet = useCallback(async (): Promise<EmbeddedWallet> => {
     const node = getAztecNode(activeNetwork.aztecNodeUrl);
-    return EmbeddedWallet.create(node, { pxeConfig: { proverEnabled: true } });
+    return EmbeddedWallet.create(node, { inspect: import.meta.env.DEV });
   }, [activeNetwork]);
 
   const refreshFeeJuiceBalance = useCallback(async () => {
