@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import { resolve } from "path";
-import { aztecViteBase, chunkSizeValidator } from "@gregojuice/common/vite";
+import { aztecVitePlugin, chunkSizeValidator } from "@gregojuice/common/vite";
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -9,14 +9,14 @@ export default defineConfig(({ command, mode }) => {
   // Profiling (zone.js-based async context tracking) runs only in dev.
   // V8's "fast await" optimization bypasses user-space Promise.prototype.then
   // for native `async function` bodies, breaking zone.js propagation. Lowering
-  // the esbuild/SWC target to es2016 in dev forces async/await to be transpiled
+  // the source/build target to es2016 in dev forces async/await to be transpiled
   // to Promise-based state machines that DO go through user-level .then() —
   // which zone.js can hook. Prod keeps esnext for speed.
   const isDev = command === "serve";
-  const base = aztecViteBase({ es2016: isDev });
 
   return {
-    ...base,
+    base: "./",
+    logLevel: process.env.CI ? "error" : undefined,
     resolve: {
       alias: {
         "@gregojuice/embedded-wallet/ui": resolve(
@@ -70,12 +70,8 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     plugins: [
-      ...base.plugins,
-      react({
-        jsxImportSource: "@emotion/react",
-        // Match esbuild target in dev so async/await gets transpiled for zone.js.
-        ...(isDev ? { devTarget: "es2016" as const } : {}),
-      }),
+      aztecVitePlugin({ es2016: isDev }),
+      react({ jsxImportSource: "@emotion/react" }),
       chunkSizeValidator([
         {
           pattern: /assets\/index-.*\.js$/,

@@ -1,17 +1,14 @@
 import { resolve } from "path";
 import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import { aztecViteBase } from "@gregojuice/common/vite";
+import react from "@vitejs/plugin-react";
+import { aztecVitePlugin } from "@gregojuice/common/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const base = aztecViteBase();
   return {
-    ...base,
-    server: {
-      ...base.server,
-      port: 5174,
-    },
+    base: "./",
+    logLevel: process.env.CI ? "error" : undefined,
+    server: { port: 5174 },
     resolve: {
       alias: {
         "@gregojuice/embedded-wallet/ui": resolve(
@@ -52,7 +49,7 @@ export default defineConfig(({ mode }) => {
         ),
       },
     },
-    plugins: [...base.plugins, react({ jsxImportSource: "@emotion/react" })],
+    plugins: [aztecVitePlugin(), react({ jsxImportSource: "@emotion/react" })],
     define: {
       "process.env": JSON.stringify({
         LOG_LEVEL: env.LOG_LEVEL,
