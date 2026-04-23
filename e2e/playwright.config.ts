@@ -82,7 +82,7 @@ export default defineConfig({
       url: "http://localhost:5175",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      stdout: "ignore",
+      stdout: "pipe",
       stderr: "pipe",
     },
     {
@@ -90,7 +90,7 @@ export default defineConfig({
       url: "http://localhost:5173",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      stdout: "ignore",
+      stdout: "pipe",
       stderr: "pipe",
     },
     {
@@ -98,7 +98,7 @@ export default defineConfig({
       url: "http://localhost:5174",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      stdout: "ignore",
+      stdout: "pipe",
       stderr: "pipe",
     },
   ],
