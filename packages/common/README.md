@@ -37,10 +37,10 @@ Used by:
 import { aztecVitePlugin } from "@gregojuice/common/vite";
 
 export default defineConfig({
-  plugins: [aztecVitePlugin(), /* react(), etc. */],
+  plugins: [aztecVitePlugin() /* react(), etc. */],
 });
 ```
 
-Sets cross-origin isolation headers, node polyfills (`buffer`, `path`) with the yarn-workspace absolute-path fix, and the build/source targets. On Vite ≤7 it also adds the `optimizeDeps.exclude` list (bb.js, noir wasm packages, sqlite-wasm, kv-store sqlite-opfs), the matching CJS `include` list (pino, util, sha3, lodash.*), and a `.wasm` content-type middleware — all needed because Vite 7's esbuild pre-bundler mis-handles Web Workers and sibling `.wasm` assets. Vite 8's Rolldown pre-bundler handles those correctly, so none of the extras are applied there.
+Sets cross-origin isolation headers, node polyfills (`buffer`, `path`) with the yarn-workspace absolute-path fix, and the build/source targets. On Vite ≤7 it also adds the `optimizeDeps.exclude` list (bb.js, noir wasm packages, sqlite-wasm, kv-store sqlite-opfs), the matching CJS `include` list (pino, util, sha3, lodash.\*), and a `.wasm` content-type middleware — all needed because Vite 7's esbuild pre-bundler mis-handles Web Workers and sibling `.wasm` assets. Vite 8's Rolldown pre-bundler handles those correctly, so none of the extras are applied there.
 
 `{ es2016: true }` lowers `build.target` / `oxc.target` (or `esbuild.target` on Vite ≤7) so native `async function`s get transpiled to Promise chains. Set this in dev if you use zone.js — V8's "fast await" otherwise bypasses `Promise.prototype.then` hooks.
