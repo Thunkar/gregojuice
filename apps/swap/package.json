@@ -7,6 +7,7 @@
     "clean": "rm -rf ./dist .tsbuildinfo",
     "dev": "NODE_OPTIONS=--max_http_header_size=128000 vite",
     "build": "tsc -b && vite build",
+    "build:e2e": "tsc -b && vite build --mode e2e",
     "lint": "eslint .",
     "typecheck": "tsc -b --noEmit",
     "preview": "NODE_OPTIONS=--max_http_header_size=128000 vite preview",

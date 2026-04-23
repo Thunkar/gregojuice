@@ -18,12 +18,15 @@ export interface NetworkConfig {
 
 const modules = import.meta.glob<{ default: NetworkConfig }>("./*.json", { eager: true });
 
+// Normally drop `local` in production builds. The `e2e` vite mode (see CI:
+// `vite build --mode e2e`) keeps it so the preview server can still hit
+// `aztec start --local-network` over chainId 31337.
+const keepLocal = import.meta.env.DEV || import.meta.env.MODE === "e2e";
+
 const NETWORKS: NetworkConfig[] = Object.values(modules)
   .map((m) => m.default)
   .filter((n) => n && typeof n.id === "string")
-  // In production, exclude the developer-local network — it's never reachable
-  // from a deployed build.
-  .filter((n) => !import.meta.env.PROD || n.id !== "local");
+  .filter((n) => keepLocal || n.id !== "local");
 
 export function getNetworks(): NetworkConfig[] {
   return NETWORKS;

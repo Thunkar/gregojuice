@@ -36,11 +36,15 @@ export interface NetworkConfig {
 
 const modules = import.meta.glob<{ default: NetworkConfig }>("./*.json", { eager: true });
 
+// In production bundles we normally drop `local` (users don't need it). The
+// `e2e` vite mode (see CI: `vite build --mode e2e`) keeps it so the preview
+// server can still select chainId 31337 against `aztec start --local-network`.
+const keepLocal = import.meta.env.DEV || import.meta.env.MODE === "e2e";
+
 const NETWORKS: NetworkConfig[] = Object.values(modules)
   .map((m) => m.default)
   .filter((n) => n && typeof n.id === "string")
-  // Local only makes sense in dev; drop it from production bundles.
-  .filter((n) => !import.meta.env.PROD || n.id !== "local");
+  .filter((n) => keepLocal || n.id !== "local");
 
 export function getNetworks(): NetworkConfig[] {
   return NETWORKS;
@@ -52,8 +56,9 @@ export function getDefaultNetwork(): NetworkConfig {
       'No network configurations found. Run "yarn deploy:local" / "yarn deploy:devnet" first.',
     );
   }
-  // Dev prefers local; prod prefers devnet; otherwise whatever's first.
-  if (import.meta.env.DEV) {
+  // Dev and the `e2e` mode prefer local; real prod prefers devnet; otherwise
+  // whatever's first.
+  if (keepLocal) {
     const local = NETWORKS.find((n) => n.id === "local");
     if (local) return local;
   }
