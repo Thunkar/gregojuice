@@ -78,8 +78,8 @@ export function aztecVitePlugin(options: AztecVitePluginOptions = {}): Plugin[] 
       if (isLegacyVite) {
         // Vite ≤7: esbuild-based pre-bundler leaves `new Worker(new URL(...))`
         // verbatim in bundled output, and doesn't copy adjacent .wasm assets.
-        // Exclude the offending packages from pre-bundle and force the CJS
-        // transitives back in so their named imports still interop.
+        // Exclude packages what use wasm, workers or both from pre-bundle and
+        // force the CJS transitives back in so their named imports still interop.
         return {
           ...base,
           esbuild: { target },
