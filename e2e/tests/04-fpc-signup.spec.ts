@@ -145,11 +145,15 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
   await page.getByTestId("app-signup-register").click();
 
   // Race: success alert or error alert.
+  // Register calls `node.getContract(address)` — a blocking RPC that stalls on
+  // CI whenever the browser is mid-proof (bb.js saturates the 4 vCPU → node's
+  // event loop doesn't get scheduled for 60-70s per proof). Give it 3× a proof
+  // cycle of headroom.
   const registerSuccess = page.getByTestId("app-signup-register-success");
   const registerError = page.getByTestId("app-signup-register-error");
   await Promise.race([
-    registerSuccess.waitFor({ state: "visible", timeout: 60_000 }),
-    registerError.waitFor({ state: "visible", timeout: 60_000 }).then(async () => {
+    registerSuccess.waitFor({ state: "visible", timeout: 180_000 }),
+    registerError.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {
       throw new Error(`register failed: ${await registerError.textContent()}`);
     }),
   ]);

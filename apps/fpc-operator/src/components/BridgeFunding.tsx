@@ -32,6 +32,12 @@ export function BridgeFunding({
     (event: MessageEvent) => {
       const data = event.data;
       if (data?.type !== "gregojuice-bridge") return;
+      // Log so CI traces can confirm receipt. Paired with the bridge-side log
+      // in useBridgeWizard.ts — if we see one but not the other, the message
+      // was dropped; if we see both but setActiveStep doesn't fire, the
+      // handler ran but onComplete was stale/undefined.
+      // eslint-disable-next-line no-console
+      console.log(`[fpc-op] received bridge message: ${JSON.stringify(data)}`);
       if (data.status === "complete") onComplete?.();
       else if (data.status === "error") onError?.(data.error ?? "Bridge failed");
     },

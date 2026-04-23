@@ -245,6 +245,11 @@ export function useBridgeWizard() {
       default:
         return;
     }
+    // Logged so CI traces show the message actually fired. If we see this line
+    // but the parent never handles it, the postMessage is being dropped — not
+    // a logic bug in the iframe.
+    // eslint-disable-next-line no-console
+    console.log(`[bridge] postMessage → parent: ${JSON.stringify(msg)} (origin=${parentOrigin ?? "*"})`);
     window.parent.postMessage(msg, parentOrigin ?? "*");
   }, [bridge.type, isIframe, parentOrigin]);
 
