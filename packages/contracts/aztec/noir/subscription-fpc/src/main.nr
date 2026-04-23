@@ -16,7 +16,7 @@ contract SubscriptionFPC {
             note_viewer_options::NoteViewerOptions,
         },
         protocol::{
-            abis::function_selector::FunctionSelector,
+            abis::{function_selector::FunctionSelector, gas_settings::GasSettings},
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Packable, ToField},
@@ -25,6 +25,20 @@ contract SubscriptionFPC {
         utils::comparison::Comparator,
     };
     use aztec::oracle::notes::set_sender_for_tags;
+
+    /// Bounds FPC liability before `set_as_fee_payer()` commits. Protocol guarantees
+    /// `actual_fee <= (gas_limits + teardown_gas_limits).compute_fee(max_fees_per_gas)`,
+    /// so asserting that product `<= max_fee` here makes the subscription's per-tx cap
+    /// a hard gate: if it fails the circuit proves nothing and the tx never reaches
+    /// a sequencer, so the FPC is never charged.
+    #[contract_library_method]
+    fn assert_fee_within_max(gas_settings: GasSettings, max_fee: u128) {
+        let total_gas = gas_settings.gas_limits + gas_settings.teardown_gas_limits;
+        let max_possible_fee: u128 =
+            (total_gas.da_gas as u128) * gas_settings.max_fees_per_gas.fee_per_da_gas
+            + (total_gas.l2_gas as u128) * gas_settings.max_fees_per_gas.fee_per_l2_gas;
+        assert(max_possible_fee <= max_fee, "Gas settings exceed subscription max_fee");
+    }
 
     #[derive(Packable, Eq)]
     #[note]
@@ -134,18 +148,7 @@ contract SubscriptionFPC {
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
 
-        // Bound FPC liability BEFORE committing as fee payer. Protocol guarantees
-        // actual_fee <= (gas_limits + teardown_gas_limits).compute_fee(max_fees_per_gas),
-        // so gating that product by max_fee here caps the FPC's worst-case charge.
-        // On failure the circuit proves nothing and the tx never reaches a sequencer.
-        let gs = self.context.gas_settings();
-        let total_gas = gs.gas_limits + gs.teardown_gas_limits;
-        let max_possible_fee: u128 = (total_gas.da_gas as u128) * gs.max_fees_per_gas.fee_per_da_gas
-            + (total_gas.l2_gas as u128) * gs.max_fees_per_gas.fee_per_l2_gas;
-        assert(
-            max_possible_fee <= subscription.max_fee,
-            "Gas settings exceed subscription max_fee",
-        );
+        assert_fee_within_max(self.context.gas_settings(), subscription.max_fee);
 
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
@@ -223,12 +226,7 @@ contract SubscriptionFPC {
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
 
-        // See sponsor(): bound FPC liability before committing as fee payer.
-        let gs = self.context.gas_settings();
-        let total_gas = gs.gas_limits + gs.teardown_gas_limits;
-        let max_possible_fee: u128 = (total_gas.da_gas as u128) * gs.max_fees_per_gas.fee_per_da_gas
-            + (total_gas.l2_gas as u128) * gs.max_fees_per_gas.fee_per_l2_gas;
-        assert(max_possible_fee <= slot.max_fee, "Gas settings exceed subscription max_fee");
+        assert_fee_within_max(self.context.gas_settings(), slot.max_fee);
 
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
