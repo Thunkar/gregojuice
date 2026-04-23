@@ -138,5 +138,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: e2e/playwright-report/
+          # html-report/   — Playwright's HTML report (traces, videos)
+          # playwright-report/aztec.log — our sidecar log (aztec node stdout/err)
+          path: |
+            e2e/html-report/
+            e2e/playwright-report/
           retention-days: 7

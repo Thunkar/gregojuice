@@ -53,7 +53,13 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
+  // Separate Playwright's HTML reporter from our ad-hoc sidecar artifacts
+  // (aztec.log written by local-network.ts). The HTML reporter wipes its
+  // outputFolder on startup, which was eating aztec.log when both lived in
+  // `playwright-report/`.
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never", outputFolder: "html-report" }]]
+    : [["html", { outputFolder: "html-report" }]],
   timeout: 5 * 60_000,
   expect: { timeout: 30_000 },
   globalSetup: "./fixtures/global-setup.ts",
