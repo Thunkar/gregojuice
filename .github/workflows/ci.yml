@@ -76,7 +76,7 @@ jobs:
       - name: Install Playwright system deps
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          version: playwright-deps-v1
+          version: playwright-deps-v2
           packages: >-
             fonts-freefont-ttf fonts-ipafont-gothic fonts-liberation
             fonts-noto-color-emoji fonts-tlwg-loma-otf fonts-unifont
@@ -98,10 +98,27 @@ jobs:
             libxext6 libxfixes3 libxi6 libxkbcommon0 libxml2 libxrandr2
             libxrender1 libxslt1.1 xfonts-cyrillic xfonts-scalable xvfb
 
-      # Downloads chromium (and any other browser Playwright's config
-      # references) into ~/.cache/ms-playwright. The setup action already
-      # caches that directory, so this is a no-op on a warm cache.
+      # Cache the downloaded browser binaries. Keyed on the @playwright/test
+      # version so any bump busts the cache automatically (Playwright pins a
+      # specific chromium build per release and refuses to use a mismatched
+      # one). We read the installed version from `yarn info` rather than the
+      # raw package.json spec to resolve `^`-style ranges.
+      - name: Resolve Playwright version
+        id: playwright-version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./e2e/node_modules/@playwright/test/package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: yarn workspace @gregojuice/e2e exec playwright install
 
       # Replays from the turbo cache populated by the `build` job (same SHA,

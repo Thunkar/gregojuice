@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { test, expect } from "../fixtures/test-base.ts";
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
