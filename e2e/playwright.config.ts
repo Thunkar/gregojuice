@@ -16,15 +16,44 @@ import { defineConfig, devices } from "@playwright/test";
  * key derivation all happen in `globalSetup`.
  *
  * Environment toggles:
- *   E2E_HEADED=1       → headed browser (watch tests run)
- *   E2E_SLOW_MO=500    → slow down each action by N ms (implies headed)
- *   E2E_SKIP_NETWORK=1 → skip spawning `aztec start --local-network` in globalSetup;
- *                        assumes you already have one running
+ *   E2E_HEADED=1         → headed browser (watch tests run)
+ *   E2E_SLOW_MO=500      → slow down each action by N ms (implies headed)
+ *   E2E_SKIP_NETWORK=1   → skip spawning `aztec start --local-network` in globalSetup;
+ *                          assumes you already have one running
+ *   E2E_MODE=dev|preview → which command the webServers run. `dev` uses `vite`
+ *                          (HMR, fast start, heavy RSS); `preview` uses built
+ *                          `dist/` over a static server (prod assets, much
+ *                          lower RSS, no Rolldown/HMR processes to crash).
+ *                          CI pins `preview`; local default is `dev`.
  */
 const headed = process.env.E2E_HEADED === "1" || !!process.env.E2E_SLOW_MO;
 const slowMo = process.env.E2E_SLOW_MO ? Number(process.env.E2E_SLOW_MO) : undefined;
+const serverMode: "dev" | "preview" = process.env.E2E_MODE === "preview" ? "preview" : "dev";
 
 const desktopChrome = { ...devices["Desktop Chrome"] };
+
+function appServer(
+  workspace: string,
+  port: number,
+): {
+  command: string;
+  url: string;
+  reuseExistingServer: boolean;
+  timeout: number;
+  stdout: "pipe";
+  stderr: "pipe";
+} {
+  // `vite preview` accepts --port/--strictPort just like `vite`, so the
+  // command shape is identical apart from the subcommand.
+  return {
+    command: `yarn workspace ${workspace} ${serverMode} --port ${port} --strictPort`,
+    url: `http://localhost:${port}`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    stdout: "pipe",
+    stderr: "pipe",
+  };
+}
 
 export default defineConfig({
   testDir: "./tests",
@@ -77,29 +106,8 @@ export default defineConfig({
     },
   ],
   webServer: [
-    {
-      command: "yarn workspace @gregojuice/swap dev --port 5175 --strictPort",
-      url: "http://localhost:5175",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-    {
-      command: "yarn workspace @gregojuice/bridge dev --port 5173 --strictPort",
-      url: "http://localhost:5173",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-    {
-      command: "yarn workspace @gregojuice/fpc-operator dev --port 5174 --strictPort",
-      url: "http://localhost:5174",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: "pipe",
-      stderr: "pipe",
-    },
+    appServer("@gregojuice/swap", 5175),
+    appServer("@gregojuice/bridge", 5173),
+    appServer("@gregojuice/fpc-operator", 5174),
   ],
 });
