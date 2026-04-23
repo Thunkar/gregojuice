@@ -350,11 +350,4 @@ describe("FPC gas overhead", () => {
     expect(FPC_TEARDOWN_DA_GAS).toBe(measuredTeardownDA);
   });
 
-  // Note: the former "private repricing is consistent between subscribe and sponsor"
-  // test relied on every sponsored tx having public calls (via the _ensure_max_fee
-  // teardown), which uniformly AVM-repriced the FPC's private side effects. Now
-  // that max_fee is gated in setup, private-sponsored txs have no public phase,
-  // so subscribe's extra SubscriptionNote insertion isn't AVM-repriced while
-  // sponsor's narrower side-effect set isn't either — the old symmetry was an
-  // artifact of the repriced public path, not a semantic invariant.
 });

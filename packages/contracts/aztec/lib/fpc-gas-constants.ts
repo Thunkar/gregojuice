@@ -4,21 +4,19 @@
  * When operators can't run a full simulation calibration, they can compute
  * the sponsored gas limits from a standalone simulation + these constants.
  *
- * For PUBLIC sponsored functions (sponsored fn side effects are already at
- * AVM rates in the standalone measurement — nothing to reprice):
- *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
- *   teardownLimits = FPC_TEARDOWN (zero — max_fee is gated in setup, no teardown fn)
- *
- * For PRIVATE sponsored functions, post-fix the tx has no public calls at
- * all (no forced teardown), so the sponsored fn's side effects stay at
- * private rates — no repricing needed:
+ * For PUBLIC sponsored functions (no repricing needed):
  *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
  *   teardownLimits = FPC_TEARDOWN
  *
- * (Note: FPC_OVERHEAD is measured from subscribePublicGas - standalonePublicGas,
- * so it implicitly includes AVM-rate pricing of the FPC's own note ops. In a
- * private-sponsored tx those ops would actually be at private rates, so this
- * slightly over-estimates — safe for max_fee calibration, just looser.)
+ * For PRIVATE sponsored functions (tx has no public calls, so sponsored
+ * fn side effects stay at private rates — no repricing needed):
+ *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
+ *   teardownLimits = FPC_TEARDOWN
+ *
+ * FPC_OVERHEAD is measured from subscribePublicGas - standalonePublicGas,
+ * so it implicitly includes AVM-rate pricing of the FPC's own note ops. In
+ * a private-sponsored tx those ops are at private rates, so this slightly
+ * over-estimates — safe for max_fee calibration, just looser.
  *
  * These constants are derived from @aztec/constants and stay in sync automatically.
  * The FPC overhead itself is measured by the fpc-overhead test.
@@ -37,8 +35,9 @@ import {
 
 // ── Side-effect repricing (private → AVM rates) ──────────────────────
 // When a tx has public calls, private side effects are charged at AVM rates
-// instead of private rates. This now only applies to FPC txs whose sponsored
-// function is itself public — there is no longer a forced public teardown.
+// instead of private rates. For FPC sponsored txs this applies only when the
+// sponsored function is itself public (private-sponsored txs have no public
+// phase).
 
 /** L2 gas rate difference per note hash */
 export const NOTE_HASH_L2_RATE_DIFF = AVM_EMITNOTEHASH_BASE_L2_GAS - L2_GAS_PER_NOTE_HASH;
@@ -79,7 +78,7 @@ export const FPC_SPONSOR_OVERHEAD_L2_GAS = 88881;
 /** Sponsor overhead on DA gas */
 export const FPC_SPONSOR_OVERHEAD_DA_GAS = 640;
 
-/** FPC teardown L2 gas (zero — max_fee is now enforced in setup, no teardown fn) */
+/** FPC teardown L2 gas (zero — max_fee is enforced in setup, no teardown fn) */
 export const FPC_TEARDOWN_L2_GAS = 0;
 
 /** FPC teardown DA gas */
