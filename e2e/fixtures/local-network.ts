@@ -46,8 +46,18 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
 
   try {
     await Promise.all([
-      waitForReady(proc, DEFAULT_L1_RPC_URL, "L1 RPC"),
-      waitForReady(proc, DEFAULT_NODE_URL, "Aztec node"),
+      waitForRpc(proc, DEFAULT_L1_RPC_URL, "L1 RPC", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_chainId",
+        params: [],
+      }),
+      waitForRpc(proc, DEFAULT_NODE_URL, "Aztec node", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "node_getNodeInfo",
+        params: [],
+      }),
     ]);
   } catch (err) {
     proc.kill("SIGTERM");
@@ -67,15 +77,33 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
   };
 }
 
-async function waitForReady(proc: ChildProcess, url: string, label: string): Promise<void> {
+/**
+ * Poll a JSON-RPC endpoint until it returns a successful result (not just an
+ * HTTP response). The old TCP-accept probe passed as soon as the port was open,
+ * which on a slow CI runner can be minutes before the node is actually ready
+ * to serve `sendTx` / `getNodeInfo`.
+ */
+async function waitForRpc(
+  proc: ChildProcess,
+  url: string,
+  label: string,
+  request: { jsonrpc: "2.0"; id: number; method: string; params: unknown[] },
+): Promise<void> {
   const deadline = Date.now() + READINESS_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (proc.exitCode !== null) {
       throw new Error(`local-network exited early with code ${proc.exitCode}`);
     }
     try {
-      const res = await fetch(url, { method: "POST", body: "{}" });
-      if (res.status < 500) return;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { result?: unknown; error?: unknown };
+        if (body.result !== undefined) return;
+      }
     } catch {
       // not ready yet
     }
