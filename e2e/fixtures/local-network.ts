@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Spawns `aztec start --local-network` for the test run. This brings up
@@ -33,7 +34,12 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
   // appears healthy on HTTP until its internal log flush backs up enough to
   // stall the event loop, at which point it stops serving requests and dies.
   // CI trips this easily (higher log volume, no interactive terminal).
-  const logPath = join(workDir, "aztec.log");
+  //
+  // Write under e2e/playwright-report/ so the CI upload-artifact step picks
+  // the log up on failure, instead of losing it to the ephemeral $TMPDIR.
+  const reportDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "playwright-report");
+  await mkdir(reportDir, { recursive: true });
+  const logPath = join(reportDir, "aztec.log");
   const logStream = createWriteStream(logPath, { flags: "a" });
   proc.stdout?.pipe(logStream);
   proc.stderr?.pipe(logStream);
