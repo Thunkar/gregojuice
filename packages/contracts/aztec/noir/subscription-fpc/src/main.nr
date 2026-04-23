@@ -26,16 +26,21 @@ contract SubscriptionFPC {
     };
     use aztec::oracle::notes::set_sender_for_tags;
 
-    /// Bounds FPC liability before `set_as_fee_payer()` commits. Protocol guarantees
-    /// `actual_fee <= (gas_limits + teardown_gas_limits).compute_fee(max_fees_per_gas)`,
-    /// so asserting that product `<= max_fee` here makes the subscription's per-tx cap
-    /// a hard gate: if it fails the circuit proves nothing and the tx never reaches
-    /// a sequencer, so the FPC is never charged.
+    /// Asserts that the transaction's max possible fee is within the FPC's allowance (`max_fee`).
+    ///
+    /// Doing this in private rather than later (like in public teardown) ensures that a sponsored
+    /// transaction's private execution cannot be proven if it would be possible for it to
+    /// exceed the allowance (`max_fee`).
+    ///
+    /// If, instead, the assertion was done in public teardown, a transaction that exceeds the
+    /// FPC's `max_fee` would revert during teardown, but could still have its private portion
+    /// proven, and therefore could still be executed by a sequencer and included in a block.
+    /// In that case, the FPC would be responsible for paying some fee larger than `max_fee`.
     #[contract_library_method]
     fn assert_fee_within_max(gas_settings: GasSettings, max_fee: u128) {
         let total_gas = gas_settings.gas_limits + gas_settings.teardown_gas_limits;
-        let max_possible_fee: u128 =
-            (total_gas.da_gas as u128) * gas_settings.max_fees_per_gas.fee_per_da_gas
+        let max_possible_fee: u128 = (total_gas.da_gas as u128)
+            * gas_settings.max_fees_per_gas.fee_per_da_gas
             + (total_gas.l2_gas as u128) * gas_settings.max_fees_per_gas.fee_per_l2_gas;
         assert(max_possible_fee <= max_fee, "Gas settings exceed subscription max_fee");
     }
@@ -208,7 +213,10 @@ contract SubscriptionFPC {
             config_id,
         );
         let slots = self.storage.slots.at(self.address).pop_notes(options);
-        assert(slots.len() > 0, "No subscription slots available for this function. The operator must call sign_up first.");
+        assert(
+            slots.len() > 0,
+            "No subscription slots available for this function. The operator must call sign_up first.",
+        );
         let slot = slots.get(0);
         if slot.users > 0 {
             self
