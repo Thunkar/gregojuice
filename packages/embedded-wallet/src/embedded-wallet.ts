@@ -68,8 +68,8 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
   /**
    * Overrides `EmbeddedWalletBase.create` with our defaults:
-   *   - `proverEnabled: true` is forced, even if the caller passes false (we want proving
-   *     on against local-network).
+   *   - `proverEnabled: true` by default (we want proving on against local-network);
+   *     caller can opt out by passing `pxe: { proverEnabled: false }`.
    *   - When not `ephemeral`, default `pxe.store` and `walletDb.store` to
    *     `AztecSQLiteOPFSStore` instances scoped by rollup address. A caller may still
    *     inject their own stores and they win.
@@ -90,8 +90,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
     const node = typeof nodeOrUrl === "string" ? createAztecNodeClient(nodeOrUrl) : nodeOrUrl;
     const rootLogger = rest.logger ?? createLogger("embedded-wallet");
 
-    // Force prover on. Applies to both ephemeral and persistent paths.
-    const pxeOptions = { ...rest.pxe, proverEnabled: true };
+    // Prover on by default; caller can opt out by passing `pxe: { proverEnabled: false }`
+    // (e.g. apps do this under VITE_DISABLE_PROVER=1 for e2e CI where proving
+    // starves the node's event loop).
+    const pxeOptions = { proverEnabled: true, ...rest.pxe };
 
     let finalOptions: EmbeddedWalletOptions;
     let pxeStore: AztecSQLiteOPFSStore | undefined;

@@ -40,7 +40,13 @@ export function createNodeClient(nodeUrl: string): AztecNode {
 export async function createEmbeddedWallet(
   node: AztecNode,
 ): Promise<{ wallet: EmbeddedWallet; address: AztecAddress }> {
-  const wallet = await EmbeddedWallet.create(node, { inspect: import.meta.env.DEV });
+  // `VITE_DISABLE_PROVER=1` turns off bb.js proving — only used in CI e2e
+  // where proving starves the Aztec node's event loop on the 4 vCPU runner.
+  const proverEnabled = import.meta.env.VITE_DISABLE_PROVER !== "1";
+  const wallet = await EmbeddedWallet.create(node, {
+    inspect: import.meta.env.DEV,
+    pxe: { proverEnabled },
+  });
   let accountManager = await wallet.loadStoredAccount();
   if (!accountManager) {
     accountManager = await wallet.createInitializerlessAccount();

@@ -129,9 +129,17 @@ jobs:
         # --fail-on-flaky-tests makes Playwright exit 1 when a test passes only
         # on retry. Default behaviour marks flakies as "passed" which hides
         # real regressions.
+        #
+        # VITE_DISABLE_PROVER=1 turns off bb.js proving in the three apps'
+        # embedded wallets. We trade real proof generation for dev speed so
+        # proving doesn't starve the Aztec node's event loop on the 4 vCPU
+        # runner (which caused flakes like `node.getContract` hanging 60-70s).
+        # `--local-network` accepts fake proofs (`accepting fake proofs` in
+        # the node log) so the end-to-end flow still completes.
         run: yarn workspace @gregojuice/e2e test --fail-on-flaky-tests
         env:
           CI: "1"
+          VITE_DISABLE_PROVER: "1"
 
       - name: Upload Playwright report
         if: failure()
