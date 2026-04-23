@@ -175,7 +175,7 @@ describe("Failure cases", () => {
 
   it("rejects subscribe when gas settings would exceed max_fee", async () => {
     // Sign up a fresh slot with an absurdly low max_fee (1 juice). Any realistic
-    // tx exceeds this, so the new setup-phase gate in subscribe() must reject
+    // tx exceeds this, so the setup-phase gate in subscribe() must reject
     // before the FPC commits as fee payer.
     const TIGHT_INDEX = FAILURE_INDEX + 1;
 
@@ -206,7 +206,14 @@ describe("Failure cases", () => {
       .getFunctionCall();
 
     await ctx.fpc.methods
-      .sign_up(tightCall.to, tightCall.selector, TIGHT_INDEX, 1, 1n, 1)
+      .sign_up(
+        /*app=*/ tightCall.to,
+        /*selector=*/ tightCall.selector,
+        /*current_index=*/ TIGHT_INDEX,
+        /*max_uses=*/ 1,
+        /*max_fee=*/ 1n, // VERY LOW MAX FEE
+        /*max_users=*/ 1,
+      )
       .send({ from: ctx.admin });
 
     const tightAuthWit = await tightUserWallet.createAuthWit(tightUserAddress, {
