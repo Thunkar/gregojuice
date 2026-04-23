@@ -128,16 +128,10 @@ jobs:
       - name: Run e2e tests
         # --fail-on-flaky-tests makes Playwright exit 1 when a test passes only
         # on retry. Default behaviour marks flakies as "passed" which hides
-        # real regressions (e.g. the swap dev server dying mid-run).
-        #
-        # E2E_MODE=preview makes Playwright's webServers run `vite preview`
-        # against built `dist/` output instead of the dev server. Prod assets
-        # are lighter (no HMR, no pre-bundler running beside the tests) and
-        # closer to what real users hit.
+        # real regressions.
         run: yarn workspace @gregojuice/e2e test --fail-on-flaky-tests
         env:
           CI: "1"
-          E2E_MODE: preview
 
       - name: Upload Playwright report
         if: failure()
