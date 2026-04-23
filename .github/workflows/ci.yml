@@ -131,7 +131,10 @@ jobs:
         run: yarn build --output-logs=new-only
 
       - name: Run e2e tests
-        run: yarn workspace @gregojuice/e2e test
+        # --fail-on-flaky-tests makes Playwright exit 1 when a test passes only
+        # on retry. Default behaviour marks flakies as "passed" which hides
+        # real regressions (e.g. the swap dev server dying mid-run).
+        run: yarn workspace @gregojuice/e2e test --fail-on-flaky-tests
         env:
           CI: "1"
 
