@@ -101,13 +101,17 @@ jobs:
       # Cache the downloaded browser binaries. Keyed on the @playwright/test
       # version so any bump busts the cache automatically (Playwright pins a
       # specific chromium build per release and refuses to use a mismatched
-      # one). We read the installed version from `yarn info` rather than the
-      # raw package.json spec to resolve `^`-style ranges.
+      # one). Reads the resolved version from the `yarn.lock` entry, which
+      # exists regardless of how yarn lays down node_modules (hoisted vs not).
       - name: Resolve Playwright version
         id: playwright-version
         shell: bash
         run: |
-          VERSION=$(node -p "require('./e2e/node_modules/@playwright/test/package.json').version")
+          VERSION=$(awk '/^"@playwright\/test@/{found=1; next} found && /version:/{print $2; exit}' yarn.lock | tr -d '"')
+          if [ -z "$VERSION" ]; then
+            echo "Failed to resolve @playwright/test version from yarn.lock" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browsers
