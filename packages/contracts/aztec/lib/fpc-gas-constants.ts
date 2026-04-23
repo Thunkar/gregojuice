@@ -2,21 +2,16 @@
  * Gas constants for manual calibration of sponsored transactions.
  *
  * When operators can't run a full simulation calibration, they can compute
- * the sponsored gas limits from a standalone simulation + these constants.
+ * the sponsored gas limits from a standalone simulation + these constants:
  *
- * For PUBLIC sponsored functions (no repricing needed):
  *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
  *   teardownLimits = FPC_TEARDOWN
  *
- * For PRIVATE sponsored functions (tx has no public calls, so sponsored
- * fn side effects stay at private rates — no repricing needed):
- *   gasLimits     = standalone.gasLimits + FPC_OVERHEAD
- *   teardownLimits = FPC_TEARDOWN
- *
- * FPC_OVERHEAD is measured from subscribePublicGas - standalonePublicGas,
- * so it implicitly includes AVM-rate pricing of the FPC's own note ops. In
- * a private-sponsored tx those ops are at private rates, so this slightly
- * over-estimates — safe for max_fee calibration, just looser.
+ * Same formula regardless of whether the sponsored function is public,
+ * private, or private-with-enqueued-public-calls: the FPC does not change
+ * the public-call topology of the tx, so whatever pricing regime the
+ * standalone simulation used also applies to the sponsored version. No
+ * separate side-effect repricing adjustment is needed.
  *
  * These constants are derived from @aztec/constants and stay in sync automatically.
  * The FPC overhead itself is measured by the fpc-overhead test.
@@ -35,9 +30,9 @@ import {
 
 // ── Side-effect repricing (private → AVM rates) ──────────────────────
 // When a tx has public calls, private side effects are charged at AVM rates
-// instead of private rates. For FPC sponsored txs this applies only when the
-// sponsored function is itself public (private-sponsored txs have no public
-// phase).
+// instead of private rates. This is a property of the sponsored function
+// itself (does it run public code or enqueue public calls?) — the FPC does
+// not change it.
 
 /** L2 gas rate difference per note hash */
 export const NOTE_HASH_L2_RATE_DIFF = AVM_EMITNOTEHASH_BASE_L2_GAS - L2_GAS_PER_NOTE_HASH;
@@ -51,8 +46,8 @@ export const L2_TO_L1_MSG_L2_RATE_DIFF = AVM_SENDL2TOL1MSG_BASE_L2_GAS - L2_GAS_
 // ── Base overhead difference ─────────────────────────────────────────
 // Private-only txs use PRIVATE_TX_L2_GAS_OVERHEAD.
 // Txs with public calls use PUBLIC_TX_L2_GAS_OVERHEAD.
-// Applies to FPC sponsored txs only when the sponsored function is public —
-// when the sponsored function is private the whole tx stays private-only.
+// Whether either applies to a sponsored tx is determined by the sponsored
+// function, not by the FPC.
 
 /** L2 gas overhead difference */
 export const PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF =
