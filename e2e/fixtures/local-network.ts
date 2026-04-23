@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createWriteStream } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +28,16 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  // Drain stdout/stderr to a file. Unconsumed pipes fill their OS buffer
+  // (~64KB on Linux) and then BLOCK the child on its next write — the node
+  // appears healthy on HTTP until its internal log flush backs up enough to
+  // stall the event loop, at which point it stops serving requests and dies.
+  // CI trips this easily (higher log volume, no interactive terminal).
+  const logPath = join(workDir, "aztec.log");
+  const logStream = createWriteStream(logPath, { flags: "a" });
+  proc.stdout?.pipe(logStream);
+  proc.stderr?.pipe(logStream);
+
   try {
     await Promise.all([
       waitForReady(proc, DEFAULT_L1_RPC_URL, "L1 RPC"),
@@ -44,6 +55,7 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
     stop: async () => {
       proc.kill("SIGTERM");
       await new Promise<void>((resolve) => proc.once("exit", () => resolve()));
+      logStream.end();
       await rm(workDir, { recursive: true, force: true });
     },
   };
