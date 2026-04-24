@@ -41,6 +41,7 @@ packages/contracts/ethereum/dist
 
 # Playwright / e2e outputs
 e2e/playwright-report
+e2e/html-report
 e2e/test-results
 e2e/.cache
 

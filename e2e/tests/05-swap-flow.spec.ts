@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { test, expect } from "../fixtures/test-base.ts";
 import {
   readState,
   STATE_FILES,
@@ -54,19 +55,6 @@ test.describe.serial("gregoswap end-user flow", () => {
     const global = await readState<GlobalState>(STATE_FILES.global);
     const swap = await readState<SwapDeploymentState>(STATE_FILES.swapDeployment);
     console.log(`[e2e] target node=${global.nodeUrl}, gregoCoin=${swap.gregoCoin}`);
-
-    // Forward browser console + pageerror to test output — essential for
-    // diagnosing hangs inside the swap UI (drip tx failures, simulation
-    // errors, etc.) that never surface as test assertions.
-    page.on("console", (msg) => {
-      const t = msg.type();
-      if (t === "error" || t === "warning" || t === "info") {
-        console.log(`[browser:${t}] ${msg.text()}`);
-      }
-    });
-    page.on("pageerror", (err) => {
-      console.log(`[browser:pageerror] ${err.message}`);
-    });
 
     await openOnboarding(page);
 

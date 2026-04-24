@@ -1,11 +1,11 @@
 /**
- * Network configs are per-file under this directory. A network only appears
- * in the UI if its JSON exists at build time — `import.meta.glob` + `eager`
- * means the set is fixed when the Vite bundle is produced.
+ * Network configs are per-file under this directory. A network appears in
+ * the UI if its JSON exists at build time — `import.meta.glob` + `eager`
+ * fixes the set when the bundle is produced.
  *
- * Public networks (testnet, devnet, nextnet) are checked in. `local.json` is
- * gitignored and generated per-developer via `scripts/bootstrap-networks.js`
- * or by running the e2e setup chain.
+ * Network presence is a *build concern*: production deploys delete
+ * `local.json` before building, so the bundle only carries real networks.
+ * Local dev / e2e leave `local.json` in place and it becomes the default.
  */
 
 export interface NetworkConfig {
@@ -18,12 +18,19 @@ export interface NetworkConfig {
 
 const modules = import.meta.glob<{ default: NetworkConfig }>("./*.json", { eager: true });
 
+/** Preference order; unknown ids sort alphabetically at the end. */
+const PREFERRED_ORDER = ["local", "testnet"];
+
 const NETWORKS: NetworkConfig[] = Object.values(modules)
   .map((m) => m.default)
-  .filter((n) => n && typeof n.id === "string")
-  // In production, exclude the developer-local network — it's never reachable
-  // from a deployed build.
-  .filter((n) => !import.meta.env.PROD || n.id !== "local");
+  .filter((n): n is NetworkConfig => !!n && typeof n.id === "string")
+  .sort((a, b) => {
+    const ai = PREFERRED_ORDER.indexOf(a.id);
+    const bi = PREFERRED_ORDER.indexOf(b.id);
+    const aw = ai === -1 ? PREFERRED_ORDER.length : ai;
+    const bw = bi === -1 ? PREFERRED_ORDER.length : bi;
+    return aw - bw || a.id.localeCompare(b.id);
+  });
 
 export function getNetworks(): NetworkConfig[] {
   return NETWORKS;
@@ -35,6 +42,5 @@ export function getDefaultNetwork(): NetworkConfig {
       "No network configs found under src/config/networks/. Check at least one JSON exists.",
     );
   }
-  // Prefer testnet as the default; fall back to whatever's first.
-  return NETWORKS.find((n) => n.id === "testnet") ?? NETWORKS[0];
+  return NETWORKS[0];
 }

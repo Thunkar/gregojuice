@@ -1,4 +1,5 @@
-import { test, expect, type Frame } from "@playwright/test";
+import { type Frame } from "@playwright/test";
+import { test, expect } from "../fixtures/test-base.ts";
 import { readFile } from "node:fs/promises";
 import {
   writeState,

@@ -36,7 +36,14 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
-  // Once wallet is ready, determine the right starting step
+  // Once wallet is ready, determine the right starting step.
+  // NOTE: this effect can race with BridgeFunding's `onComplete` handler if the
+  // user bridges while our on-chain checks are still in flight. Guard every
+  // `setActiveStep` with a functional updater that only advances the step —
+  // never regresses — so the bridge's `setActiveStep(2)` isn't clobbered by a
+  // late-arriving "balance is still 0" from this init query.
+  const advanceTo = (next: number) => setActiveStep((current) => Math.max(current, next));
+
   useEffect(() => {
     if (status !== "ready" || !wallet || !address || !node || hasInitRef.current) return;
     hasInitRef.current = true;
@@ -69,13 +76,13 @@ export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardPro
         ]);
 
         if (adminBal > 0n && fpcBal > 0n) {
-          setActiveStep(2);
+          advanceTo(2);
         } else {
-          setActiveStep(1);
+          advanceTo(1);
         }
       } catch (err) {
         console.error("Setup init failed:", err);
-        setActiveStep(1);
+        advanceTo(1);
       }
     })();
   }, [status, wallet, address, node]);
