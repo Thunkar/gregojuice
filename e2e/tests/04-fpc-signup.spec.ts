@@ -144,22 +144,23 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
   await page.getByTestId("app-signup-contract-address").fill(args.contractAddress);
   await page.getByTestId("app-signup-register").click();
 
-  // Race: success alert or error alert.
-  // Register calls `node.getContract(address)` — a blocking RPC that stalls on
-  // CI whenever the browser is mid-proof (bb.js saturates the 4 vCPU → node's
-  // event loop doesn't get scheduled for 60-70s per proof). Give it 3× a proof
-  // cycle of headroom.
-  const registerSuccess = page.getByTestId("app-signup-register-success");
+  // Race: step-1 transition (success) or register-error alert (failure).
+  //
+  // The register handler calls `setContractInstance()` and `setActiveStep(1)`
+  // in the same microtask, so the success alert renders inside step 0 *as*
+  // step 0 collapses — in CI the alert is often never "visible" to Playwright,
+  // it just flashes through a hidden mount. Watching `data-active-step="1"`
+  // instead is equivalent and race-free. Error alert is in step 0 too, but
+  // when register fails step never advances, so the error stays visible.
   const registerError = page.getByTestId("app-signup-register-error");
   await Promise.race([
-    registerSuccess.waitFor({ state: "visible", timeout: 180_000 }),
+    expect(wizard)
+      .toHaveAttribute("data-active-step", "1", { timeout: 180_000 })
+      .then(() => {}),
     registerError.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {
       throw new Error(`register failed: ${await registerError.textContent()}`);
     }),
   ]);
-
-  // The register handler auto-advances to step 1.
-  await expect(wizard).toHaveAttribute("data-active-step", "1", { timeout: 10_000 });
 
   // ── Step 1: pick the function ──────────────────────────────────────
   await page.getByTestId("app-signup-function-select-display").click();
