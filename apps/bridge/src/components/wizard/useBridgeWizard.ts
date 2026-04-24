@@ -245,14 +245,16 @@ export function useBridgeWizard() {
       default:
         return;
     }
-    // Logged so CI traces show the message actually fired. If we see this line
-    // but the parent never handles it, the postMessage is being dropped — not
-    // a logic bug in the iframe.
+    // Prefer `window.location.ancestorOrigins[0]` over `document.referrer`:
+    // when the iframe navigates after load (e.g. props change → src update),
+    // `document.referrer` becomes the iframe's own previous URL, which makes
+    // `postMessage(msg, parentOrigin)` reject with "target origin does not
+    // match recipient". `ancestorOrigins` always reflects the actual parent.
+    // Fall back to `*` — our messages carry non-sensitive status only.
+    const target = window.location.ancestorOrigins?.[0] ?? parentOrigin ?? "*";
     // eslint-disable-next-line no-console
-    console.log(
-      `[bridge] postMessage → parent: ${JSON.stringify(msg)} (origin=${parentOrigin ?? "*"})`,
-    );
-    window.parent.postMessage(msg, parentOrigin ?? "*");
+    console.log(`[bridge] postMessage → parent: ${JSON.stringify(msg)} (origin=${target})`);
+    window.parent.postMessage(msg, target);
   }, [bridge.type, isIframe, parentOrigin]);
 
   // ── L1 info fetching ──────────────────────────────────────────────
