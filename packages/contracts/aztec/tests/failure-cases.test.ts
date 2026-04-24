@@ -172,4 +172,64 @@ describe("Failure cases", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("rejects subscribe when gas settings would exceed max_fee", async () => {
+    // Sign up a fresh slot with an absurdly low max_fee (1 juice). Any realistic
+    // tx exceeds this, so the setup-phase gate in subscribe() must reject
+    // before the FPC commits as fee payer.
+    const TIGHT_INDEX = FAILURE_INDEX + 1;
+
+    const tightUserWallet = await EmbeddedWallet.create(ctx.node, { ephemeral: true });
+    await tightUserWallet.registerContract(
+      ctx.fpcInstance,
+      SubscriptionFPC.artifact,
+      ctx.fpcSecretKey,
+    );
+    await tightUserWallet.registerContract(
+      await ctx.node.getContract(token.address),
+      TokenContractArtifact,
+    );
+
+    const tightUserSecret = await Fr.random();
+    const tightUserAccountManager = await ctx.wallet.createECDSARAccount(
+      tightUserSecret,
+      SALT,
+      SIGNING_PRIVATE_KEY,
+    );
+    const tightUserAddress = tightUserAccountManager.address;
+    await (await tightUserAccountManager.getDeployMethod()).send({ from: ctx.admin });
+    await tightUserWallet.createECDSARAccount(tightUserSecret, SALT, SIGNING_PRIVATE_KEY);
+
+    const tightUserToken = TokenContract.at(token.address, tightUserWallet);
+    const tightCall = await tightUserToken.methods
+      .transfer_in_private(tightUserAddress, recipientAddress, 1n, 0)
+      .getFunctionCall();
+
+    await ctx.fpc.methods
+      .sign_up(
+        /*app=*/ tightCall.to,
+        /*selector=*/ tightCall.selector,
+        /*current_index=*/ TIGHT_INDEX,
+        /*max_uses=*/ 1,
+        /*max_fee=*/ 1n, // VERY LOW MAX FEE
+        /*max_users=*/ 1,
+      )
+      .send({ from: ctx.admin });
+
+    const tightAuthWit = await tightUserWallet.createAuthWit(tightUserAddress, {
+      caller: ctx.fpc.address,
+      call: tightCall,
+    });
+
+    const fpc = ctx.fpc.withWallet(tightUserWallet);
+
+    await expect(
+      fpc.helpers.subscribe({
+        call: tightCall,
+        configIndex: TIGHT_INDEX,
+        userAddress: tightUserAddress,
+        authWitnesses: [tightAuthWit],
+      }),
+    ).rejects.toThrow(/Gas settings exceed subscription max_fee/);
+  });
 });

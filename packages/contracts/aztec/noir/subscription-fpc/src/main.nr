@@ -16,7 +16,7 @@ contract SubscriptionFPC {
             note_viewer_options::NoteViewerOptions,
         },
         protocol::{
-            abis::function_selector::FunctionSelector,
+            abis::{function_selector::FunctionSelector, gas_settings::GasSettings},
             address::AztecAddress,
             hash::poseidon2_hash,
             traits::{Packable, ToField},
@@ -25,6 +25,25 @@ contract SubscriptionFPC {
         utils::comparison::Comparator,
     };
     use aztec::oracle::notes::set_sender_for_tags;
+
+    /// Asserts that the transaction's max possible fee is within the FPC's allowance (`max_fee`).
+    ///
+    /// Doing this in private rather than later (like in public teardown) ensures that a sponsored
+    /// transaction's private execution cannot be proven if it would be possible for it to
+    /// exceed the allowance (`max_fee`).
+    ///
+    /// If, instead, the assertion was done in public teardown, a transaction that exceeds the
+    /// FPC's `max_fee` would revert during teardown, but could still have its private portion
+    /// proven, and therefore could still be executed by a sequencer and included in a block.
+    /// In that case, the FPC would be responsible for paying some fee larger than `max_fee`.
+    #[contract_library_method]
+    fn assert_fee_within_max(gas_settings: GasSettings, max_fee: u128) {
+        let total_gas = gas_settings.gas_limits + gas_settings.teardown_gas_limits;
+        let max_possible_fee: u128 = (total_gas.da_gas as u128)
+            * gas_settings.max_fees_per_gas.fee_per_da_gas
+            + (total_gas.l2_gas as u128) * gas_settings.max_fees_per_gas.fee_per_l2_gas;
+        assert(max_possible_fee <= max_fee, "Gas settings exceed subscription max_fee");
+    }
 
     #[derive(Packable, Eq)]
     #[note]
@@ -47,12 +66,6 @@ contract SubscriptionFPC {
         admin: PublicImmutable<AztecAddress, Context>,
         subscriptions: Owned<PrivateSet<SubscriptionNote, Context>, Context>,
         slots: Owned<PrivateSet<SlotNote, Context>, Context>,
-    }
-
-    #[internal("public")]
-    fn safe_cast_to_u128(field: Field) -> u128 {
-        field.assert_max_bit_size::<128>();
-        field as u128
     }
 
     #[initializer]
@@ -140,15 +153,17 @@ contract SubscriptionFPC {
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
 
+        assert_fee_within_max(self.context.gas_settings(), subscription.max_fee);
+
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
         self.context.end_setup();
 
-        self.internal._call_sponsored_fn(call, subscription.max_fee);
+        self.internal._call_sponsored_fn(call);
     }
 
     #[internal("private")]
-    fn _call_sponsored_fn(call: FunctionCall, max_fee: u128) {
+    fn _call_sponsored_fn(call: FunctionCall) {
         if call.is_public {
             self.context.call_public_function_with_calldata_hash(
                 call.target_address,
@@ -168,14 +183,6 @@ contract SubscriptionFPC {
                 call.is_static,
             );
         }
-
-        self.set_as_teardown(SubscriptionFPC::at(self.address)._ensure_max_fee(max_fee));
-    }
-
-    #[external("public")]
-    fn _ensure_max_fee(max_fee: u128) {
-        let actual_fee = self.internal.safe_cast_to_u128(self.context.transaction_fee());
-        assert(actual_fee <= max_fee, "Max fee exceeds subscription limit");
     }
 
     #[external("private")]
@@ -206,7 +213,10 @@ contract SubscriptionFPC {
             config_id,
         );
         let slots = self.storage.slots.at(self.address).pop_notes(options);
-        assert(slots.len() > 0, "No subscription slots available for this function. The operator must call sign_up first.");
+        assert(
+            slots.len() > 0,
+            "No subscription slots available for this function. The operator must call sign_up first.",
+        );
         let slot = slots.get(0);
         if slot.users > 0 {
             self
@@ -223,6 +233,8 @@ contract SubscriptionFPC {
                 )
                 .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED)
         }
+
+        assert_fee_within_max(self.context.gas_settings(), slot.max_fee);
 
         // We are convinced, sponsor the fee and end setup
         self.context.set_as_fee_payer();
@@ -243,7 +255,7 @@ contract SubscriptionFPC {
             .deliver(MessageDelivery.ONCHAIN_UNCONSTRAINED);
 
         // We allow calling the sponsored function in the same tx as the subscription
-        self.internal._call_sponsored_fn(call, slot.max_fee);
+        self.internal._call_sponsored_fn(call);
     }
 
     #[external("utility")]
