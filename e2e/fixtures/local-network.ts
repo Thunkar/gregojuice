@@ -1,7 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Spawns `aztec start --local-network` for the test run. This brings up
@@ -27,10 +29,35 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  // Drain stdout/stderr to a file. Unconsumed pipes fill their OS buffer
+  // (~64KB on Linux) and then BLOCK the child on its next write — the node
+  // appears healthy on HTTP until its internal log flush backs up enough to
+  // stall the event loop, at which point it stops serving requests and dies.
+  // CI trips this easily (higher log volume, no interactive terminal).
+  //
+  // Write under e2e/playwright-report/ so the CI upload-artifact step picks
+  // the log up on failure, instead of losing it to the ephemeral $TMPDIR.
+  const reportDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "playwright-report");
+  await mkdir(reportDir, { recursive: true });
+  const logPath = join(reportDir, "aztec.log");
+  const logStream = createWriteStream(logPath, { flags: "a" });
+  proc.stdout?.pipe(logStream);
+  proc.stderr?.pipe(logStream);
+
   try {
     await Promise.all([
-      waitForReady(proc, DEFAULT_L1_RPC_URL, "L1 RPC"),
-      waitForReady(proc, DEFAULT_NODE_URL, "Aztec node"),
+      waitForRpc(proc, DEFAULT_L1_RPC_URL, "L1 RPC", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_chainId",
+        params: [],
+      }),
+      waitForRpc(proc, DEFAULT_NODE_URL, "Aztec node", {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "node_getNodeInfo",
+        params: [],
+      }),
     ]);
   } catch (err) {
     proc.kill("SIGTERM");
@@ -44,20 +71,39 @@ export async function startLocalNetwork(): Promise<LocalNetwork> {
     stop: async () => {
       proc.kill("SIGTERM");
       await new Promise<void>((resolve) => proc.once("exit", () => resolve()));
+      logStream.end();
       await rm(workDir, { recursive: true, force: true });
     },
   };
 }
 
-async function waitForReady(proc: ChildProcess, url: string, label: string): Promise<void> {
+/**
+ * Poll a JSON-RPC endpoint until it returns a successful result (not just an
+ * HTTP response). The old TCP-accept probe passed as soon as the port was open,
+ * which on a slow CI runner can be minutes before the node is actually ready
+ * to serve `sendTx` / `getNodeInfo`.
+ */
+async function waitForRpc(
+  proc: ChildProcess,
+  url: string,
+  label: string,
+  request: { jsonrpc: "2.0"; id: number; method: string; params: unknown[] },
+): Promise<void> {
   const deadline = Date.now() + READINESS_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (proc.exitCode !== null) {
       throw new Error(`local-network exited early with code ${proc.exitCode}`);
     }
     try {
-      const res = await fetch(url, { method: "POST", body: "{}" });
-      if (res.status < 500) return;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { result?: unknown; error?: unknown };
+        if (body.result !== undefined) return;
+      }
     } catch {
       // not ready yet
     }

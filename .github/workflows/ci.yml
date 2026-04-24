@@ -76,7 +76,7 @@ jobs:
       - name: Install Playwright system deps
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          version: playwright-deps-v1
+          version: playwright-deps-v2
           packages: >-
             fonts-freefont-ttf fonts-ipafont-gothic fonts-liberation
             fonts-noto-color-emoji fonts-tlwg-loma-otf fonts-unifont
@@ -98,19 +98,38 @@ jobs:
             libxext6 libxfixes3 libxi6 libxkbcommon0 libxml2 libxrandr2
             libxrender1 libxslt1.1 xfonts-cyrillic xfonts-scalable xvfb
 
-      # Downloads chromium (and any other browser Playwright's config
-      # references) into ~/.cache/ms-playwright. The setup action already
-      # caches that directory, so this is a no-op on a warm cache.
+      # Cache the downloaded browser binaries. Keyed on the @playwright/test
+      # version so any bump busts the cache automatically (Playwright pins a
+      # specific chromium build per release and refuses to use a mismatched
+      # one). Reads the resolved version from the `yarn.lock` entry, which
+      # exists regardless of how yarn lays down node_modules (hoisted vs not).
+      - name: Resolve Playwright version
+        id: playwright-version
+        shell: bash
+        run: |
+          VERSION=$(awk '/^"@playwright\/test@/{found=1; next} found && /version:/{print $2; exit}' yarn.lock | tr -d '"')
+          if [ -z "$VERSION" ]; then
+            echo "Failed to resolve @playwright/test version from yarn.lock" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: yarn workspace @gregojuice/e2e exec playwright install
 
-      # Replays from the turbo cache populated by the `build` job (same SHA,
-      # same host-runner cache scope) — no actual compilation happens here.
-      - name: Build workspace
-        run: yarn build --output-logs=new-only
-
       - name: Run e2e tests
-        run: yarn workspace @gregojuice/e2e test
+        # --fail-on-flaky-tests makes Playwright exit 1 when a test passes only
+        # on retry. Default behaviour marks flakies as "passed" which hides
+        # real regressions.
+        run: yarn workspace @gregojuice/e2e test --fail-on-flaky-tests
         env:
           CI: "1"
 
@@ -119,5 +138,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: e2e/playwright-report/
+          # html-report/   — Playwright's HTML report (traces, videos)
+          # playwright-report/aztec.log — our sidecar log (aztec node stdout/err)
+          path: |
+            e2e/html-report/
+            e2e/playwright-report/
           retention-days: 7

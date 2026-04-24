@@ -16,12 +16,12 @@
     "deploy-fpc:testnet": "node --experimental-transform-types scripts/deploy-fpc.ts --network testnet"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
-    "@aztec/entrypoints": "v4.3.0-nightly.20260420",
-    "@aztec/foundation": "v4.3.0-nightly.20260420",
-    "@aztec/l1-artifacts": "v4.3.0-nightly.20260420",
-    "@aztec/stdlib": "v4.3.0-nightly.20260420",
-    "@aztec/wallet-sdk": "v4.3.0-nightly.20260420",
+    "@aztec/aztec.js": "v4.3.0-nightly.20260423",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260423",
+    "@aztec/foundation": "v4.3.0-nightly.20260423",
+    "@aztec/l1-artifacts": "v4.3.0-nightly.20260423",
+    "@aztec/stdlib": "v4.3.0-nightly.20260423",
+    "@aztec/wallet-sdk": "v4.3.0-nightly.20260423",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@gregojuice/aztec": "workspace:*",
@@ -35,17 +35,17 @@
     "viem": "^2.23.0"
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.3.0-nightly.20260420",
-    "@aztec/aztec-node": "v4.3.0-nightly.20260420",
-    "@aztec/constants": "v4.3.0-nightly.20260420",
-    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260420",
-    "@aztec/pxe": "v4.3.0-nightly.20260420",
-    "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "@aztec/accounts": "v4.3.0-nightly.20260423",
+    "@aztec/aztec-node": "v4.3.0-nightly.20260423",
+    "@aztec/constants": "v4.3.0-nightly.20260423",
+    "@aztec/noir-contracts.js": "v4.3.0-nightly.20260423",
+    "@aztec/pxe": "v4.3.0-nightly.20260423",
+    "@aztec/wallets": "v4.3.0-nightly.20260423",
     "@types/react": "^19.0.6",
     "@types/react-dom": "^19.0.3",
-    "@vitejs/plugin-react-swc": "^3.7.2",
+    "@vitejs/plugin-react": "^6.0.1",
     "typescript": "~5.7.3",
-    "vite": "^7.1.4",
-    "vite-plugin-node-polyfills": "^0.24.0"
+    "vite": "^8.0.10",
+    "vite-plugin-node-polyfills": "^0.26.0"
   }
 }

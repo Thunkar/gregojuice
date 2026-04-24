@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "../fixtures/test-base.ts";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";

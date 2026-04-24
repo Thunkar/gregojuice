@@ -76,7 +76,13 @@ export function AztecWalletProvider({ children }: { children: ReactNode }) {
 
   const initEmbeddedWallet = useCallback(async (): Promise<EmbeddedWallet> => {
     const node = getAztecNode(activeNetwork.aztecNodeUrl);
-    return EmbeddedWallet.create(node, { pxeConfig: { proverEnabled: true } });
+    // `VITE_DISABLE_PROVER=1` turns off bb.js proving — only used in CI e2e
+    // where proving starves the Aztec node's event loop on the 4 vCPU runner.
+    const proverEnabled = import.meta.env.VITE_DISABLE_PROVER !== "1";
+    return EmbeddedWallet.create(node, {
+      inspect: import.meta.env.DEV,
+      pxe: { proverEnabled },
+    });
   }, [activeNetwork]);
 
   const refreshFeeJuiceBalance = useCallback(async () => {

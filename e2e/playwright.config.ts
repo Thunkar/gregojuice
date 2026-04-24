@@ -26,19 +26,49 @@ const slowMo = process.env.E2E_SLOW_MO ? Number(process.env.E2E_SLOW_MO) : undef
 
 const desktopChrome = { ...devices["Desktop Chrome"] };
 
+function appServer(
+  workspace: string,
+  port: number,
+): {
+  command: string;
+  url: string;
+  reuseExistingServer: boolean;
+  timeout: number;
+  stdout: "pipe";
+  stderr: "pipe";
+} {
+  return {
+    command: `yarn workspace ${workspace} dev --port ${port} --strictPort`,
+    url: `http://localhost:${port}`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    stdout: "pipe",
+    stderr: "pipe",
+  };
+}
+
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
+  // Separate Playwright's HTML reporter from our ad-hoc sidecar artifacts
+  // (aztec.log written by local-network.ts). The HTML reporter wipes its
+  // outputFolder on startup, which was eating aztec.log when both lived in
+  // `playwright-report/`.
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never", outputFolder: "html-report" }]]
+    : [["html", { outputFolder: "html-report" }]],
   timeout: 5 * 60_000,
   expect: { timeout: 30_000 },
   globalSetup: "./fixtures/global-setup.ts",
   globalTeardown: "./fixtures/global-teardown.ts",
   use: {
-    trace: "on-first-retry",
+    // `retain-on-failure` keeps traces for failing attempts (including flakes
+    // that later pass on retry). `on-first-retry` only captures the retry,
+    // which is usually the passing run — less useful for debugging.
+    trace: "retain-on-failure",
     video: "retain-on-failure",
     headless: !headed,
     launchOptions: slowMo ? { slowMo } : undefined,
@@ -77,29 +107,8 @@ export default defineConfig({
     },
   ],
   webServer: [
-    {
-      command: "yarn workspace @gregojuice/swap dev --port 5175 --strictPort",
-      url: "http://localhost:5175",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: "ignore",
-      stderr: "pipe",
-    },
-    {
-      command: "yarn workspace @gregojuice/bridge dev --port 5173 --strictPort",
-      url: "http://localhost:5173",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: "ignore",
-      stderr: "pipe",
-    },
-    {
-      command: "yarn workspace @gregojuice/fpc-operator dev --port 5174 --strictPort",
-      url: "http://localhost:5174",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: "ignore",
-      stderr: "pipe",
-    },
+    appServer("@gregojuice/swap", 5175),
+    appServer("@gregojuice/bridge", 5173),
+    appServer("@gregojuice/fpc-operator", 5174),
   ],
 });

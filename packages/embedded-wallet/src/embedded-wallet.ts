@@ -12,7 +12,7 @@
  */
 
 import { collectOffchainEffects, type ExecutionPayload, TxStatus } from "@aztec/stdlib/tx";
-import type { AztecNode } from "@aztec/aztec.js/node";
+import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
 import {
   type InteractionWaitOptions,
   NO_WAIT,
@@ -31,24 +31,128 @@ import {
   type EmbeddedWalletOptions,
   type AccountType,
 } from "@aztec/wallets/embedded";
+import { AztecSQLiteOPFSStore } from "@aztec/kv-store/sqlite-opfs";
+import { createLogger } from "@aztec/foundation/log";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import {
   createSchnorrInitializerlessAccount,
   computeContractSalt,
   serializeSigningKey,
 } from "./initializerless-account";
+import { registerSqliteInspectors } from "./sqlite-inspector";
 import { GasSettings } from "@aztec/stdlib/gas";
 import type { AztecAddress } from "@aztec/stdlib/aztec-address";
 
 /** The initializerless type string — cast to AccountType for WalletDB storage. */
 export const INITIALIZERLESS_TYPE = "schnorr-initializerless" as AccountType;
 
+/** Extra options supported by this wallet on top of `EmbeddedWalletOptions`. */
+export type EmbeddedWalletExtraOptions = {
+  /**
+   * When true, register dev-only inspectors on `window`:
+   *   - `window.__aztecStores` — ad-hoc SQL + `.sqlite` export for pxe/wallet stores
+   *   - `window.__txProfiler` — live tx-progress history + subscribe + phase roll-up
+   *
+   * Not compatible with `ephemeral: true` — no sqlite-opfs store exists to inspect.
+   */
+  inspect?: boolean;
+};
+
 export class EmbeddedWallet extends EmbeddedWalletBase {
-  static override create<T extends EmbeddedWalletBase = EmbeddedWallet>(
+  /**
+   * Our own reference to the walletDB store. The SDK's `WalletDB` doesn't expose
+   * its backing store, so `stop()` has no way to close it — we capture it here so
+   * our overridden `stop()` can release the SAH Pool's OPFS lock on the way out.
+   */
+  #walletStore?: { close?: () => Promise<void> };
+
+  /**
+   * Overrides `EmbeddedWalletBase.create` with our defaults:
+   *   - `proverEnabled: true` by default (we want proving on against local-network);
+   *     caller can opt out by passing `pxe: { proverEnabled: false }`.
+   *   - When not `ephemeral`, default `pxe.store` and `walletDb.store` to
+   *     `AztecSQLiteOPFSStore` instances scoped by rollup address. A caller may still
+   *     inject their own stores and they win.
+   *   - `inspect: true` registers the dev window hooks after creation.
+   */
+  static override async create<T extends EmbeddedWalletBase = EmbeddedWallet>(
     nodeOrUrl: string | AztecNode,
-    options?: EmbeddedWalletOptions,
+    options: EmbeddedWalletOptions & EmbeddedWalletExtraOptions = {},
   ): Promise<T> {
-    return super.create<T>(nodeOrUrl, options);
+    const { inspect, ...rest } = options;
+
+    if (inspect && rest.ephemeral) {
+      throw new Error(
+        "`inspect: true` is incompatible with `ephemeral: true` (no persistent store to inspect)",
+      );
+    }
+
+    const node = typeof nodeOrUrl === "string" ? createAztecNodeClient(nodeOrUrl) : nodeOrUrl;
+    const rootLogger = rest.logger ?? createLogger("embedded-wallet");
+
+    // Prover on by default; caller can opt out by passing `pxe: { proverEnabled: false }`
+    // (e.g. apps do this under VITE_DISABLE_PROVER=1 for e2e CI where proving
+    // starves the node's event loop).
+    const pxeOptions = { proverEnabled: true, ...rest.pxe };
+
+    let finalOptions: EmbeddedWalletOptions;
+    let pxeStore: AztecSQLiteOPFSStore | undefined;
+    let walletStore: AztecSQLiteOPFSStore | undefined;
+
+    if (rest.ephemeral) {
+      finalOptions = { ...rest, pxe: pxeOptions };
+    } else {
+      const { rollupAddress } = await node.getL1ContractAddresses();
+      const rollup = rollupAddress.toString();
+
+      // Only open defaults the caller didn't already fill in.
+      pxeStore =
+        (pxeOptions.store as AztecSQLiteOPFSStore | undefined) ??
+        (await AztecSQLiteOPFSStore.open(
+          rootLogger.createChild("pxe:data:sqlite-opfs"),
+          `pxe_data_${rollup}`,
+          false,
+          `.aztec-kv-pxe-${rollup}`,
+        ));
+      walletStore =
+        (rest.walletDb?.store as AztecSQLiteOPFSStore | undefined) ??
+        (await AztecSQLiteOPFSStore.open(
+          rootLogger.createChild("wallet:data:sqlite-opfs"),
+          `wallet_data_${rollup}`,
+          false,
+          `.aztec-kv-wallet-${rollup}`,
+        ));
+
+      finalOptions = {
+        ...rest,
+        logger: rootLogger,
+        pxe: { ...pxeOptions, store: pxeStore },
+        walletDb: { ...rest.walletDb, store: walletStore },
+      };
+    }
+
+    const wallet = await super.create<T>(node, finalOptions);
+
+    if (walletStore) {
+      (wallet as unknown as EmbeddedWallet).#walletStore = walletStore;
+    }
+
+    if (inspect && pxeStore && walletStore) {
+      registerSqliteInspectors({ pxe: pxeStore, wallet: walletStore });
+    }
+
+    return wallet;
+  }
+
+  /**
+   * The SDK's `stop()` closes the PXE (and its store) but not the walletDB store.
+   * Close it here so the SAH Pool's OPFS lock is released on the way out.
+   */
+  override async stop(): Promise<void> {
+    await super.stop();
+    if (this.#walletStore?.close) {
+      await this.#walletStore.close();
+    }
   }
 
   /**

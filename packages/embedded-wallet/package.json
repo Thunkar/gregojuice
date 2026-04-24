@@ -26,12 +26,13 @@
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@aztec/aztec.js": "v4.3.0-nightly.20260420",
-    "@aztec/entrypoints": "v4.3.0-nightly.20260420",
-    "@aztec/foundation": "v4.3.0-nightly.20260420",
-    "@aztec/stdlib": "v4.3.0-nightly.20260420",
-    "@aztec/wallet-sdk": "v4.3.0-nightly.20260420",
-    "@aztec/wallets": "v4.3.0-nightly.20260420",
+    "@aztec/aztec.js": "v4.3.0-nightly.20260423",
+    "@aztec/entrypoints": "v4.3.0-nightly.20260423",
+    "@aztec/foundation": "v4.3.0-nightly.20260423",
+    "@aztec/kv-store": "v4.3.0-nightly.20260423",
+    "@aztec/stdlib": "v4.3.0-nightly.20260423",
+    "@aztec/wallet-sdk": "v4.3.0-nightly.20260423",
+    "@aztec/wallets": "v4.3.0-nightly.20260423",
     "@gregojuice/aztec": "workspace:*"
   },
   "peerDependencies": {
@@ -55,7 +56,7 @@
     }
   },
   "devDependencies": {
-    "@aztec/accounts": "v4.3.0-nightly.20260420",
+    "@aztec/accounts": "v4.3.0-nightly.20260423",
     "@emotion/react": "^11.14.0",
     "@gregojuice/common": "workspace:*",
     "@mui/icons-material": "^6.3.1",

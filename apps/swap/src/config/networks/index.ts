@@ -1,8 +1,12 @@
 /**
  * Swap's per-network config is richer than bridge/fpc-operator — each JSON
  * also carries the addresses of the deployed contracts + the SubscriptionFPC
- * config. Loaded the same way (glob + eager) so adding a new network is just
- * dropping in a new JSON.
+ * config. Loaded via glob so adding a new network is just dropping in a new
+ * JSON.
+ *
+ * Network presence is a *build concern*: production deploys delete
+ * `local.json` before building, so the bundle only carries real networks.
+ * Local dev / e2e leave `local.json` in place and it becomes the default.
  */
 
 export interface SubscriptionFPCConfig {
@@ -36,11 +40,23 @@ export interface NetworkConfig {
 
 const modules = import.meta.glob<{ default: NetworkConfig }>("./*.json", { eager: true });
 
+/**
+ * Order of preference: local first (if present), then testnet, then anything
+ * else alphabetically. `getDefaultNetwork` returns `NETWORKS[0]`, so this
+ * ordering is what picks the default network on first load.
+ */
+const PREFERRED_ORDER = ["local", "testnet"];
+
 const NETWORKS: NetworkConfig[] = Object.values(modules)
   .map((m) => m.default)
-  .filter((n) => n && typeof n.id === "string")
-  // Local only makes sense in dev; drop it from production bundles.
-  .filter((n) => !import.meta.env.PROD || n.id !== "local");
+  .filter((n): n is NetworkConfig => !!n && typeof n.id === "string")
+  .sort((a, b) => {
+    const ai = PREFERRED_ORDER.indexOf(a.id);
+    const bi = PREFERRED_ORDER.indexOf(b.id);
+    const aw = ai === -1 ? PREFERRED_ORDER.length : ai;
+    const bw = bi === -1 ? PREFERRED_ORDER.length : bi;
+    return aw - bw || a.id.localeCompare(b.id);
+  });
 
 export function getNetworks(): NetworkConfig[] {
   return NETWORKS;
@@ -49,15 +65,10 @@ export function getNetworks(): NetworkConfig[] {
 export function getDefaultNetwork(): NetworkConfig {
   if (NETWORKS.length === 0) {
     throw new Error(
-      'No network configurations found. Run "yarn deploy:local" / "yarn deploy:devnet" first.',
+      'No network configurations found. Run "yarn deploy:local" / "yarn deploy:testnet" first.',
     );
   }
-  // Dev prefers local; prod prefers devnet; otherwise whatever's first.
-  if (import.meta.env.DEV) {
-    const local = NETWORKS.find((n) => n.id === "local");
-    if (local) return local;
-  }
-  return NETWORKS.find((n) => n.id === "devnet") ?? NETWORKS[0];
+  return NETWORKS[0];
 }
 
 /** @deprecated Use `getNetworks` directly. */

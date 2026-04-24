@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { test, expect } from "../fixtures/test-base.ts";
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
@@ -143,18 +144,23 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
   await page.getByTestId("app-signup-contract-address").fill(args.contractAddress);
   await page.getByTestId("app-signup-register").click();
 
-  // Race: success alert or error alert.
-  const registerSuccess = page.getByTestId("app-signup-register-success");
+  // Race: step-1 transition (success) or register-error alert (failure).
+  //
+  // The register handler calls `setContractInstance()` and `setActiveStep(1)`
+  // in the same microtask, so the success alert renders inside step 0 *as*
+  // step 0 collapses — in CI the alert is often never "visible" to Playwright,
+  // it just flashes through a hidden mount. Watching `data-active-step="1"`
+  // instead is equivalent and race-free. Error alert is in step 0 too, but
+  // when register fails step never advances, so the error stays visible.
   const registerError = page.getByTestId("app-signup-register-error");
   await Promise.race([
-    registerSuccess.waitFor({ state: "visible", timeout: 60_000 }),
-    registerError.waitFor({ state: "visible", timeout: 60_000 }).then(async () => {
+    expect(wizard)
+      .toHaveAttribute("data-active-step", "1", { timeout: 180_000 })
+      .then(() => {}),
+    registerError.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {
       throw new Error(`register failed: ${await registerError.textContent()}`);
     }),
   ]);
-
-  // The register handler auto-advances to step 1.
-  await expect(wizard).toHaveAttribute("data-active-step", "1", { timeout: 10_000 });
 
   // ── Step 1: pick the function ──────────────────────────────────────
   await page.getByTestId("app-signup-function-select-display").click();
@@ -253,7 +259,10 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
 }
 
 test.describe.serial("fpc signs up sponsored apps", () => {
-  test.slow();
+  // Two signups × (calibrate ≤ 240s + submit ≤ 300s) is already 18 min in the
+  // worst case — `test.slow()`'s ×3 (15 min) cuts it too close on CI. Bump to
+  // 25 min for headroom on slow proof generation.
+  test.setTimeout(25 * 60_000);
 
   // Mint BEFORE the browser starts. If we ran this inside the test body
   // the `page` fixture would instantiate first, popping an empty browser

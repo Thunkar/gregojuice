@@ -245,7 +245,14 @@ export function useBridgeWizard() {
       default:
         return;
     }
-    window.parent.postMessage(msg, parentOrigin ?? "*");
+    // Prefer `window.location.ancestorOrigins[0]` over `document.referrer`:
+    // when the iframe navigates after load (e.g. props change → src update),
+    // `document.referrer` becomes the iframe's own previous URL, which makes
+    // `postMessage(msg, parentOrigin)` reject with "target origin does not
+    // match recipient". `ancestorOrigins` always reflects the actual parent.
+    // Fall back to `*` — our messages carry non-sensitive status only.
+    const target = window.location.ancestorOrigins?.[0] ?? parentOrigin ?? "*";
+    window.parent.postMessage(msg, target);
   }, [bridge.type, isIframe, parentOrigin]);
 
   // ── L1 info fetching ──────────────────────────────────────────────
