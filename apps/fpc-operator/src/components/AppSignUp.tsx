@@ -44,12 +44,12 @@ import {
   type CalibrationResult as CalibrationData,
 } from "../services/calibration";
 import {
-  FPC_SUBSCRIBE_OVERHEAD_L2_GAS,
-  FPC_SUBSCRIBE_OVERHEAD_DA_GAS,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
   FPC_TEARDOWN_L2_GAS,
   FPC_TEARDOWN_DA_GAS,
-  PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF,
-  repricePrivateSideEffects,
 } from "@gregojuice/aztec/fpc-gas-constants";
 import { FunctionType } from "@aztec/aztec.js/abi";
 import { ArtifactUpload } from "./ArtifactUpload";
@@ -120,9 +120,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     daGas: "",
     l2Gas: "",
   });
-  const [manualNoteHashes, setManualNoteHashes] = useState("0");
-  const [manualNullifiers, setManualNullifiers] = useState("0");
-  const [manualL2ToL1Msgs, setManualL2ToL1Msgs] = useState("0");
 
   const isPrivateFunction = selectedFunction?.functionType === FunctionType.PRIVATE;
 
@@ -316,20 +313,24 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     const standaloneDA = parseInt(manualStandaloneGas.daGas) || 0;
     const standaloneL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
 
-    const totalDA = standaloneDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
-    let totalL2 = standaloneL2 + FPC_SUBSCRIBE_OVERHEAD_L2_GAS;
-
-    if (isPrivateFunction) {
-      totalL2 += PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF;
-      totalL2 += repricePrivateSideEffects(
-        parseInt(manualNoteHashes) || 0,
-        parseInt(manualNullifiers) || 0,
-        parseInt(manualL2ToL1Msgs) || 0,
-      );
-    }
+    // The standalone gasLimits already bake in the tx's pricing regime
+    // (PUBLIC_TX overhead + AVM rates if the fn has a public call, PRIVATE_TX
+    // overhead + private rates otherwise). Sponsoring adds only the FPC's own
+    // overhead, which itself depends on whether the sponsored call enqueues
+    // a public call — the FPC's internal note ops get repriced at AVM rates
+    // when there is one. Pick the matching pre-measured constant.
+    const fpcOverheadDA = isPrivateFunction
+      ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE
+      : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC;
+    const fpcOverheadL2 = isPrivateFunction
+      ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE
+      : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
 
     const result: CalibrationData = {
-      gasLimits: { daGas: totalDA, l2Gas: totalL2 },
+      gasLimits: {
+        daGas: standaloneDA + fpcOverheadDA,
+        l2Gas: standaloneL2 + fpcOverheadL2,
+      },
       teardownGasLimits: {
         daGas: FPC_TEARDOWN_DA_GAS,
         l2Gas: FPC_TEARDOWN_L2_GAS,
@@ -887,44 +888,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                   />
                 </Box>
 
-                {isPrivateFunction && (
-                  <>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ mb: 0.5, display: "block" }}
-                    >
-                      Side effects (for L2 gas repricing — private → public rates)
-                    </Typography>
-                    <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-                      <TextField
-                        label="Note hashes"
-                        type="number"
-                        value={manualNoteHashes}
-                        onChange={(e) => setManualNoteHashes(e.target.value)}
-                        size="small"
-                        sx={{ flex: 1 }}
-                      />
-                      <TextField
-                        label="Nullifiers"
-                        type="number"
-                        value={manualNullifiers}
-                        onChange={(e) => setManualNullifiers(e.target.value)}
-                        size="small"
-                        sx={{ flex: 1 }}
-                      />
-                      <TextField
-                        label="L2→L1 msgs"
-                        type="number"
-                        value={manualL2ToL1Msgs}
-                        onChange={(e) => setManualL2ToL1Msgs(e.target.value)}
-                        size="small"
-                        sx={{ flex: 1 }}
-                      />
-                    </Box>
-                  </>
-                )}
-
                 {/* Live breakdown */}
                 {(manualStandaloneGas.daGas || manualStandaloneGas.l2Gas) && (
                   <Box
@@ -941,72 +904,34 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     {(() => {
                       const sDA = parseInt(manualStandaloneGas.daGas) || 0;
                       const sL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
-                      const reprice = isPrivateFunction
-                        ? repricePrivateSideEffects(
-                            parseInt(manualNoteHashes) || 0,
-                            parseInt(manualNullifiers) || 0,
-                            parseInt(manualL2ToL1Msgs) || 0,
-                          )
-                        : 0;
-                      const totalDA = sDA + FPC_SUBSCRIBE_OVERHEAD_DA_GAS;
-                      const totalL2 =
-                        sL2 +
-                        FPC_SUBSCRIBE_OVERHEAD_L2_GAS +
-                        (isPrivateFunction ? PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF + reprice : 0);
+                      const overheadDA = isPrivateFunction
+                        ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE
+                        : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC;
+                      const overheadL2 = isPrivateFunction
+                        ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE
+                        : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
+                      const totalDA = sDA + overheadDA;
+                      const totalL2 = sL2 + overheadL2;
                       return (
                         <>
                           <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                            }}
+                            sx={{ display: "flex", justifyContent: "space-between" }}
                           >
                             <span>Standalone</span>
                             <span>
-                              DA={sDA.toLocaleString()} L2=
-                              {sL2.toLocaleString()}
+                              DA={sDA.toLocaleString()} L2={sL2.toLocaleString()}
                             </span>
                           </Box>
                           <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                            }}
+                            sx={{ display: "flex", justifyContent: "space-between" }}
                           >
-                            <span>+ FPC overhead</span>
                             <span>
-                              DA=+
-                              {FPC_SUBSCRIBE_OVERHEAD_DA_GAS.toLocaleString()} L2=+
-                              {FPC_SUBSCRIBE_OVERHEAD_L2_GAS.toLocaleString()}
+                              + FPC overhead ({isPrivateFunction ? "private" : "public"})
+                            </span>
+                            <span>
+                              DA=+{overheadDA.toLocaleString()} L2=+{overheadL2.toLocaleString()}
                             </span>
                           </Box>
-                          {isPrivateFunction && (
-                            <>
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                }}
-                              >
-                                <span>+ Overhead diff</span>
-                                <span>
-                                  L2=+
-                                  {PRIVATE_TO_PUBLIC_L2_OVERHEAD_DIFF.toLocaleString()}
-                                </span>
-                              </Box>
-                              {reprice > 0 && (
-                                <Box
-                                  sx={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                  }}
-                                >
-                                  <span>+ Repricing</span>
-                                  <span>L2=+{reprice.toLocaleString()}</span>
-                                </Box>
-                              )}
-                            </>
-                          )}
                           <Box
                             sx={{
                               display: "flex",
@@ -1020,15 +945,11 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                           >
                             <span>= Total gasLimits</span>
                             <span>
-                              DA={totalDA.toLocaleString()} L2=
-                              {totalL2.toLocaleString()}
+                              DA={totalDA.toLocaleString()} L2={totalL2.toLocaleString()}
                             </span>
                           </Box>
                           <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                            }}
+                            sx={{ display: "flex", justifyContent: "space-between" }}
                           >
                             <span> Teardown</span>
                             <span>
