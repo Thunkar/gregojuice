@@ -36,7 +36,8 @@ import {
 import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
 import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import { TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
-import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "@gregojuice/aztec/subscription-fpc";
+import { Gas } from "@aztec/stdlib/gas";
 import { fetchFeeStats, computeMaxFeeFromP75 } from "@gregojuice/common/fees";
 
 import {
@@ -106,7 +107,7 @@ const SIGNUPS: SignupSpec[] = [
       contracts.gregoCoinPremium.toString(),
       10n,
       20n,
-      Fr.random().toString(),
+      0n,
     ],
   },
   {
@@ -159,9 +160,20 @@ async function main() {
 
   const resolved = await resolveSignups(SIGNUPS, contracts);
   // Matches the shape the swap app expects at runtime:
-  // { [contractAddress]: { [functionSelector]: configIndex } }.
-  // See apps/swap/src/config/networks/index.ts → SubscriptionFPCConfig.
-  const functions: Record<string, Record<string, number>> = {};
+  //   { [contractAddress]: { [functionSelector]: SubscriptionFunctionConfig } }.
+  // See apps/swap/src/config/networks/index.ts. `gasLimits` is the sponsored
+  // fn's own gas (no FPC overhead) — the helpers add the subscribe/sponsor
+  // overhead at call time.
+  const functions: Record<
+    string,
+    Record<
+      string,
+      {
+        configIndex: number;
+        gasLimits: { daGas: number; l2Gas: number };
+      }
+    >
+  > = {};
 
   // Rows destined for the fpc-operator backup's `apps` array — same shape
   // the UI's Backup/Restore tab produces, so a script-written backup can be
@@ -171,7 +183,13 @@ async function main() {
   for (const signup of resolved) {
     console.error(`\nSigning up ${signup.aliasKey}.${signup.functionName}...`);
 
-    const maxFee = await pickMaxFee({ network, fpc, wallet, admin, node, signup, contracts });
+    const { maxFee, gasLimits } = await pickSignupParams({
+      network,
+      wallet,
+      admin,
+      signup,
+      contracts,
+    });
 
     await fpc.contract.methods
       .sign_up(
@@ -184,11 +202,16 @@ async function main() {
       )
       .send({ from: admin, fee: { paymentMethod } });
 
-    console.error(`  sign_up ok — maxFee=${maxFee}`);
+    console.error(
+      `  sign_up ok — maxFee=${maxFee} gasLimits=${gasLimits.daGas}/${gasLimits.l2Gas}`,
+    );
 
     const key = signup.contractAddress.toString();
     functions[key] = functions[key] ?? {};
-    functions[key][signup.selector.toString()] = 0;
+    functions[key][signup.selector.toString()] = {
+      configIndex: 0,
+      gasLimits,
+    };
 
     backupApps.push({
       appAddress: key,
@@ -197,6 +220,7 @@ async function main() {
       maxUses: signup.maxUses,
       maxFee: maxFee.toString(),
       maxUsers: signup.maxUsers,
+      gasLimits,
       createdAt: Date.now(),
     });
   }
@@ -309,46 +333,64 @@ async function resolveSignups(
   return out;
 }
 
-async function pickMaxFee(params: {
+/**
+ * Runs calibration and derives the signup params. Calibration measures the
+ * sponsored fn's standalone gas, which we persist into the swap config so
+ * runtime callers can add the appropriate FPC overhead. `maxFee` on
+ * testnet is sized from the P75 of per-gas prices against the full
+ * subscribe-path cost; on local it falls back to a hardcoded policy value
+ * because there's no P75 feed.
+ */
+async function pickSignupParams(params: {
   network: NetworkName;
-  fpc: SubscriptionFPC;
   wallet: EmbeddedWallet;
   admin: AztecAddress;
-  node: AztecNode;
   signup: ResolvedSignup;
   contracts: Record<string, AztecAddress>;
-}): Promise<bigint> {
-  const { network, fpc, wallet, admin, node, signup, contracts } = params;
-  if (network === "local") {
-    return SIGNUP_POLICY.localMaxFee;
-  }
+}): Promise<{
+  maxFee: bigint;
+  gasLimits: { daGas: number; l2Gas: number };
+}> {
+  const { network, wallet, admin, signup, contracts } = params;
 
-  // Build a realistic sample call to measure gas on.
   const contract = Contract.at(signup.contractAddress, signup.artifact, wallet);
   const args = signup.sampleArgs({
     admin,
     contractAddress: signup.contractAddress,
     contracts,
   });
-  const sampleCall = await contract.methods[signup.functionName](...args).getFunctionCall();
+  const action = contract.methods[signup.functionName](...args);
+  const sampleCall = await action.getFunctionCall();
 
-  const { estimatedGas } = await fpc.helpers.calibrate({
-    adminWallet: wallet,
-    adminAddress: admin,
-    node,
-    sampleCall,
+  const { estimatedGas } = await action.simulate({
+    from: admin,
+    fee: { estimateGas: true, estimatedGasPadding: 0 },
   });
+  if (!estimatedGas) throw new Error("estimateGas returned no result");
+  const gasLimits = {
+    daGas: Number(estimatedGas.gasLimits.daGas),
+    l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+  };
 
-  const stats = await fetchFeeStats(network, P75_BLOCK_RANGE);
-  return computeMaxFeeFromP75(
-    { daGas: Number(estimatedGas.gasLimits.daGas), l2Gas: Number(estimatedGas.gasLimits.l2Gas) },
-    {
-      daGas: Number(estimatedGas.teardownGasLimits.daGas),
-      l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas),
-    },
-    stats,
-    P75_MULTIPLIER,
-  );
+  let maxFee: bigint;
+  if (network === "local") {
+    maxFee = SIGNUP_POLICY.localMaxFee;
+  } else {
+    // Size max_fee against the subscribe-path composite (standalone + FPC
+    // subscribe overhead) — that's the worst case the slot needs to cover.
+    const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+      fpcSubscribeOverhead(sampleCall),
+    );
+    const stats = await fetchFeeStats(network, P75_BLOCK_RANGE);
+    maxFee = computeMaxFeeFromP75(
+      { daGas: Number(subscribeTotal.daGas), l2Gas: Number(subscribeTotal.l2Gas) },
+      { daGas: 0, l2Gas: 0 },
+      stats,
+      P75_MULTIPLIER,
+    );
+  }
+
+  return { maxFee, gasLimits };
 }
 
 main().catch((err) => {

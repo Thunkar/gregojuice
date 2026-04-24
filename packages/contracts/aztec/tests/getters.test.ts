@@ -10,11 +10,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import { Fr } from "@aztec/aztec.js/fields";
+import { Gas } from "@aztec/stdlib/gas";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 import { poseidon2Hash } from "@aztec/foundation/crypto/poseidon";
 
-import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "../lib/subscription-fpc.js";
 import { setupTestContext, type FPCTestContext } from "./utils.js";
 
 const CONFIG_INDEX = 500000 + Math.floor(Math.random() * 100000);
@@ -32,6 +33,7 @@ beforeAll(async () => {
 describe("FPC getters", () => {
   let token: TokenContract;
   let configId: Fr;
+  let gasLimits: { daGas: number; l2Gas: number };
 
   beforeAll(async () => {
     // Deploy token
@@ -47,9 +49,8 @@ describe("FPC getters", () => {
     await token.methods.mint_to_private(ctx.admin, 10000n).send({ from: ctx.admin });
 
     // Compute config_id the same way the contract does
-    const sampleCall = await token.methods
-      .transfer_in_private(ctx.admin, ctx.admin, 1n, 0)
-      .getFunctionCall();
+    const sampleAction = token.methods.transfer_in_private(ctx.admin, ctx.admin, 1n, 0);
+    const sampleCall = await sampleAction.getFunctionCall();
 
     configId = await poseidon2Hash([
       sampleCall.to.toField(),
@@ -57,20 +58,25 @@ describe("FPC getters", () => {
       new Fr(CONFIG_INDEX),
     ]);
 
-    // Calibrate and sign up with 100 user slots
     const authwit = await ctx.wallet.createAuthWit(ctx.admin, {
       caller: ctx.fpc.address,
       call: sampleCall,
     });
 
-    const { maxFee } = await ctx.fpc.helpers.calibrate({
-      adminWallet: ctx.wallet,
-      adminAddress: ctx.admin,
-      node: ctx.node,
-      sampleCall,
-      feeMultiplier: 50,
-      authWitnesses: [authwit],
+    const { estimatedGas } = await sampleAction.with({ authWitnesses: [authwit] }).simulate({
+      from: ctx.admin,
+      fee: { estimateGas: true, estimatedGasPadding: 0 },
     });
+    if (!estimatedGas) throw new Error("estimateGas returned no result");
+    gasLimits = {
+      daGas: Number(estimatedGas.gasLimits.daGas),
+      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+    };
+    const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+      fpcSubscribeOverhead(sampleCall),
+    );
+    const currentFees = await ctx.node.getCurrentMinFees();
+    const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
 
     await ctx.fpc.methods
       .sign_up(sampleCall.to, sampleCall.selector, CONFIG_INDEX, MAX_USES, maxFee, MAX_USERS)
@@ -134,6 +140,7 @@ describe("FPC getters", () => {
       configIndex: CONFIG_INDEX,
       userAddress,
       authWitnesses: [authWit],
+      gasLimits,
     });
 
     // Check slots decreased by 1

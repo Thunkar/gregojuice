@@ -37,12 +37,7 @@ import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/Subscr
 import { useWallet } from "../contexts/WalletContext";
 import { useAliases } from "../contexts/AliasContext";
 import { signUpApp } from "../services/fpcService";
-import {
-  runCalibration,
-  retryCalibrationSimulation,
-  CalibrationError,
-  type CalibrationResult as CalibrationData,
-} from "../services/calibration";
+import { runCalibration, type CalibrationResult as CalibrationData } from "../services/calibration";
 import {
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
@@ -62,11 +57,10 @@ const STEPS = ["Contract Artifact & Address", "Select Function", "Calibration", 
 interface AppSignUpProps {
   fpc: SubscriptionFPCContract;
   adminAddress: AztecAddress;
-  fpcAddress: string;
   onSignedUp?: () => void;
 }
 
-export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSignUpProps) {
+export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
   const { wallet, node } = useWallet();
   const {
     contracts: storedContracts,
@@ -130,7 +124,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationData | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
-  const [calibrationIndex, setCalibrationIndex] = useState<number | null>(null);
 
   // Step 5: Sign up
   const [maxFeeFj, setMaxFeeFj] = useState("");
@@ -186,7 +179,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setSelectedFunction(fn);
     setArgValues(getDefaultArgs(fn));
     setCalibrationResult(null);
-    setCalibrationIndex(null);
     setActiveStep(2);
   };
 
@@ -278,31 +270,17 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setCalibrating(true);
     setCalibrationError(null);
     try {
-      const baseParams = {
+      const result = await runCalibration({
         adminWallet: wallet,
         adminAddress,
-        fpcAddress: AztecAddress.fromString(fpcAddress),
         artifact,
         contractInstance,
         selectedFunction,
         argValues,
-      };
-
-      const result =
-        calibrationIndex !== null
-          ? await retryCalibrationSimulation({
-              ...baseParams,
-              calibrationIndex,
-            })
-          : await runCalibration(baseParams);
-
+      });
       setCalibrationResult(result);
-      setCalibrationIndex(result.calibrationIndex);
       setActiveStep(3); // Auto-advance to Review & Sign Up
     } catch (err) {
-      if (err instanceof CalibrationError) {
-        setCalibrationIndex(err.calibrationIndex);
-      }
       setCalibrationError(err instanceof Error ? err.message : "Calibration failed");
     } finally {
       setCalibrating(false);
@@ -327,7 +305,8 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
       : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
 
     const result: CalibrationData = {
-      gasLimits: {
+      gasLimits: { daGas: standaloneDA, l2Gas: standaloneL2 },
+      subscribeGasLimits: {
         daGas: standaloneDA + fpcOverheadDA,
         l2Gas: standaloneL2 + fpcOverheadL2,
       },
@@ -335,7 +314,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         daGas: FPC_TEARDOWN_DA_GAS,
         l2Gas: FPC_TEARDOWN_L2_GAS,
       },
-      calibrationIndex: -1,
     };
     setCalibrationResult(result);
     setActiveStep(3);
@@ -355,6 +333,9 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         selectedFunction.name,
         selectedFunction.parameters,
       );
+      if (!calibrationResult) {
+        throw new Error("Calibration must complete before signing up");
+      }
       await signUpApp(fpc, adminAddress, {
         appAddress: contractInstance.address,
         selector,
@@ -362,6 +343,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         maxUses: parseInt(maxUses),
         maxFee: parseUnits(maxFeeFj, 18),
         maxUsers: parseInt(maxUsers),
+        gasLimits: calibrationResult.gasLimits,
       });
       // Persist the signed-up app as an aliased contract so it's available as
       // an arg pick for future calibrations.
@@ -381,7 +363,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         setContractAlias("");
         setArgValues([]);
         setCalibrationResult(null);
-        setCalibrationIndex(null);
         setCalibrationError(null);
         setMaxFeeFj("");
         setConfigIndex("0");
@@ -818,10 +799,10 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     {calibrating ? (
                       <>
                         <CircularProgress size={20} sx={{ mr: 1 }} />
-                        {calibrationIndex !== null ? "Retrying..." : "Calibrating..."}
+                        Calibrating...
                       </>
-                    ) : calibrationIndex !== null ? (
-                      "Retry Calibration"
+                    ) : calibrationResult ? (
+                      "Re-run Calibration"
                     ) : (
                       "Run Calibration"
                     )}

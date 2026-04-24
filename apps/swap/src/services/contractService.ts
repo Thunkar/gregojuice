@@ -406,12 +406,13 @@ export async function executeSponsoredSwap(
     )
     .getFunctionCall();
 
-  const configIndex = subFPC.functions[amm.address.toString()]?.[call.selector.toString()];
-  if (configIndex == null) {
+  const fnConfig = subFPC.functions[amm.address.toString()]?.[call.selector.toString()];
+  if (fnConfig == null) {
     throw new Error(
       `No subscription config found for AMM ${amm.address.toString()} selector ${call.selector.toString()}`,
     );
   }
+  const { configIndex, gasLimits } = fnConfig;
 
   const subscribed = hasSubscription(subFPC.address, configIndex, userAddress.toString());
 
@@ -420,6 +421,7 @@ export async function executeSponsoredSwap(
       call,
       configIndex,
       userAddress,
+      gasLimits,
     });
     return receipt;
   } else {
@@ -427,6 +429,7 @@ export async function executeSponsoredSwap(
       call,
       configIndex,
       userAddress,
+      gasLimits,
     });
     markSubscribed(subFPC.address, configIndex, userAddress.toString());
     return receipt;
@@ -486,8 +489,9 @@ export async function querySubscriptionStatus(
   // Derive configIndex + selector from the AMM's function map — take the first entry
   const ammFunctions = subFPC.functions[amm.address.toString()];
   if (!ammFunctions) return { kind: "no_fpc" };
-  const [[selectorHex, configIndex]] = Object.entries(ammFunctions);
-  if (configIndex == null) return { kind: "no_fpc" };
+  const [[selectorHex, fnConfig]] = Object.entries(ammFunctions);
+  if (fnConfig == null) return { kind: "no_fpc" };
+  const configIndex = fnConfig.configIndex;
 
   // Compute config_id the same way the contract does: poseidon2Hash([app, selector, index])
   const selector = FunctionSelector.fromString(selectorHex);
@@ -559,12 +563,13 @@ export async function executeDrip(
   }
 
   const call = await pop.methods.check_password_and_mint(password, recipient).getFunctionCall();
-  const configIndex = subFPC.functions[pop.address.toString()]?.[call.selector.toString()];
-  if (configIndex == null) {
+  const fnConfig = subFPC.functions[pop.address.toString()]?.[call.selector.toString()];
+  if (fnConfig == null) {
     throw new Error(
       `No subscription config found for ${pop.address.toString()} selector ${call.selector.toString()}`,
     );
   }
+  const { configIndex, gasLimits } = fnConfig;
 
   const accounts = await wallet.getAccounts();
   const userAddress = accounts[0]?.item ?? recipient;
@@ -573,6 +578,7 @@ export async function executeDrip(
     call,
     configIndex,
     userAddress,
+    gasLimits,
   });
   return receipt;
 }
@@ -604,20 +610,31 @@ export async function executeTransferOffchain(
     .transfer_in_private_deliver_offchain(fromAddress, recipient, amount, authwitNonce)
     .getFunctionCall();
 
-  const configIndex = subFPC.functions[token.address.toString()]?.[call.selector.toString()];
-  if (configIndex == null) {
+  const fnConfig = subFPC.functions[token.address.toString()]?.[call.selector.toString()];
+  if (fnConfig == null) {
     throw new Error(
       `No subscription config found for token ${token.address.toString()} selector ${call.selector.toString()}`,
     );
   }
+  const { configIndex, gasLimits } = fnConfig;
 
   const subscribed = hasSubscription(subFPC.address, configIndex, fromAddress.toString());
 
   let txResult: { receipt: TxReceipt; offchainMessages: OffchainMessage[] };
   if (subscribed) {
-    txResult = await fpc.helpers.sponsor({ call, configIndex, userAddress: fromAddress });
+    txResult = await fpc.helpers.sponsor({
+      call,
+      configIndex,
+      userAddress: fromAddress,
+      gasLimits,
+    });
   } else {
-    txResult = await fpc.helpers.subscribe({ call, configIndex, userAddress: fromAddress });
+    txResult = await fpc.helpers.subscribe({
+      call,
+      configIndex,
+      userAddress: fromAddress,
+      gasLimits,
+    });
     markSubscribed(subFPC.address, configIndex, fromAddress.toString());
   }
 

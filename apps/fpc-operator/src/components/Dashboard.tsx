@@ -37,7 +37,6 @@ export function Dashboard({ fpc, adminAddress, fpcAddress }: DashboardProps) {
         <AppSignUp
           fpc={fpc}
           adminAddress={adminAddress}
-          fpcAddress={fpcAddress}
           onSignedUp={() => setListKey((k) => k + 1)}
         />
       )}

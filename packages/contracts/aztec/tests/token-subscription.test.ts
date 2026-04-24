@@ -2,12 +2,13 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { Fr } from "@aztec/aztec.js/fields";
+import { Gas } from "@aztec/stdlib/gas";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 
 import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
 
-import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "../lib/subscription-fpc.js";
 import { setupTestContext, type FPCTestContext } from "./utils.js";
 
 const PRIVATE_INDEX = 100000 + Math.floor(Math.random() * 100000);
@@ -28,6 +29,7 @@ describe("Token transfer subscription (multi-use)", () => {
   let token: TokenContract;
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
+  let privateGasLimits: { daGas: number; l2Gas: number };
 
   beforeAll(async () => {
     const {
@@ -74,24 +76,28 @@ describe("Token transfer subscription (multi-use)", () => {
   });
 
   it("calibrates and sets up transfer_in_private as a sponsored app", async () => {
-    const sampleCall = await token.methods
-      .transfer_in_private(ctx.admin, recipientAddress, 10n, 0)
-      .getFunctionCall();
+    const sampleAction = token.methods.transfer_in_private(ctx.admin, recipientAddress, 10n, 0);
+    const sampleCall = await sampleAction.getFunctionCall();
 
     const authwit = await ctx.wallet.createAuthWit(ctx.admin, {
       caller: ctx.fpc.address,
       call: sampleCall,
     });
 
-    const { maxFee } = await ctx.fpc.helpers.calibrate({
-      adminWallet: ctx.wallet,
-      adminAddress: ctx.admin,
-      node: ctx.node,
-      sampleCall,
-      feeMultiplier: 50,
-      authWitnesses: [authwit],
+    const { estimatedGas } = await sampleAction.with({ authWitnesses: [authwit] }).simulate({
+      from: ctx.admin,
+      fee: { estimateGas: true, estimatedGasPadding: 0 },
     });
-
+    if (!estimatedGas) throw new Error("estimateGas returned no result");
+    privateGasLimits = {
+      daGas: Number(estimatedGas.gasLimits.daGas),
+      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+    };
+    const subscribeTotal = new Gas(privateGasLimits.daGas, privateGasLimits.l2Gas).add(
+      fpcSubscribeOverhead(sampleCall),
+    );
+    const currentFees = await ctx.node.getCurrentMinFees();
+    const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
     expect(maxFee).toBeGreaterThan(0n);
 
     await ctx.fpc.methods
@@ -117,6 +123,7 @@ describe("Token transfer subscription (multi-use)", () => {
       configIndex: PRIVATE_INDEX,
       userAddress,
       authWitnesses: [authWit],
+      gasLimits: privateGasLimits,
     });
   });
 
@@ -137,6 +144,7 @@ describe("Token transfer subscription (multi-use)", () => {
       configIndex: PRIVATE_INDEX,
       userAddress,
       authWitnesses: [authWit],
+      gasLimits: privateGasLimits,
     });
   });
 
@@ -161,6 +169,7 @@ describe("Token transfer subscription (multi-use)", () => {
 
 describe("Public token transfer subscription", () => {
   let token: TokenContract;
+  let publicGasLimits: { daGas: number; l2Gas: number };
 
   beforeAll(async () => {
     const {
@@ -176,8 +185,7 @@ describe("Public token transfer subscription", () => {
   });
 
   it("calibrates and sets up transfer_in_public as a sponsored app", async () => {
-    const authwitNonce = Fr.random();
-    const action = token.methods.transfer_in_public(ctx.admin, ctx.admin, 10n, authwitNonce);
+    const action = token.methods.transfer_in_public(ctx.admin, ctx.admin, 10n, 0n);
 
     // Set public authwit for calibration (FPC is the caller)
     const setAuthwit = await SetPublicAuthwitContractInteraction.create(
@@ -190,14 +198,20 @@ describe("Public token transfer subscription", () => {
 
     const sampleCall = await action.getFunctionCall();
 
-    const { maxFee } = await ctx.fpc.helpers.calibrate({
-      adminWallet: ctx.wallet,
-      adminAddress: ctx.admin,
-      node: ctx.node,
-      sampleCall,
-      feeMultiplier: 50,
+    const { estimatedGas } = await action.simulate({
+      from: ctx.admin,
+      fee: { estimateGas: true, estimatedGasPadding: 0 },
     });
-
+    if (!estimatedGas) throw new Error("estimateGas returned no result");
+    publicGasLimits = {
+      daGas: Number(estimatedGas.gasLimits.daGas),
+      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+    };
+    const subscribeTotal = new Gas(publicGasLimits.daGas, publicGasLimits.l2Gas).add(
+      fpcSubscribeOverhead(sampleCall),
+    );
+    const currentFees = await ctx.node.getCurrentMinFees();
+    const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
     expect(maxFee).toBeGreaterThan(0n);
 
     await ctx.fpc.methods
@@ -224,6 +238,7 @@ describe("Public token transfer subscription", () => {
       call: sampleCall,
       configIndex: PUBLIC_INDEX,
       userAddress: ctx.admin,
+      gasLimits: publicGasLimits,
     });
   });
 
@@ -246,6 +261,7 @@ describe("Public token transfer subscription", () => {
       call: sampleCall,
       configIndex: PUBLIC_INDEX,
       userAddress: ctx.admin,
+      gasLimits: publicGasLimits,
     });
   });
 });

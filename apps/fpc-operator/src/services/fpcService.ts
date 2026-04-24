@@ -64,6 +64,12 @@ export interface SignedUpApp {
   maxUses: number;
   maxFee: string;
   maxUsers: number;
+  /**
+   * Sponsored fn's own gas limits (no FPC overhead). Runtime callers add
+   * the subscribe/sponsor overhead at call time; swap persists this into
+   * its network config so the helpers can size each tx.
+   */
+  gasLimits: { daGas: number; l2Gas: number };
   createdAt: number;
 }
 
@@ -220,6 +226,7 @@ export interface SignUpParams {
   maxUses: number;
   maxFee: bigint;
   maxUsers: number;
+  gasLimits: { daGas: number; l2Gas: number };
 }
 
 export async function signUpApp(
@@ -245,6 +252,7 @@ export async function signUpApp(
     maxUses: params.maxUses,
     maxFee: params.maxFee.toString(),
     maxUsers: params.maxUsers,
+    gasLimits: params.gasLimits,
     createdAt: Date.now(),
   });
 }

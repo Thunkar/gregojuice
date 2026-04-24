@@ -108,12 +108,14 @@ export function CalibrationResult({
         ? BigInt(Math.round(Number(stats.maxFeePerL2Gas.p75)))
         : null;
 
-  // Compute max fee from calibrated gas limits × fee-per-gas × multiplier
+  // Compute max fee from calibrated subscribe-wrapped gas × fee-per-gas ×
+  // multiplier. Subscribe is the worst case; sponsor fits under the same
+  // cap since its overhead is smaller.
   useEffect(() => {
     if (resolvedFeePerDaGas === null || resolvedFeePerL2Gas === null) return;
     const multiplierBp = BigInt(Math.round(feeMultiplier * 100));
     const baseFee = computeMaxFee(
-      result.gasLimits,
+      result.subscribeGasLimits,
       result.teardownGasLimits,
       resolvedFeePerDaGas,
       resolvedFeePerL2Gas,
@@ -160,14 +162,14 @@ export function CalibrationResult({
 
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.5, mb: 1.5 }}>
         <Typography variant="caption" color="text.secondary">
-          Gas Limits
+          Gas Limits (subscribe)
         </Typography>
         <Typography
           variant="caption"
           sx={{ textAlign: "right", fontFamily: "monospace", fontSize: "0.7rem" }}
         >
-          DA: {result.gasLimits.daGas.toLocaleString()} · L2:{" "}
-          {result.gasLimits.l2Gas.toLocaleString()}
+          DA: {result.subscribeGasLimits.daGas.toLocaleString()} · L2:{" "}
+          {result.subscribeGasLimits.l2Gas.toLocaleString()}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           Teardown

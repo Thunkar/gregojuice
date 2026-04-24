@@ -1,5 +1,3 @@
-import type { AztecNode } from "@aztec/aztec.js/node";
-import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import {
   FunctionType,
@@ -9,8 +7,7 @@ import {
 } from "@aztec/aztec.js/abi";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import type { AuthWitness } from "@aztec/stdlib/auth-witness";
-import { Gas, type GasSettings } from "@aztec/stdlib/gas";
-import { FPC_TEARDOWN_L2_GAS, FPC_TEARDOWN_DA_GAS } from "./fpc-gas-constants.js";
+import { Gas } from "@aztec/stdlib/gas";
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
@@ -20,8 +17,44 @@ import { HashedValues } from "@aztec/stdlib/tx";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { Fr } from "@aztec/aztec.js/fields";
 import { deriveKeys } from "@aztec/aztec.js/keys";
+import {
+  FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE,
+  FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC,
+  FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE,
+  FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_TEARDOWN_DA_GAS,
+  FPC_TEARDOWN_L2_GAS,
+} from "./fpc-gas-constants.js";
 
-const MAX_U128 = 2n ** 128n - 1n;
+/**
+ * Overhead the FPC adds on top of the sponsored function's gas.
+ * `subscribe` is the cold path (notes + nullifiers for slot + subscription);
+ * `sponsor` reuses the existing subscription so it's cheaper. Both vary
+ * further based on whether the sponsored call enqueues a public call —
+ * the FPC's own private note ops get repriced at AVM rates when there is
+ * one. See `fpc-overhead.test.ts` for the measurements that pin these.
+ */
+export function fpcSubscribeOverhead(call: FunctionCall): Gas {
+  const isPublic = call.type === FunctionType.PUBLIC;
+  return new Gas(
+    isPublic ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
+    isPublic ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
+  );
+}
+
+export function fpcSponsorOverhead(call: FunctionCall): Gas {
+  const isPublic = call.type === FunctionType.PUBLIC;
+  return new Gas(
+    isPublic ? FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC : FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE,
+    isPublic ? FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC : FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE,
+  );
+}
+
+const FPC_TEARDOWN_GAS = new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS);
 
 /**
  * Converts a TS FunctionCall into the Noir FunctionCall struct shape
@@ -62,88 +95,11 @@ export async function buildExtraHashedArgs(call: FunctionCall): Promise<HashedVa
   return [await HashedValues.fromArgs(call.args)];
 }
 
-export async function calibrateSponsoredApp(params: {
-  /** Wallet with the admin account, used to send sign_up txs */
-  adminWallet: EmbeddedWallet;
-  /** Address of the admin account in adminWallet */
-  adminAddress: AztecAddress;
-  /** Aztec node client */
-  node: AztecNode;
-  /** Address of the already-deployed and funded SubscriptionFPC contract */
-  fpcAddress: AztecAddress;
-  /** A sample FunctionCall for the sponsored method (from getFunctionCall()) */
-  sampleCall: FunctionCall;
-  /** Max uses per subscription (default 1) */
-  maxUses?: number;
-  /** Max concurrent subscribers (default 1) */
-  maxUsers?: number;
-  /** Fee safety multiplier on currentFees (default 10) */
-  feeMultiplier?: number;
-  /** Auth witnesses required by the sponsored call */
-  authWitnesses?: AuthWitness[];
-  /** Additional scopes required by the sponsored call  */
-  additionalScopes?: AztecAddress[];
-}): Promise<{
-  maxFee: bigint;
-  estimatedGas: Pick<GasSettings, "gasLimits" | "teardownGasLimits">;
-}> {
-  const {
-    adminWallet,
-    adminAddress,
-    node,
-    fpcAddress,
-    sampleCall,
-    feeMultiplier = 10,
-    authWitnesses = [],
-    additionalScopes = [],
-  } = params;
-
-  const appAddress = sampleCall.to;
-  const selector = sampleCall.selector;
-
-  // Instantiate the FPC
-  const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-
-  // --- Step 1: Calibration sign_up (unique index per calibration, MAX fee) ---
-  // Use a high index unlikely to collide with production indices
-  const calibrationIndex = 1000000 + Math.floor(Math.random() * 1000000);
-  await adminFpc.methods
-    .sign_up(appAddress, selector, calibrationIndex, 1, MAX_U128, 1)
-    .send({ from: adminAddress });
-
-  // --- Step 2: Simulate subscription to measure gas ---
-  const noirCall = await buildNoirFunctionCall(sampleCall);
-
-  const { estimatedGas } = await adminFpc.methods
-    .subscribe(noirCall, calibrationIndex, adminAddress)
-    .with({
-      authWitnesses,
-      extraHashedArgs: await buildExtraHashedArgs(sampleCall),
-    })
-    .simulate({
-      from: NO_FROM,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
-      additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
-    });
-
-  // --- Step 3: Compute tight max_fee ---
-  const currentFees = await node.getCurrentMinFees();
-  const maxFee = estimatedGas.gasLimits
-    .add(estimatedGas.teardownGasLimits)
-    .computeFee(currentFees.mul(feeMultiplier))
-    .toBigInt();
-
-  return {
-    maxFee,
-    estimatedGas,
-  };
-}
-
 /**
  * Subscribes to the SubscriptionFPC and sends a call in a single tx.
  *
- * Handles the boilerplate of converting the FunctionCall to the Noir struct,
- * attaching extra hashed args, and sending with the right options.
+ * `gasLimits` is the sponsored fn's own gas (no FPC overhead) — the helper
+ * adds the `subscribe`-path FPC overhead on top.
  */
 export async function subscribeAndCall(params: {
   /** SubscriptionFPC contract instance (connected to the user's wallet) */
@@ -154,10 +110,14 @@ export async function subscribeAndCall(params: {
   configIndex: number;
   /** The subscribing user's address */
   userAddress: AztecAddress;
+  /** Sponsored fn's own gas limits (no FPC overhead) */
+  gasLimits: { daGas: number; l2Gas: number };
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress, authWitnesses = [] } = params;
+  const { fpc, call, configIndex, userAddress, gasLimits, authWitnesses = [] } = params;
+
+  const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(fpcSubscribeOverhead(call));
 
   const noirCall = await buildNoirFunctionCall(call);
 
@@ -171,7 +131,10 @@ export async function subscribeAndCall(params: {
       from: NO_FROM,
       additionalScopes: [userAddress, fpc.address],
       fee: {
-        gasSettings: { teardownGasLimits: new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS) },
+        gasSettings: {
+          gasLimits: totalGasLimits,
+          teardownGasLimits: FPC_TEARDOWN_GAS,
+        },
       },
     });
 }
@@ -179,8 +142,9 @@ export async function subscribeAndCall(params: {
 /**
  * Sends a sponsored call through the SubscriptionFPC.
  *
- * Handles the boilerplate of converting the FunctionCall to the Noir struct,
- * attaching extra hashed args, and sending with the right options.
+ * `gasLimits` is the sponsored fn's own gas (no FPC overhead) — the helper
+ * adds the `sponsor`-path FPC overhead on top. `sponsor`'s overhead is
+ * smaller than `subscribe`'s because the subscription already exists.
  */
 export async function sendSponsoredCall(params: {
   /** SubscriptionFPC contract instance (connected to the user's wallet) */
@@ -191,10 +155,14 @@ export async function sendSponsoredCall(params: {
   configIndex: number;
   /** The subscribing user's address */
   userAddress: AztecAddress;
+  /** Sponsored fn's own gas limits (no FPC overhead) */
+  gasLimits: { daGas: number; l2Gas: number };
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress, authWitnesses = [] } = params;
+  const { fpc, call, configIndex, userAddress, gasLimits, authWitnesses = [] } = params;
+
+  const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(fpcSponsorOverhead(call));
 
   const noirCall = await buildNoirFunctionCall(call);
 
@@ -208,7 +176,10 @@ export async function sendSponsoredCall(params: {
       from: NO_FROM,
       additionalScopes: [userAddress, fpc.address],
       fee: {
-        gasSettings: { teardownGasLimits: new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS) },
+        gasSettings: {
+          gasLimits: totalGasLimits,
+          teardownGasLimits: FPC_TEARDOWN_GAS,
+        },
       },
     });
 }
@@ -273,35 +244,13 @@ export class SubscriptionFPC {
     const fpc = this;
     return {
       /**
-       * Calibrates gas for a sponsored app by running the full sponsor flow
-       */
-      calibrate: (params: {
-        adminWallet: EmbeddedWallet;
-        adminAddress: AztecAddress;
-        node: AztecNode;
-        sampleCall: FunctionCall;
-        maxUses?: number;
-        maxUsers?: number;
-        feeMultiplier?: number;
-        authWitnesses?: AuthWitness[];
-        additionalScopes?: AztecAddress[];
-      }): Promise<{
-        maxFee: bigint;
-        estimatedGas: { gasLimits: Gas; teardownGasLimits: Gas };
-      }> =>
-        calibrateSponsoredApp({
-          ...params,
-          fpcAddress: fpc.address,
-        }),
-
-      /**
-       * Subscribes and sends a sponsored call through the FPC. Handles building the Noir
-       * FunctionCall struct, attaching hashed args, and sending with NO_FROM.
+       * Subscribes and sends a sponsored call through the FPC.
        */
       subscribe: (params: {
         call: FunctionCall;
         configIndex: number;
         userAddress: AztecAddress;
+        gasLimits: { daGas: number; l2Gas: number };
         authWitnesses?: AuthWitness[];
       }) =>
         subscribeAndCall({
@@ -310,13 +259,13 @@ export class SubscriptionFPC {
         }),
 
       /**
-       * Sends a sponsored call through the FPC. Handles building the Noir
-       * FunctionCall struct, attaching hashed args, and sending with NO_FROM.
+       * Sends a sponsored call through the FPC.
        */
       sponsor: (params: {
         call: FunctionCall;
         configIndex: number;
         userAddress: AztecAddress;
+        gasLimits: { daGas: number; l2Gas: number };
         authWitnesses?: AuthWitness[];
       }) =>
         sendSponsoredCall({

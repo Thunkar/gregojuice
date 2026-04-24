@@ -163,6 +163,7 @@ describe("FPC gas overhead", () => {
         call: sampleCall,
         configIndex: PUBLIC_INDEX,
         userAddress: ctx.admin,
+        gasLimits: standalonePublicGas.gasLimits,
       });
     }
 
@@ -250,6 +251,7 @@ describe("FPC gas overhead", () => {
         configIndex: PRIVATE_INDEX,
         userAddress: ctx.admin,
         authWitnesses: [subAuthwit],
+        gasLimits: standalonePrivateGas.gasLimits,
       });
     }
 

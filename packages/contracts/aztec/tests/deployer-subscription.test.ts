@@ -6,9 +6,10 @@ import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/cont
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
+import { Gas } from "@aztec/stdlib/gas";
 
 import { EcdsaAccountDeployerContract } from "../noir/artifacts/EcdsaAccountDeployer.js";
-import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "../lib/subscription-fpc.js";
 import { setupTestContext, type FPCTestContext } from "./utils.js";
 
 const PRODUCTION_INDEX = 100000 + Math.floor(Math.random() * 100000);
@@ -25,6 +26,7 @@ describe("Account deployment subscription", () => {
   let userWallet: EmbeddedWallet;
   let deployerAddress: AztecAddress;
   let subscribedAccountManager: AccountManager;
+  let gasLimits: { daGas: number; l2Gas: number };
 
   beforeAll(async () => {
     userWallet = await EmbeddedWallet.create(ctx.node, { ephemeral: true });
@@ -51,24 +53,32 @@ describe("Account deployment subscription", () => {
       await Fr.random(),
       SIGNING_PRIVATE_KEY,
     );
-    const sampleCall = await EcdsaAccountDeployerContract.at(deployerAddress, ctx.wallet)
-      .methods.deploy(
-        dummyAccount.address,
-        await Fr.random(),
-        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
-        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
-      )
-      .getFunctionCall();
+    const deploy = EcdsaAccountDeployerContract.at(deployerAddress, ctx.wallet).methods.deploy(
+      dummyAccount.address,
+      await Fr.random(),
+      Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+      Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
+    );
+    const sampleCall = await deploy.getFunctionCall();
 
-    const { maxFee } = await ctx.fpc.helpers.calibrate({
-      adminWallet: ctx.wallet,
-      adminAddress: ctx.admin,
-      node: ctx.node,
-      sampleCall,
-      feeMultiplier: 50,
+    const { estimatedGas } = await deploy.simulate({
+      from: ctx.admin,
+      fee: { estimateGas: true, estimatedGasPadding: 0 },
       additionalScopes: [dummyAccount.address],
     });
+    if (!estimatedGas) throw new Error("estimateGas returned no result");
+    gasLimits = {
+      daGas: Number(estimatedGas.gasLimits.daGas),
+      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
+    };
 
+    // Size max_fee against the subscribe-path composite with a 50× safety
+    // multiplier — local fees are cheap but stable enough not to need P75.
+    const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+      fpcSubscribeOverhead(sampleCall),
+    );
+    const currentFees = await ctx.node.getCurrentMinFees();
+    const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
     expect(maxFee).toBeGreaterThan(0n);
 
     await ctx.fpc.methods
@@ -102,6 +112,7 @@ describe("Account deployment subscription", () => {
       call: sponsoredCall,
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,
+      gasLimits,
     });
   });
 });

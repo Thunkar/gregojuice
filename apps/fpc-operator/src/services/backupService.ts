@@ -14,7 +14,6 @@ import {
 // ── Backup format ────────────────────────────────────────────────────
 
 const BACKUP_VERSION = 1;
-const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
 const NETWORK_KEY = "gregojuice_network";
 
 export interface BackupData {
@@ -28,7 +27,6 @@ export interface BackupData {
   };
   fpc: StoredFPC | null;
   apps: SignedUpApp[];
-  calibrationIndices: Record<string, number>;
 }
 
 // ── Export ────────────────────────────────────────────────────────────
@@ -38,13 +36,6 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
 
   const fpc = getStoredFPC();
   const apps = getSignedUpApps();
-
-  let calibrationIndices: Record<string, number> = {};
-  try {
-    calibrationIndices = JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
-  } catch {
-    // ignore malformed cache
-  }
 
   const data: BackupData = {
     version: BACKUP_VERSION,
@@ -57,7 +48,6 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
     },
     fpc,
     apps,
-    calibrationIndices,
   };
 
   const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -140,11 +130,6 @@ export async function applyBackup(wallet: EmbeddedWallet, data: BackupData): Pro
   // Restore signed-up apps
   if (data.apps?.length) {
     saveSignedUpApps(data.apps);
-  }
-
-  // Restore calibration indices
-  if (data.calibrationIndices && Object.keys(data.calibrationIndices).length > 0) {
-    localStorage.setItem(CALIBRATION_CACHE_KEY, JSON.stringify(data.calibrationIndices));
   }
 
   // Reload to reinitialize everything from clean state

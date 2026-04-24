@@ -29,6 +29,11 @@ export interface SignedUpApp {
   maxUses: number;
   maxFee: string;
   maxUsers: number;
+  /**
+   * Sponsored fn's own gas limits (no FPC overhead). Runtime callers add
+   * the subscribe/sponsor overhead at call time.
+   */
+  gasLimits: { daGas: number; l2Gas: number };
   createdAt: number;
 }
 
@@ -43,7 +48,6 @@ export interface FpcAdminBackup {
   };
   fpc: StoredFPC | null;
   apps: SignedUpApp[];
-  calibrationIndices: Record<string, number>;
 }
 
 /**
@@ -90,7 +94,6 @@ export interface WriteFpcAdminBackupParams {
   admin: FpcAdminBackup["admin"];
   fpc?: StoredFPC | null;
   apps?: SignedUpApp[];
-  calibrationIndices?: Record<string, number>;
 }
 
 /**
@@ -110,10 +113,6 @@ export function writeFpcAdminBackup(params: WriteFpcAdminBackupParams): void {
     admin: params.admin,
     fpc: params.fpc !== undefined ? params.fpc : (existing?.fpc ?? null),
     apps: params.apps !== undefined ? params.apps : (existing?.apps ?? []),
-    calibrationIndices:
-      params.calibrationIndices !== undefined
-        ? params.calibrationIndices
-        : (existing?.calibrationIndices ?? {}),
   };
 
   fs.mkdirSync(path.dirname(params.backupPath), { recursive: true });
