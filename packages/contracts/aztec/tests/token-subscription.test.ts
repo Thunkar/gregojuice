@@ -84,15 +84,12 @@ describe("Token transfer subscription (multi-use)", () => {
       call: sampleCall,
     });
 
-    const { estimatedGas } = await sampleAction.with({ authWitnesses: [authwit] }).simulate({
-      from: ctx.admin,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
+    privateGasLimits = await ctx.fpc.helpers.calibrate({
+      adminWallet: ctx.wallet,
+      adminAddress: ctx.admin,
+      sampleCall,
+      authWitnesses: [authwit],
     });
-    if (!estimatedGas) throw new Error("estimateGas returned no result");
-    privateGasLimits = {
-      daGas: Number(estimatedGas.gasLimits.daGas),
-      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-    };
     const subscribeTotal = new Gas(privateGasLimits.daGas, privateGasLimits.l2Gas).add(
       fpcSubscribeOverhead(sampleCall),
     );
@@ -198,15 +195,11 @@ describe("Public token transfer subscription", () => {
 
     const sampleCall = await action.getFunctionCall();
 
-    const { estimatedGas } = await action.simulate({
-      from: ctx.admin,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
+    publicGasLimits = await ctx.fpc.helpers.calibrate({
+      adminWallet: ctx.wallet,
+      adminAddress: ctx.admin,
+      sampleCall,
     });
-    if (!estimatedGas) throw new Error("estimateGas returned no result");
-    publicGasLimits = {
-      daGas: Number(estimatedGas.gasLimits.daGas),
-      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-    };
     const subscribeTotal = new Gas(publicGasLimits.daGas, publicGasLimits.l2Gas).add(
       fpcSubscribeOverhead(sampleCall),
     );

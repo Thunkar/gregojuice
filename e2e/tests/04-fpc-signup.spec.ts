@@ -333,7 +333,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
         token_out: swap.gregoCoinPremium,
         amount_out: "100",
         amount_in_max: "1000000",
-        authwit_nonce: "0",
+        authwit_nonce: "1",
       },
       extras: [
         {

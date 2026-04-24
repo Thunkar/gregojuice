@@ -3,11 +3,14 @@ import { FunctionType, type AbiType, type ContractArtifact, type FunctionAbi } f
 import { Contract } from "@aztec/aztec.js/contracts";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
+import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
 import {
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_TEARDOWN_DA_GAS,
+  FPC_TEARDOWN_L2_GAS,
 } from "@gregojuice/aztec/fpc-gas-constants";
 
 /**
@@ -74,6 +77,7 @@ export interface CalibrationResult {
 interface CalibrationBaseParams {
   adminWallet: EmbeddedWallet;
   adminAddress: AztecAddress;
+  fpc: SubscriptionFPC;
   artifact: ContractArtifact;
   contractInstance: ContractInstanceWithAddress;
   selectedFunction: FunctionAbi;
@@ -81,18 +85,14 @@ interface CalibrationBaseParams {
 }
 
 /**
- * Simulates the sponsored fn standalone (no FPC wrapping) and derives the
- * subscribe-wrapped total by adding the known FPC overhead.
- *
- * Replaces the previous flow of provisioning a throwaway slot with
- * `max_fee=MAX_U128` and simulating `subscribe(...)` through the FPC —
- * which required a real tx per calibration. Standalone simulation is
- * equivalent for gas purposes (the FPC's contribution is a fixed constant
- * that depends only on whether the sponsored call has a public phase) and
- * saves one tx + its proof.
+ * Operator-facing wrapper around the shared `calibrateSponsoredApp` helper.
+ * Builds the sample call from the wizard's form state, runs calibration
+ * through the FPC, and augments the result with the subscribe-wrapped
+ * composite + teardown limits for the UI's fee calculator.
  */
 export async function runCalibration(params: CalibrationBaseParams): Promise<CalibrationResult> {
-  const { adminWallet, adminAddress, artifact, contractInstance, selectedFunction, argValues } = params;
+  const { adminWallet, adminAddress, fpc, artifact, contractInstance, selectedFunction, argValues } =
+    params;
 
   const adminMeta = await adminWallet.getContractMetadata(contractInstance.address);
   if (!adminMeta.instance) {
@@ -106,18 +106,11 @@ export async function runCalibration(params: CalibrationBaseParams): Promise<Cal
   const action = contract.methods[selectedFunction.name](...parsedArgs);
   const sampleCall = await action.getFunctionCall();
 
-  const { estimatedGas } = await action.simulate({
-    from: adminAddress,
-    fee: { estimateGas: true, estimatedGasPadding: 0 },
+  const gasLimits = await fpc.helpers.calibrate({
+    adminWallet,
+    adminAddress,
+    sampleCall,
   });
-  if (!estimatedGas) {
-    throw new Error("Simulation returned no gas estimate");
-  }
-
-  const gasLimits = {
-    daGas: Number(estimatedGas.gasLimits.daGas),
-    l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-  };
 
   const isPublic = sampleCall.type === FunctionType.PUBLIC;
   const subscribeOverheadDa = isPublic
@@ -134,8 +127,8 @@ export async function runCalibration(params: CalibrationBaseParams): Promise<Cal
       l2Gas: gasLimits.l2Gas + subscribeOverheadL2,
     },
     teardownGasLimits: {
-      daGas: Number(estimatedGas.teardownGasLimits.daGas),
-      l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas),
+      daGas: FPC_TEARDOWN_DA_GAS,
+      l2Gas: FPC_TEARDOWN_L2_GAS,
     },
   };
 }

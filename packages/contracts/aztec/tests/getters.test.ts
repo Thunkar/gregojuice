@@ -63,15 +63,12 @@ describe("FPC getters", () => {
       call: sampleCall,
     });
 
-    const { estimatedGas } = await sampleAction.with({ authWitnesses: [authwit] }).simulate({
-      from: ctx.admin,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
+    gasLimits = await ctx.fpc.helpers.calibrate({
+      adminWallet: ctx.wallet,
+      adminAddress: ctx.admin,
+      sampleCall,
+      authWitnesses: [authwit],
     });
-    if (!estimatedGas) throw new Error("estimateGas returned no result");
-    gasLimits = {
-      daGas: Number(estimatedGas.gasLimits.daGas),
-      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-    };
     const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
       fpcSubscribeOverhead(sampleCall),
     );

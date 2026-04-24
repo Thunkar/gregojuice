@@ -73,15 +73,12 @@ describe("Failure cases", () => {
       call: sampleCall,
     });
 
-    const { estimatedGas } = await sampleAction.with({ authWitnesses: [authwit] }).simulate({
-      from: ctx.admin,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
+    gasLimits = await ctx.fpc.helpers.calibrate({
+      adminWallet: ctx.wallet,
+      adminAddress: ctx.admin,
+      sampleCall,
+      authWitnesses: [authwit],
     });
-    if (!estimatedGas) throw new Error("estimateGas returned no result");
-    gasLimits = {
-      daGas: Number(estimatedGas.gasLimits.daGas),
-      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-    };
     // Size max_fee against the subscribe-path composite with a 50× safety
     // multiplier.
     const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(

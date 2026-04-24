@@ -61,16 +61,12 @@ describe("Account deployment subscription", () => {
     );
     const sampleCall = await deploy.getFunctionCall();
 
-    const { estimatedGas } = await deploy.simulate({
-      from: ctx.admin,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
+    gasLimits = await ctx.fpc.helpers.calibrate({
+      adminWallet: ctx.wallet,
+      adminAddress: ctx.admin,
+      sampleCall,
       additionalScopes: [dummyAccount.address],
     });
-    if (!estimatedGas) throw new Error("estimateGas returned no result");
-    gasLimits = {
-      daGas: Number(estimatedGas.gasLimits.daGas),
-      l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-    };
 
     // Size max_fee against the subscribe-path composite with a 50× safety
     // multiplier — local fees are cheap but stable enough not to need P75.

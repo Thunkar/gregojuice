@@ -34,6 +34,7 @@ import {
 import { getDefaultInitializer, getInitializer } from "@aztec/stdlib/abi";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
 import { useWallet } from "../contexts/WalletContext";
 import { useAliases } from "../contexts/AliasContext";
 import { signUpApp } from "../services/fpcService";
@@ -273,6 +274,7 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
       const result = await runCalibration({
         adminWallet: wallet,
         adminAddress,
+        fpc: new SubscriptionFPC(fpc),
         artifact,
         contractInstance,
         selectedFunction,

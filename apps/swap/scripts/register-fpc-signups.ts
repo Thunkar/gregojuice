@@ -107,7 +107,7 @@ const SIGNUPS: SignupSpec[] = [
       contracts.gregoCoinPremium.toString(),
       10n,
       20n,
-      0n,
+      1n,
     ],
   },
   {
@@ -185,6 +185,7 @@ async function main() {
 
     const { maxFee, gasLimits } = await pickSignupParams({
       network,
+      fpc,
       wallet,
       admin,
       signup,
@@ -343,6 +344,7 @@ async function resolveSignups(
  */
 async function pickSignupParams(params: {
   network: NetworkName;
+  fpc: SubscriptionFPC;
   wallet: EmbeddedWallet;
   admin: AztecAddress;
   signup: ResolvedSignup;
@@ -351,7 +353,7 @@ async function pickSignupParams(params: {
   maxFee: bigint;
   gasLimits: { daGas: number; l2Gas: number };
 }> {
-  const { network, wallet, admin, signup, contracts } = params;
+  const { network, fpc, wallet, admin, signup, contracts } = params;
 
   const contract = Contract.at(signup.contractAddress, signup.artifact, wallet);
   const args = signup.sampleArgs({
@@ -359,18 +361,13 @@ async function pickSignupParams(params: {
     contractAddress: signup.contractAddress,
     contracts,
   });
-  const action = contract.methods[signup.functionName](...args);
-  const sampleCall = await action.getFunctionCall();
+  const sampleCall = await contract.methods[signup.functionName](...args).getFunctionCall();
 
-  const { estimatedGas } = await action.simulate({
-    from: admin,
-    fee: { estimateGas: true, estimatedGasPadding: 0 },
+  const gasLimits = await fpc.helpers.calibrate({
+    adminWallet: wallet,
+    adminAddress: admin,
+    sampleCall,
   });
-  if (!estimatedGas) throw new Error("estimateGas returned no result");
-  const gasLimits = {
-    daGas: Number(estimatedGas.gasLimits.daGas),
-    l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-  };
 
   let maxFee: bigint;
   if (network === "local") {

@@ -8,6 +8,7 @@ import {
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import type { AuthWitness } from "@aztec/stdlib/auth-witness";
 import { Gas } from "@aztec/stdlib/gas";
+import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
@@ -55,6 +56,76 @@ export function fpcSponsorOverhead(call: FunctionCall): Gas {
 }
 
 const FPC_TEARDOWN_GAS = new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS);
+
+const MAX_U128 = 2n ** 128n - 1n;
+
+/**
+ * Measures the gas a sponsored fn uses when dispatched from the FPC's
+ * `subscribe` entrypoint, and returns it standalone (overhead subtracted).
+ *
+ * Can't just simulate the fn directly: the standalone path runs through
+ * the admin's account entrypoint, which has different gas than the FPC's
+ * `subscribe` dispatch. At runtime the FPC's entrypoint is what executes,
+ * so we need to measure under those same conditions.
+ *
+ * How: provision a throwaway slot with `max_fee = MAX_U128` at a random
+ * index (so no fee gate trips during the estimator's inflated-limits pass),
+ * simulate `fpc.subscribe(noirCall, ...)` with `estimateGas: true`, then
+ * subtract the known subscribe overhead. Callers add whatever overhead
+ * fits their path (subscribe/sponsor) when they actually send.
+ */
+export async function calibrateSponsoredApp(params: {
+  /** FPC admin wallet — signs the throwaway sign_up tx and simulates subscribe */
+  adminWallet: EmbeddedWallet;
+  /** FPC admin address — used as the sponsored call's `from` in simulation */
+  adminAddress: AztecAddress;
+  /** Address of the already-deployed FPC */
+  fpcAddress: AztecAddress;
+  /** Sample FunctionCall to measure (from `method(...).getFunctionCall()`) */
+  sampleCall: FunctionCall;
+  /** Auth witnesses required by the sponsored call */
+  authWitnesses?: AuthWitness[];
+  /** Additional scopes required by the sponsored call during simulation */
+  additionalScopes?: AztecAddress[];
+}): Promise<{ daGas: number; l2Gas: number }> {
+  const {
+    adminWallet,
+    adminAddress,
+    fpcAddress,
+    sampleCall,
+    authWitnesses = [],
+    additionalScopes = [],
+  } = params;
+
+  const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
+  const calibrationIndex = 1_000_000 + Math.floor(Math.random() * 1_000_000);
+
+  await adminFpc.methods
+    .sign_up(sampleCall.to, sampleCall.selector, calibrationIndex, 1, MAX_U128, 1)
+    .send({ from: adminAddress });
+
+  const noirCall = await buildNoirFunctionCall(sampleCall);
+  const { estimatedGas } = await adminFpc.methods
+    .subscribe(noirCall, calibrationIndex, adminAddress)
+    .with({
+      authWitnesses,
+      extraHashedArgs: await buildExtraHashedArgs(sampleCall),
+    })
+    .simulate({
+      from: NO_FROM,
+      fee: { estimateGas: true, estimatedGasPadding: 0 },
+      additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
+    });
+  if (!estimatedGas) {
+    throw new Error("Calibration simulation returned no gas estimate");
+  }
+
+  const subscribeOverhead = fpcSubscribeOverhead(sampleCall);
+  return {
+    daGas: Math.max(0, Number(estimatedGas.gasLimits.daGas) - Number(subscribeOverhead.daGas)),
+    l2Gas: Math.max(0, Number(estimatedGas.gasLimits.l2Gas) - Number(subscribeOverhead.l2Gas)),
+  };
+}
 
 /**
  * Converts a TS FunctionCall into the Noir FunctionCall struct shape
@@ -243,6 +314,22 @@ export class SubscriptionFPC {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const fpc = this;
     return {
+      /**
+       * Measures a sponsored fn's standalone gas under the same entrypoint
+       * (the FPC's `subscribe`) that it runs through at send-time.
+       */
+      calibrate: (params: {
+        adminWallet: EmbeddedWallet;
+        adminAddress: AztecAddress;
+        sampleCall: FunctionCall;
+        authWitnesses?: AuthWitness[];
+        additionalScopes?: AztecAddress[];
+      }) =>
+        calibrateSponsoredApp({
+          ...params,
+          fpcAddress: fpc.address,
+        }),
+
       /**
        * Subscribes and sends a sponsored call through the FPC.
        */
