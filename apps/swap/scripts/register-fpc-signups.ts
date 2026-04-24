@@ -113,7 +113,7 @@ const SIGNUPS: SignupSpec[] = [
     artifact: TokenContractArtifact,
     functionName: "transfer_in_private_deliver_offchain",
     contractAlias: ["gregoCoin", "gregoCoinPremium"],
-    sampleArgs: ({ admin }) => [admin.toString(), admin.toString(), 10n, 0n, "0x"],
+    sampleArgs: ({ admin }) => [admin.toString(), admin.toString(), 10n, 0n],
   },
 ];
 
