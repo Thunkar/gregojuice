@@ -23,25 +23,29 @@
       "0x20ae286edb142b7172070bdc899c9e2732ab7281db6526cb7889d5999ae3b08c": {
         "0xa539bd29": {
           "configIndex": 0,
-          "gasLimits": { "daGas": 0, "l2Gas": 0 }
+          "gasLimits": { "daGas": 0, "l2Gas": 0 },
+          "hasPublicCall": false
         }
       },
       "0x2b1bb3a73b1d7f316c09575eeead0fec58acc61584cd54a7a34fa15fbcdb0d73": {
         "0xfd228669": {
           "configIndex": 0,
-          "gasLimits": { "daGas": 0, "l2Gas": 0 }
+          "gasLimits": { "daGas": 0, "l2Gas": 0 },
+          "hasPublicCall": false
         }
       },
       "0x1c42339fd847cdf39c9acf0c9bd23a56edc35e56b2e9e8e229203d7a18e73ef1": {
         "0x859e4f61": {
           "configIndex": 0,
-          "gasLimits": { "daGas": 0, "l2Gas": 0 }
+          "gasLimits": { "daGas": 0, "l2Gas": 0 },
+          "hasPublicCall": false
         }
       },
       "0x1efafa0dc8519f89a8b6fb232e4ba0aa75c2ab33b6cc97a313369b8f62f7ff01": {
         "0x859e4f61": {
           "configIndex": 0,
-          "gasLimits": { "daGas": 0, "l2Gas": 0 }
+          "gasLimits": { "daGas": 0, "l2Gas": 0 },
+          "hasPublicCall": false
         }
       }
     }

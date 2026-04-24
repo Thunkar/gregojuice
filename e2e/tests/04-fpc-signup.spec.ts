@@ -370,20 +370,24 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     // app-list row's data-* attrs. Swap's helpers add the subscribe/sponsor
     // FPC overhead on top at call time; committing the plain gas here keeps
     // the slot's `max_fee` consistent with what runtime will send.
-    const readGasLimits = async (appAddress: string, selector: string) => {
+    const readGasInfo = async (appAddress: string, selector: string) => {
       const row = page.getByTestId(`app-list-row-${appAddress}-${selector}`);
       await expect(row).toBeVisible({ timeout: 30_000 });
-      const [daGas, l2Gas] = await Promise.all([
+      const [daGas, l2Gas, hasPublicCallStr] = await Promise.all([
         row.getAttribute("data-gas-da"),
         row.getAttribute("data-gas-l2"),
+        row.getAttribute("data-has-public-call"),
       ]);
-      if (daGas == null || l2Gas == null) {
+      if (daGas == null || l2Gas == null || hasPublicCallStr == null) {
         throw new Error(`Missing gas data attrs on row ${appAddress}:${selector}`);
       }
-      return { daGas: Number(daGas), l2Gas: Number(l2Gas) };
+      return {
+        gasLimits: { daGas: Number(daGas), l2Gas: Number(l2Gas) },
+        hasPublicCall: hasPublicCallStr === "true",
+      };
     };
-    const popGasLimits = await readGasLimits(swap.pop, popSelector.toString());
-    const ammGasLimits = await readGasLimits(swap.amm, ammSelector.toString());
+    const popInfo = await readGasInfo(swap.pop, popSelector.toString());
+    const ammInfo = await readGasInfo(swap.amm, ammSelector.toString());
 
     const swapConfig = JSON.parse(await readFile(SWAP_LOCAL_JSON, "utf-8"));
     swapConfig.subscriptionFPC = {
@@ -391,10 +395,18 @@ test.describe.serial("fpc signs up sponsored apps", () => {
       secretKey: fpc.fpcSecretKey,
       functions: {
         [swap.pop]: {
-          [popSelector.toString()]: { configIndex: 0, gasLimits: popGasLimits },
+          [popSelector.toString()]: {
+            configIndex: 0,
+            gasLimits: popInfo.gasLimits,
+            hasPublicCall: popInfo.hasPublicCall,
+          },
         },
         [swap.amm]: {
-          [ammSelector.toString()]: { configIndex: 0, gasLimits: ammGasLimits },
+          [ammSelector.toString()]: {
+            configIndex: 0,
+            gasLimits: ammInfo.gasLimits,
+            hasPublicCall: ammInfo.hasPublicCall,
+          },
         },
       },
     };

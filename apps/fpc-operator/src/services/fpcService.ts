@@ -70,6 +70,12 @@ export interface SignedUpApp {
    * its network config so the helpers can size each tx.
    */
   gasLimits: { daGas: number; l2Gas: number };
+  /**
+   * Whether the sponsored call enqueues a public phase. Detected at
+   * calibration. Runtime needs it to pick the correct FPC overhead
+   * constant (PUBLIC vs PRIVATE variant).
+   */
+  hasPublicCall: boolean;
   createdAt: number;
 }
 
@@ -227,6 +233,7 @@ export interface SignUpParams {
   maxFee: bigint;
   maxUsers: number;
   gasLimits: { daGas: number; l2Gas: number };
+  hasPublicCall: boolean;
 }
 
 export async function signUpApp(
@@ -253,6 +260,7 @@ export async function signUpApp(
     maxFee: params.maxFee.toString(),
     maxUsers: params.maxUsers,
     gasLimits: params.gasLimits,
+    hasPublicCall: params.hasPublicCall,
     createdAt: Date.now(),
   });
 }

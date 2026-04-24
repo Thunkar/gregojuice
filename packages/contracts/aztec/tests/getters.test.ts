@@ -34,6 +34,7 @@ describe("FPC getters", () => {
   let token: TokenContract;
   let configId: Fr;
   let gasLimits: { daGas: number; l2Gas: number };
+  let hasPublicCall: boolean;
 
   beforeAll(async () => {
     // Deploy token
@@ -63,14 +64,16 @@ describe("FPC getters", () => {
       call: sampleCall,
     });
 
-    gasLimits = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
       sampleCall,
       authWitnesses: [authwit],
     });
+    gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    hasPublicCall = calibrated.hasPublicCall;
     const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
-      fpcSubscribeOverhead(sampleCall),
+      fpcSubscribeOverhead(hasPublicCall),
     );
     const currentFees = await ctx.node.getCurrentMinFees();
     const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
@@ -138,6 +141,7 @@ describe("FPC getters", () => {
       userAddress,
       authWitnesses: [authWit],
       gasLimits,
+      hasPublicCall,
     });
 
     // Check slots decreased by 1

@@ -27,6 +27,7 @@ describe("Account deployment subscription", () => {
   let deployerAddress: AztecAddress;
   let subscribedAccountManager: AccountManager;
   let gasLimits: { daGas: number; l2Gas: number };
+  let hasPublicCall: boolean;
 
   beforeAll(async () => {
     userWallet = await EmbeddedWallet.create(ctx.node, { ephemeral: true });
@@ -61,17 +62,19 @@ describe("Account deployment subscription", () => {
     );
     const sampleCall = await deploy.getFunctionCall();
 
-    gasLimits = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
       sampleCall,
       additionalScopes: [dummyAccount.address],
     });
+    gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    hasPublicCall = calibrated.hasPublicCall;
 
     // Size max_fee against the subscribe-path composite with a 50× safety
     // multiplier — local fees are cheap but stable enough not to need P75.
     const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
-      fpcSubscribeOverhead(sampleCall),
+      fpcSubscribeOverhead(hasPublicCall),
     );
     const currentFees = await ctx.node.getCurrentMinFees();
     const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
@@ -109,6 +112,7 @@ describe("Account deployment subscription", () => {
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,
       gasLimits,
+      hasPublicCall,
     });
   });
 });

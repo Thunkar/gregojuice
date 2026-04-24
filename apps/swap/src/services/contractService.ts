@@ -412,7 +412,7 @@ export async function executeSponsoredSwap(
       `No subscription config found for AMM ${amm.address.toString()} selector ${call.selector.toString()}`,
     );
   }
-  const { configIndex, gasLimits } = fnConfig;
+  const { configIndex, gasLimits, hasPublicCall } = fnConfig;
 
   const subscribed = hasSubscription(subFPC.address, configIndex, userAddress.toString());
 
@@ -422,6 +422,7 @@ export async function executeSponsoredSwap(
       configIndex,
       userAddress,
       gasLimits,
+      hasPublicCall,
     });
     return receipt;
   } else {
@@ -430,6 +431,7 @@ export async function executeSponsoredSwap(
       configIndex,
       userAddress,
       gasLimits,
+      hasPublicCall,
     });
     markSubscribed(subFPC.address, configIndex, userAddress.toString());
     return receipt;
@@ -569,7 +571,7 @@ export async function executeDrip(
       `No subscription config found for ${pop.address.toString()} selector ${call.selector.toString()}`,
     );
   }
-  const { configIndex, gasLimits } = fnConfig;
+  const { configIndex, gasLimits, hasPublicCall } = fnConfig;
 
   const accounts = await wallet.getAccounts();
   const userAddress = accounts[0]?.item ?? recipient;
@@ -579,6 +581,7 @@ export async function executeDrip(
     configIndex,
     userAddress,
     gasLimits,
+    hasPublicCall,
   });
   return receipt;
 }
@@ -616,7 +619,7 @@ export async function executeTransferOffchain(
       `No subscription config found for token ${token.address.toString()} selector ${call.selector.toString()}`,
     );
   }
-  const { configIndex, gasLimits } = fnConfig;
+  const { configIndex, gasLimits, hasPublicCall } = fnConfig;
 
   const subscribed = hasSubscription(subFPC.address, configIndex, fromAddress.toString());
 
@@ -627,6 +630,7 @@ export async function executeTransferOffchain(
       configIndex,
       userAddress: fromAddress,
       gasLimits,
+      hasPublicCall,
     });
   } else {
     txResult = await fpc.helpers.subscribe({
@@ -634,6 +638,7 @@ export async function executeTransferOffchain(
       configIndex,
       userAddress: fromAddress,
       gasLimits,
+      hasPublicCall,
     });
     markSubscribed(subFPC.address, configIndex, fromAddress.toString());
   }

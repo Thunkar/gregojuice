@@ -30,6 +30,7 @@ describe("Token transfer subscription (multi-use)", () => {
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
   let privateGasLimits: { daGas: number; l2Gas: number };
+  let privateHasPublicCall: boolean;
 
   beforeAll(async () => {
     const {
@@ -84,14 +85,16 @@ describe("Token transfer subscription (multi-use)", () => {
       call: sampleCall,
     });
 
-    privateGasLimits = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
       sampleCall,
       authWitnesses: [authwit],
     });
+    privateGasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    privateHasPublicCall = calibrated.hasPublicCall;
     const subscribeTotal = new Gas(privateGasLimits.daGas, privateGasLimits.l2Gas).add(
-      fpcSubscribeOverhead(sampleCall),
+      fpcSubscribeOverhead(privateHasPublicCall),
     );
     const currentFees = await ctx.node.getCurrentMinFees();
     const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
@@ -121,6 +124,7 @@ describe("Token transfer subscription (multi-use)", () => {
       userAddress,
       authWitnesses: [authWit],
       gasLimits: privateGasLimits,
+      hasPublicCall: privateHasPublicCall,
     });
   });
 
@@ -142,6 +146,7 @@ describe("Token transfer subscription (multi-use)", () => {
       userAddress,
       authWitnesses: [authWit],
       gasLimits: privateGasLimits,
+      hasPublicCall: privateHasPublicCall,
     });
   });
 
@@ -167,6 +172,7 @@ describe("Token transfer subscription (multi-use)", () => {
 describe("Public token transfer subscription", () => {
   let token: TokenContract;
   let publicGasLimits: { daGas: number; l2Gas: number };
+  let publicHasPublicCall: boolean;
 
   beforeAll(async () => {
     const {
@@ -195,13 +201,15 @@ describe("Public token transfer subscription", () => {
 
     const sampleCall = await action.getFunctionCall();
 
-    publicGasLimits = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
       sampleCall,
     });
+    publicGasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    publicHasPublicCall = calibrated.hasPublicCall;
     const subscribeTotal = new Gas(publicGasLimits.daGas, publicGasLimits.l2Gas).add(
-      fpcSubscribeOverhead(sampleCall),
+      fpcSubscribeOverhead(publicHasPublicCall),
     );
     const currentFees = await ctx.node.getCurrentMinFees();
     const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
@@ -232,6 +240,7 @@ describe("Public token transfer subscription", () => {
       configIndex: PUBLIC_INDEX,
       userAddress: ctx.admin,
       gasLimits: publicGasLimits,
+      hasPublicCall: publicHasPublicCall,
     });
   });
 
@@ -255,6 +264,7 @@ describe("Public token transfer subscription", () => {
       configIndex: PUBLIC_INDEX,
       userAddress: ctx.admin,
       gasLimits: publicGasLimits,
+      hasPublicCall: publicHasPublicCall,
     });
   });
 });

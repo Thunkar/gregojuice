@@ -26,6 +26,7 @@ describe("Failure cases", () => {
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
   let gasLimits: { daGas: number; l2Gas: number };
+  let hasPublicCall: boolean;
 
   beforeAll(async () => {
     const {
@@ -73,16 +74,18 @@ describe("Failure cases", () => {
       call: sampleCall,
     });
 
-    gasLimits = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
       sampleCall,
       authWitnesses: [authwit],
     });
+    gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    hasPublicCall = calibrated.hasPublicCall;
     // Size max_fee against the subscribe-path composite with a 50× safety
     // multiplier.
     const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
-      fpcSubscribeOverhead(sampleCall),
+      fpcSubscribeOverhead(hasPublicCall),
     );
     const currentFees = await ctx.node.getCurrentMinFees();
     const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
@@ -108,6 +111,7 @@ describe("Failure cases", () => {
       userAddress,
       authWitnesses: [subscribeAuthWit],
       gasLimits,
+      hasPublicCall,
     });
   });
 
@@ -131,6 +135,7 @@ describe("Failure cases", () => {
         userAddress,
         authWitnesses: [authWit],
         gasLimits,
+        hasPublicCall,
       }),
     ).rejects.toThrow();
   });
@@ -178,6 +183,7 @@ describe("Failure cases", () => {
         userAddress: grieferAddress,
         authWitnesses: [griefAuthWit],
         gasLimits,
+        hasPublicCall,
       }),
     ).rejects.toThrow();
   });
@@ -239,6 +245,7 @@ describe("Failure cases", () => {
         userAddress: tightUserAddress,
         authWitnesses: [tightAuthWit],
         gasLimits,
+        hasPublicCall,
       }),
     ).rejects.toThrow(/Gas settings exceed subscription max_fee/);
   });

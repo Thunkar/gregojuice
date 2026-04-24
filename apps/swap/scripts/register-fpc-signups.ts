@@ -171,6 +171,7 @@ async function main() {
       {
         configIndex: number;
         gasLimits: { daGas: number; l2Gas: number };
+        hasPublicCall: boolean;
       }
     >
   > = {};
@@ -183,7 +184,7 @@ async function main() {
   for (const signup of resolved) {
     console.error(`\nSigning up ${signup.aliasKey}.${signup.functionName}...`);
 
-    const { maxFee, gasLimits } = await pickSignupParams({
+    const { maxFee, gasLimits, hasPublicCall } = await pickSignupParams({
       network,
       fpc,
       wallet,
@@ -204,7 +205,7 @@ async function main() {
       .send({ from: admin, fee: { paymentMethod } });
 
     console.error(
-      `  sign_up ok — maxFee=${maxFee} gasLimits=${gasLimits.daGas}/${gasLimits.l2Gas}`,
+      `  sign_up ok — maxFee=${maxFee} gasLimits=${gasLimits.daGas}/${gasLimits.l2Gas} hasPublicCall=${hasPublicCall}`,
     );
 
     const key = signup.contractAddress.toString();
@@ -212,6 +213,7 @@ async function main() {
     functions[key][signup.selector.toString()] = {
       configIndex: 0,
       gasLimits,
+      hasPublicCall,
     };
 
     backupApps.push({
@@ -222,6 +224,7 @@ async function main() {
       maxFee: maxFee.toString(),
       maxUsers: signup.maxUsers,
       gasLimits,
+      hasPublicCall,
       createdAt: Date.now(),
     });
   }
@@ -352,6 +355,7 @@ async function pickSignupParams(params: {
 }): Promise<{
   maxFee: bigint;
   gasLimits: { daGas: number; l2Gas: number };
+  hasPublicCall: boolean;
 }> {
   const { network, fpc, wallet, admin, signup, contracts } = params;
 
@@ -363,11 +367,13 @@ async function pickSignupParams(params: {
   });
   const sampleCall = await contract.methods[signup.functionName](...args).getFunctionCall();
 
-  const gasLimits = await fpc.helpers.calibrate({
+  const calibrated = await fpc.helpers.calibrate({
     adminWallet: wallet,
     adminAddress: admin,
     sampleCall,
   });
+  const gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+  const hasPublicCall = calibrated.hasPublicCall;
 
   let maxFee: bigint;
   if (network === "local") {
@@ -376,7 +382,7 @@ async function pickSignupParams(params: {
     // Size max_fee against the subscribe-path composite (standalone + FPC
     // subscribe overhead) — that's the worst case the slot needs to cover.
     const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
-      fpcSubscribeOverhead(sampleCall),
+      fpcSubscribeOverhead(hasPublicCall),
     );
     const stats = await fetchFeeStats(network, P75_BLOCK_RANGE);
     maxFee = computeMaxFeeFromP75(
@@ -387,7 +393,7 @@ async function pickSignupParams(params: {
     );
   }
 
-  return { maxFee, gasLimits };
+  return { maxFee, gasLimits, hasPublicCall };
 }
 
 main().catch((err) => {

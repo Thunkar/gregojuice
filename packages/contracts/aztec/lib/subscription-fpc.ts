@@ -35,23 +35,26 @@ import {
  * Overhead the FPC adds on top of the sponsored function's gas.
  * `subscribe` is the cold path (notes + nullifiers for slot + subscription);
  * `sponsor` reuses the existing subscription so it's cheaper. Both vary
- * further based on whether the sponsored call enqueues a public call —
- * the FPC's own private note ops get repriced at AVM rates when there is
- * one. See `fpc-overhead.test.ts` for the measurements that pin these.
+ * further based on whether the tx contains a public phase — the FPC's own
+ * private note ops get repriced at AVM rates in that case.
+ *
+ * `hasPublicCall` reflects the **whole tx**'s pricing regime, not just the
+ * sponsored fn's top-level type: a private-typed fn that enqueues a public
+ * call (e.g. via `self.call(...)` into a public fn) still shifts the tx
+ * into public pricing. Pass `true` iff anything in the sponsored call's
+ * transitive execution ends up in a public phase.
  */
-export function fpcSubscribeOverhead(call: FunctionCall): Gas {
-  const isPublic = call.type === FunctionType.PUBLIC;
+export function fpcSubscribeOverhead(hasPublicCall: boolean): Gas {
   return new Gas(
-    isPublic ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
-    isPublic ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
+    hasPublicCall ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
+    hasPublicCall ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
   );
 }
 
-export function fpcSponsorOverhead(call: FunctionCall): Gas {
-  const isPublic = call.type === FunctionType.PUBLIC;
+export function fpcSponsorOverhead(hasPublicCall: boolean): Gas {
   return new Gas(
-    isPublic ? FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC : FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE,
-    isPublic ? FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC : FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE,
+    hasPublicCall ? FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC : FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE,
+    hasPublicCall ? FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC : FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE,
   );
 }
 
@@ -87,7 +90,7 @@ export async function calibrateSponsoredApp(params: {
   authWitnesses?: AuthWitness[];
   /** Additional scopes required by the sponsored call during simulation */
   additionalScopes?: AztecAddress[];
-}): Promise<{ daGas: number; l2Gas: number }> {
+}): Promise<{ daGas: number; l2Gas: number; hasPublicCall: boolean }> {
   const {
     adminWallet,
     adminAddress,
@@ -105,26 +108,42 @@ export async function calibrateSponsoredApp(params: {
     .send({ from: adminAddress });
 
   const noirCall = await buildNoirFunctionCall(sampleCall);
-  const { estimatedGas } = await adminFpc.methods
+  const subscribeInteraction = adminFpc.methods
     .subscribe(noirCall, calibrationIndex, adminAddress)
     .with({
       authWitnesses,
       extraHashedArgs: await buildExtraHashedArgs(sampleCall),
-    })
-    .simulate({
-      from: NO_FROM,
-      fee: { estimateGas: true, estimatedGasPadding: 0 },
-      additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
     });
-  if (!estimatedGas) {
-    throw new Error("Calibration simulation returned no gas estimate");
-  }
 
-  const subscribeOverhead = fpcSubscribeOverhead(sampleCall);
-  return {
-    daGas: Math.max(0, Number(estimatedGas.gasLimits.daGas) - Number(subscribeOverhead.daGas)),
-    l2Gas: Math.max(0, Number(estimatedGas.gasLimits.l2Gas) - Number(subscribeOverhead.l2Gas)),
-  };
+  // Build the execution payload ourselves so we can call wallet.simulateTx
+  // directly and inspect publicInputs for enqueued public calls — the
+  // top-level `simulate({ estimateGas })` API only returns gas numbers and
+  // loses the public-phase signal we need to pick the right overhead
+  // constant.
+  const payload = await subscribeInteraction.request();
+  const simulated = await adminWallet.simulateTx(payload, {
+    from: NO_FROM,
+    fee: { gasSettings: {} },
+    additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
+  });
+
+  // A private fn can enqueue public work (e.g. `self.call(...)` to a
+  // public fn). When that happens the tx shifts into public pricing —
+  // the FPC's own private side effects get repriced at AVM rates — so
+  // we must use the PUBLIC overhead constant, not the PRIVATE one.
+  // `numberOfPublicCallRequests()` catches both public top-level calls
+  // and public calls enqueued from private.
+  const hasPublicCall = simulated.publicInputs.numberOfPublicCallRequests() > 0;
+
+  const subscribeDa = Number(simulated.gasUsed.totalGas.daGas);
+  const subscribeL2 = Number(simulated.gasUsed.totalGas.l2Gas);
+  const subscribeOverhead = fpcSubscribeOverhead(hasPublicCall);
+  const derivedDa = Math.max(0, subscribeDa - Number(subscribeOverhead.daGas));
+  const derivedL2 = Math.max(0, subscribeL2 - Number(subscribeOverhead.l2Gas));
+  console.log(
+    `[calibrate] subscribe-measured DA=${subscribeDa} L2=${subscribeL2}  hasPublicCall=${hasPublicCall}  overhead DA=${Number(subscribeOverhead.daGas)} L2=${Number(subscribeOverhead.l2Gas)}  derived DA=${derivedDa} L2=${derivedL2}  (send will re-add overhead → DA=${derivedDa + Number(subscribeOverhead.daGas)} L2=${derivedL2 + Number(subscribeOverhead.l2Gas)})`,
+  );
+  return { daGas: derivedDa, l2Gas: derivedL2, hasPublicCall };
 }
 
 /**
@@ -183,12 +202,24 @@ export async function subscribeAndCall(params: {
   userAddress: AztecAddress;
   /** Sponsored fn's own gas limits (no FPC overhead) */
   gasLimits: { daGas: number; l2Gas: number };
+  /** Whether the sponsored call has a public phase (from calibration) */
+  hasPublicCall: boolean;
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress, gasLimits, authWitnesses = [] } = params;
+  const {
+    fpc,
+    call,
+    configIndex,
+    userAddress,
+    gasLimits,
+    hasPublicCall,
+    authWitnesses = [],
+  } = params;
 
-  const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(fpcSubscribeOverhead(call));
+  const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+    fpcSubscribeOverhead(hasPublicCall),
+  );
 
   const noirCall = await buildNoirFunctionCall(call);
 
@@ -228,12 +259,24 @@ export async function sendSponsoredCall(params: {
   userAddress: AztecAddress;
   /** Sponsored fn's own gas limits (no FPC overhead) */
   gasLimits: { daGas: number; l2Gas: number };
+  /** Whether the sponsored call has a public phase (from calibration) */
+  hasPublicCall: boolean;
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
 }) {
-  const { fpc, call, configIndex, userAddress, gasLimits, authWitnesses = [] } = params;
+  const {
+    fpc,
+    call,
+    configIndex,
+    userAddress,
+    gasLimits,
+    hasPublicCall,
+    authWitnesses = [],
+  } = params;
 
-  const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(fpcSponsorOverhead(call));
+  const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+    fpcSponsorOverhead(hasPublicCall),
+  );
 
   const noirCall = await buildNoirFunctionCall(call);
 
@@ -338,6 +381,7 @@ export class SubscriptionFPC {
         configIndex: number;
         userAddress: AztecAddress;
         gasLimits: { daGas: number; l2Gas: number };
+        hasPublicCall: boolean;
         authWitnesses?: AuthWitness[];
       }) =>
         subscribeAndCall({
@@ -353,6 +397,7 @@ export class SubscriptionFPC {
         configIndex: number;
         userAddress: AztecAddress;
         gasLimits: { daGas: number; l2Gas: number };
+        hasPublicCall: boolean;
         authWitnesses?: AuthWitness[];
       }) =>
         sendSponsoredCall({

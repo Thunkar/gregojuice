@@ -34,6 +34,12 @@ export interface SignedUpApp {
    * the subscribe/sponsor overhead at call time.
    */
   gasLimits: { daGas: number; l2Gas: number };
+  /**
+   * Whether the sponsored call enqueues a public phase. Detected at
+   * calibration. Runtime needs it to pick the correct FPC overhead
+   * constant (PUBLIC vs PRIVATE variant).
+   */
+  hasPublicCall: boolean;
   createdAt: number;
 }
 

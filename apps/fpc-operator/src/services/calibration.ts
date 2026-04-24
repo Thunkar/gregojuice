@@ -1,5 +1,5 @@
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { FunctionType, type AbiType, type ContractArtifact, type FunctionAbi } from "@aztec/aztec.js/abi";
+import { type AbiType, type ContractArtifact, type FunctionAbi } from "@aztec/aztec.js/abi";
 import { Contract } from "@aztec/aztec.js/contracts";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
@@ -72,6 +72,12 @@ export interface CalibrationResult {
    */
   subscribeGasLimits: { daGas: number; l2Gas: number };
   teardownGasLimits: { daGas: number; l2Gas: number };
+  /**
+   * Whether the sponsored call enqueues a public phase. Detected at
+   * calibration from the simulation result — not `sampleCall.type`,
+   * because private fns can enqueue public work too.
+   */
+  hasPublicCall: boolean;
 }
 
 interface CalibrationBaseParams {
@@ -106,17 +112,18 @@ export async function runCalibration(params: CalibrationBaseParams): Promise<Cal
   const action = contract.methods[selectedFunction.name](...parsedArgs);
   const sampleCall = await action.getFunctionCall();
 
-  const gasLimits = await fpc.helpers.calibrate({
+  const calibrated = await fpc.helpers.calibrate({
     adminWallet,
     adminAddress,
     sampleCall,
   });
+  const gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+  const hasPublicCall = calibrated.hasPublicCall;
 
-  const isPublic = sampleCall.type === FunctionType.PUBLIC;
-  const subscribeOverheadDa = isPublic
+  const subscribeOverheadDa = hasPublicCall
     ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC
     : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE;
-  const subscribeOverheadL2 = isPublic
+  const subscribeOverheadL2 = hasPublicCall
     ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC
     : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE;
 
@@ -130,5 +137,6 @@ export async function runCalibration(params: CalibrationBaseParams): Promise<Cal
       daGas: FPC_TEARDOWN_DA_GAS,
       l2Gas: FPC_TEARDOWN_L2_GAS,
     },
+    hasPublicCall,
   };
 }

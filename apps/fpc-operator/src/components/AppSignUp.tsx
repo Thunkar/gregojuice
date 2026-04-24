@@ -316,6 +316,12 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
         daGas: FPC_TEARDOWN_DA_GAS,
         l2Gas: FPC_TEARDOWN_L2_GAS,
       },
+      // In manual mode the operator declares private-vs-public themselves;
+      // `isPrivateFunction` is what the wizard knows about the fn's top-
+      // level type. We can't detect enqueued-public-from-private without
+      // a simulation, so we assume top-level-private fns don't enqueue
+      // public work. If they do, operator should use simulation mode.
+      hasPublicCall: !isPrivateFunction,
     };
     setCalibrationResult(result);
     setActiveStep(3);
@@ -346,6 +352,7 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
         maxFee: parseUnits(maxFeeFj, 18),
         maxUsers: parseInt(maxUsers),
         gasLimits: calibrationResult.gasLimits,
+        hasPublicCall: calibrationResult.hasPublicCall,
       });
       // Persist the signed-up app as an aliased contract so it's available as
       // an arg pick for future calibrations.
