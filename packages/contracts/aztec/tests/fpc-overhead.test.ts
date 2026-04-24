@@ -29,10 +29,14 @@ import {
 import { SubscriptionFPCContract } from "../noir/artifacts/SubscriptionFPC.js";
 import { setupTestContext, type FPCTestContext, type GasValues, toGas, logGas } from "./utils.js";
 import {
-  FPC_SUBSCRIBE_OVERHEAD_L2_GAS,
-  FPC_SUBSCRIBE_OVERHEAD_DA_GAS,
-  FPC_SPONSOR_OVERHEAD_L2_GAS,
-  FPC_SPONSOR_OVERHEAD_DA_GAS,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
+  FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC,
+  FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE,
+  FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE,
   FPC_TEARDOWN_L2_GAS,
   FPC_TEARDOWN_DA_GAS,
 } from "../lib/fpc-gas-constants.js";
@@ -314,40 +318,80 @@ describe("FPC gas overhead", () => {
   });
 
   it("captured constants match measured values", () => {
-    const measuredSubscribeL2 =
-      subscribePublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas;
-    const measuredSubscribeDA =
-      subscribePublicGas.gasLimits.daGas - standalonePublicGas.gasLimits.daGas;
-    const measuredSponsorL2 =
-      sponsorPublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas;
-    const measuredSponsorDA =
-      sponsorPublicGas.gasLimits.daGas - standalonePublicGas.gasLimits.daGas;
-    const measuredTeardownL2 = subscribePublicGas.teardownGasLimits.l2Gas;
-    const measuredTeardownDA = subscribePublicGas.teardownGasLimits.daGas;
+    // The four FPC overheads are measured separately for public and private
+    // sponsored functions. They differ because when the sponsored function
+    // enqueues a public call, the tx shifts into the public-pricing regime
+    // and the FPC's own private side effects (note hashes + nullifiers from
+    // its internal bookkeeping) get repriced at AVM rates. Keeping all four
+    // constants in sync with measurement means callers that compute
+    // `gasLimits = standalone + FPC_{SPONSOR,SUBSCRIBE}_OVERHEAD_{L2,DA}_GAS_{PRIVATE,PUBLIC}` pick
+    // the right value for their sponsored fn's publicness.
+    const measured = {
+      subscribePublicL2: subscribePublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas,
+      subscribePublicDA: subscribePublicGas.gasLimits.daGas - standalonePublicGas.gasLimits.daGas,
+      subscribePrivateL2:
+        subscribePrivateGas.gasLimits.l2Gas - standalonePrivateGas.gasLimits.l2Gas,
+      subscribePrivateDA:
+        subscribePrivateGas.gasLimits.daGas - standalonePrivateGas.gasLimits.daGas,
+      sponsorPublicL2: sponsorPublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas,
+      sponsorPublicDA: sponsorPublicGas.gasLimits.daGas - standalonePublicGas.gasLimits.daGas,
+      sponsorPrivateL2: sponsorPrivateGas.gasLimits.l2Gas - standalonePrivateGas.gasLimits.l2Gas,
+      sponsorPrivateDA: sponsorPrivateGas.gasLimits.daGas - standalonePrivateGas.gasLimits.daGas,
+      teardownL2: subscribePublicGas.teardownGasLimits.l2Gas,
+      teardownDA: subscribePublicGas.teardownGasLimits.daGas,
+    };
 
-    if (
-      FPC_SUBSCRIBE_OVERHEAD_L2_GAS !== measuredSubscribeL2 ||
-      FPC_SUBSCRIBE_OVERHEAD_DA_GAS !== measuredSubscribeDA ||
-      FPC_SPONSOR_OVERHEAD_L2_GAS !== measuredSponsorL2 ||
-      FPC_SPONSOR_OVERHEAD_DA_GAS !== measuredSponsorDA ||
-      FPC_TEARDOWN_L2_GAS !== measuredTeardownL2 ||
-      FPC_TEARDOWN_DA_GAS !== measuredTeardownDA
-    ) {
-      console.log("Update src/fpc-gas-constants.ts:");
-      console.log(`  export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS = ${measuredSubscribeL2};`);
-      console.log(`  export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS = ${measuredSubscribeDA};`);
-      console.log(`  export const FPC_SPONSOR_OVERHEAD_L2_GAS = ${measuredSponsorL2};`);
-      console.log(`  export const FPC_SPONSOR_OVERHEAD_DA_GAS = ${measuredSponsorDA};`);
-      console.log(`  export const FPC_TEARDOWN_L2_GAS = ${measuredTeardownL2};`);
-      console.log(`  export const FPC_TEARDOWN_DA_GAS = ${measuredTeardownDA};`);
+    const mismatches =
+      FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC !== measured.subscribePublicL2 ||
+      FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC !== measured.subscribePublicDA ||
+      FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE !== measured.subscribePrivateL2 ||
+      FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE !== measured.subscribePrivateDA ||
+      FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC !== measured.sponsorPublicL2 ||
+      FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC !== measured.sponsorPublicDA ||
+      FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE !== measured.sponsorPrivateL2 ||
+      FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE !== measured.sponsorPrivateDA ||
+      FPC_TEARDOWN_L2_GAS !== measured.teardownL2 ||
+      FPC_TEARDOWN_DA_GAS !== measured.teardownDA;
+
+    if (mismatches) {
+      console.log("Update lib/fpc-gas-constants.ts:");
+      console.log(
+        `  export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC = ${measured.subscribePublicL2};`,
+      );
+      console.log(
+        `  export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC = ${measured.subscribePublicDA};`,
+      );
+      console.log(
+        `  export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE = ${measured.subscribePrivateL2};`,
+      );
+      console.log(
+        `  export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE = ${measured.subscribePrivateDA};`,
+      );
+      console.log(
+        `  export const FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC = ${measured.sponsorPublicL2};`,
+      );
+      console.log(
+        `  export const FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC = ${measured.sponsorPublicDA};`,
+      );
+      console.log(
+        `  export const FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE = ${measured.sponsorPrivateL2};`,
+      );
+      console.log(
+        `  export const FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE = ${measured.sponsorPrivateDA};`,
+      );
+      console.log(`  export const FPC_TEARDOWN_L2_GAS = ${measured.teardownL2};`);
+      console.log(`  export const FPC_TEARDOWN_DA_GAS = ${measured.teardownDA};`);
     }
 
-    expect(FPC_SUBSCRIBE_OVERHEAD_L2_GAS).toBe(measuredSubscribeL2);
-    expect(FPC_SUBSCRIBE_OVERHEAD_DA_GAS).toBe(measuredSubscribeDA);
-    expect(FPC_SPONSOR_OVERHEAD_L2_GAS).toBe(measuredSponsorL2);
-    expect(FPC_SPONSOR_OVERHEAD_DA_GAS).toBe(measuredSponsorDA);
-    expect(FPC_TEARDOWN_L2_GAS).toBe(measuredTeardownL2);
-    expect(FPC_TEARDOWN_DA_GAS).toBe(measuredTeardownDA);
+    expect(FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC).toBe(measured.subscribePublicL2);
+    expect(FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC).toBe(measured.subscribePublicDA);
+    expect(FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE).toBe(measured.subscribePrivateL2);
+    expect(FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE).toBe(measured.subscribePrivateDA);
+    expect(FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC).toBe(measured.sponsorPublicL2);
+    expect(FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC).toBe(measured.sponsorPublicDA);
+    expect(FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE).toBe(measured.sponsorPrivateL2);
+    expect(FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE).toBe(measured.sponsorPrivateDA);
+    expect(FPC_TEARDOWN_L2_GAS).toBe(measured.teardownL2);
+    expect(FPC_TEARDOWN_DA_GAS).toBe(measured.teardownDA);
   });
-
 });
