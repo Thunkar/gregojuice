@@ -27,18 +27,7 @@ interface SetupWizardProps {
 export function SetupWizard({ onComplete, onFpcAddressComputed }: SetupWizardProps) {
   const { status, wallet, address, node } = useWallet();
   const { activeNetwork } = useNetwork();
-  const [activeStep, rawSetActiveStep] = useState(0);
-  // Debug wrapper: every setActiveStep call logs the from/to + a short stack
-  // so the next failing CI trace tells us who regressed the step.
-  const setActiveStep = (next: number | ((prev: number) => number)) => {
-    rawSetActiveStep((prev) => {
-      const nextVal = typeof next === "function" ? next(prev) : next;
-      const stack = (new Error().stack ?? "").split("\n").slice(2, 5).join(" | ");
-      // eslint-disable-next-line no-console
-      console.log(`[setup-wizard] setActiveStep ${prev} → ${nextVal} | ${stack}`);
-      return nextVal;
-    });
-  };
+  const [activeStep, setActiveStep] = useState(0);
   const [fpcAddress, setFpcAddress] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);

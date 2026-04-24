@@ -65,10 +65,9 @@ export default defineConfig({
   globalSetup: "./fixtures/global-setup.ts",
   globalTeardown: "./fixtures/global-teardown.ts",
   use: {
-    // `retain-on-failure` captures a trace for the *failing* attempt (rather
-    // than `on-first-retry` which only traces the retry that passes). We
-    // specifically need the failing-attempt trace to debug the flaky
-    // step-transition in test 01.
+    // `retain-on-failure` keeps traces for failing attempts (including flakes
+    // that later pass on retry). `on-first-retry` only captures the retry,
+    // which is usually the passing run — less useful for debugging.
     trace: "retain-on-failure",
     video: "retain-on-failure",
     headless: !headed,

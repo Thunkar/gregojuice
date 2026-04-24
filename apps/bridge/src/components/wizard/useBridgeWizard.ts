@@ -252,8 +252,6 @@ export function useBridgeWizard() {
     // match recipient". `ancestorOrigins` always reflects the actual parent.
     // Fall back to `*` — our messages carry non-sensitive status only.
     const target = window.location.ancestorOrigins?.[0] ?? parentOrigin ?? "*";
-    // eslint-disable-next-line no-console
-    console.log(`[bridge] postMessage → parent: ${JSON.stringify(msg)} (origin=${target})`);
     window.parent.postMessage(msg, target);
   }, [bridge.type, isIframe, parentOrigin]);
 
