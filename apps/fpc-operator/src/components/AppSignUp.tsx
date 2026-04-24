@@ -914,20 +914,14 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                       const totalL2 = sL2 + overheadL2;
                       return (
                         <>
-                          <Box
-                            sx={{ display: "flex", justifyContent: "space-between" }}
-                          >
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                             <span>Standalone</span>
                             <span>
                               DA={sDA.toLocaleString()} L2={sL2.toLocaleString()}
                             </span>
                           </Box>
-                          <Box
-                            sx={{ display: "flex", justifyContent: "space-between" }}
-                          >
-                            <span>
-                              + FPC overhead ({isPrivateFunction ? "private" : "public"})
-                            </span>
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                            <span>+ FPC overhead ({isPrivateFunction ? "private" : "public"})</span>
                             <span>
                               DA=+{overheadDA.toLocaleString()} L2=+{overheadL2.toLocaleString()}
                             </span>
@@ -948,9 +942,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                               DA={totalDA.toLocaleString()} L2={totalL2.toLocaleString()}
                             </span>
                           </Box>
-                          <Box
-                            sx={{ display: "flex", justifyContent: "space-between" }}
-                          >
+                          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
                             <span> Teardown</span>
                             <span>
                               DA={FPC_TEARDOWN_DA_GAS.toLocaleString()} L2=
