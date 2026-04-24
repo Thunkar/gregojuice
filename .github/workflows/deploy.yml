@@ -66,7 +66,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      # `fountainhead/action-wait-for-check` only waits for a check to reach a
+      # terminal state; it does NOT fail the step when that terminal state is
+      # "failure" or "cancelled". We read `outputs.conclusion` and fail
+      # explicitly whenever it's not "success" so deploy doesn't run on a red
+      # CI.
       - name: Wait for CI build
+        id: build
         uses: fountainhead/action-wait-for-check@v1.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -75,7 +81,14 @@ jobs:
           timeoutSeconds: 3000
           intervalSeconds: 15
 
+      - name: Assert CI build succeeded
+        if: steps.build.outputs.conclusion != 'success'
+        run: |
+          echo "CI build concluded with '${{ steps.build.outputs.conclusion }}' — aborting deploy."
+          exit 1
+
       - name: Wait for CI integration
+        id: integration
         uses: fountainhead/action-wait-for-check@v1.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -84,7 +97,14 @@ jobs:
           timeoutSeconds: 3000
           intervalSeconds: 15
 
+      - name: Assert CI integration succeeded
+        if: steps.integration.outputs.conclusion != 'success'
+        run: |
+          echo "CI integration concluded with '${{ steps.integration.outputs.conclusion }}' — aborting deploy."
+          exit 1
+
       - name: Wait for CI e2e
+        id: e2e
         uses: fountainhead/action-wait-for-check@v1.2.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -92,6 +112,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           timeoutSeconds: 3600
           intervalSeconds: 15
+
+      - name: Assert CI e2e succeeded
+        if: steps.e2e.outputs.conclusion != 'success'
+        run: |
+          echo "CI e2e concluded with '${{ steps.e2e.outputs.conclusion }}' — aborting deploy."
+          exit 1
 
   deploy:
     runs-on: ubuntu-latest
