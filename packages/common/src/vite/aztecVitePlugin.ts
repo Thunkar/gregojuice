@@ -41,7 +41,7 @@ function detectViteMajor(): number {
  *     yarn-workspace hoisting
  *
  * On Vite 7 (and older) — additionally:
- *   - `optimizeDeps.exclude: ['@aztec/kv-store/sqlite-opfs', '@sqlite.org/sqlite-wasm',
+ *   - `optimizeDeps.exclude: ['@aztec/kv-store/sqlite-opfs', '@aztec/sqlite3mc-wasm',
  *     '@aztec/noir-acvm_js', '@aztec/noir-noirc_abi', '@aztec/bb.js']` so Web Worker
  *     spawns via `new Worker(new URL('./worker.js', import.meta.url))` and sibling
  *     `.wasm` assets resolve against their real `node_modules` locations.
@@ -88,7 +88,7 @@ export function aztecVitePlugin(options: AztecVitePluginOptions = {}): Plugin[] 
               "@aztec/noir-acvm_js",
               "@aztec/noir-noirc_abi",
               "@aztec/bb.js",
-              "@sqlite.org/sqlite-wasm",
+              "@aztec/sqlite3mc-wasm",
               "@aztec/kv-store/sqlite-opfs",
             ],
             include: [

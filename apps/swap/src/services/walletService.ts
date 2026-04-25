@@ -16,6 +16,7 @@ import {
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
 import type { NetworkConfig } from "../config/networks";
+import { getOrCreateKvKey } from "../utils/kvKey";
 
 /**
  * Web wallet URLs to probe during discovery.
@@ -43,9 +44,14 @@ export async function createEmbeddedWallet(
   // `VITE_DISABLE_PROVER=1` turns off bb.js proving — only used in CI e2e
   // where proving starves the Aztec node's event loop on the 4 vCPU runner.
   const proverEnabled = import.meta.env.VITE_DISABLE_PROVER !== "1";
+  const encryptKv =
+    import.meta.env.VITE_KV_ENCRYPT !== "0" &&
+    import.meta.env.VITE_KV_ENCRYPT !== "false";
+  const encryptionKey = encryptKv ? getOrCreateKvKey() : undefined;
   const wallet = await EmbeddedWallet.create(node, {
     inspect: import.meta.env.DEV,
     pxe: { proverEnabled },
+    encryptionKey,
   });
   let accountManager = await wallet.loadStoredAccount();
   if (!accountManager) {
