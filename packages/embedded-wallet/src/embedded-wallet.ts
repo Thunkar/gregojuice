@@ -133,6 +133,14 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
 
     const wallet = await super.create<T>(node, finalOptions);
 
+    // Gas on Aztec is deterministic per-call: the estimator's output is the
+    // exact amount the tx will consume, assuming the args and caller match.
+    // Padding covers for non-determinism we don't have, and actively hurts
+    // the SubscriptionFPC flow — `max_fee` is sized against the unpadded
+    // estimate, so a padded `send()` overshoots the slot's committed cap
+    // and trips the private assertion. Zero padding by default.
+    wallet.setEstimatedGasPadding(0);
+
     if (walletStore) {
       (wallet as unknown as EmbeddedWallet).#walletStore = walletStore;
     }

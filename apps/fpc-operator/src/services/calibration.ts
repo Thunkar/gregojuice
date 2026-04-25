@@ -1,34 +1,56 @@
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import type { AbiType, ContractArtifact, FunctionAbi } from "@aztec/aztec.js/abi";
+import { type AbiType, type ContractArtifact, type FunctionAbi } from "@aztec/aztec.js/abi";
 import { Contract } from "@aztec/aztec.js/contracts";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
-import { buildNoirFunctionCall, buildExtraHashedArgs } from "@gregojuice/aztec/subscription-fpc";
-import { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
-import { NO_FROM } from "@aztec/aztec.js/account";
+import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import {
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
+  FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE,
+  FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
+  FPC_TEARDOWN_DA_GAS,
+  FPC_TEARDOWN_L2_GAS,
+} from "@gregojuice/aztec/fpc-gas-constants";
 
-const MAX_U128 = 2n ** 128n - 1n;
+// ── Calibration index cache ─────────────────────────────────────────
+//
+// The throwaway `sign_up` tx that `calibrateSponsoredApp` issues is the
+// expensive part of calibration — the simulation that follows is essentially
+// free. Cache the index per contract+selector so subsequent runs reuse the
+// same slot and skip the sign_up. Backed up via `backupService` so an
+// operator can restore them along with the FPC and signed-up apps.
+
 const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
 
-/** Retrieves a cached calibration index for a contract+selector pair, if one exists. */
-function getCachedCalibrationIndex(contractAddress: string, selector: string): number | null {
+export type CalibrationIndices = Record<string, number>;
+
+/** Returns the full cache map. Used by backup export. */
+export function getCalibrationIndices(): CalibrationIndices {
   try {
-    const cache = JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
-    return cache[`${contractAddress}:${selector}`] ?? null;
+    return JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
   } catch {
-    return null;
+    return {};
   }
 }
 
-/** Stores a calibration index for a contract+selector pair. */
-function setCachedCalibrationIndex(contractAddress: string, selector: string, index: number) {
-  try {
-    const cache = JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
-    cache[`${contractAddress}:${selector}`] = index;
-    localStorage.setItem(CALIBRATION_CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    /* ignore */
-  }
+/** Replaces the entire cache. Used by backup restore. */
+export function setCalibrationIndices(indices: CalibrationIndices): void {
+  localStorage.setItem(CALIBRATION_CACHE_KEY, JSON.stringify(indices));
+}
+
+function cacheKey(contract: string, selector: string): string {
+  return `${contract}:${selector}`;
+}
+
+function getCachedCalibrationIndex(contract: string, selector: string): number | undefined {
+  return getCalibrationIndices()[cacheKey(contract, selector)];
+}
+
+function setCachedCalibrationIndex(contract: string, selector: string, index: number): void {
+  const indices = getCalibrationIndices();
+  indices[cacheKey(contract, selector)] = index;
+  setCalibrationIndices(indices);
 }
 
 /**
@@ -77,23 +99,53 @@ function parseArg(value: string, type: AbiType): unknown {
 }
 
 export interface CalibrationResult {
+  /**
+   * Sponsored fn's own gas limits (no FPC overhead). Committed into the
+   * swap network config so runtime callers can rebuild the composite with
+   * the right overhead for subscribe vs sponsor.
+   */
   gasLimits: { daGas: number; l2Gas: number };
+  /**
+   * Subscribe-wrapped gas (gasLimits + subscribe FPC overhead). Displayed
+   * to the operator as the worst-case single-tx cost; also used to size
+   * the slot note's `max_fee` against the P75 fee-per-gas.
+   */
+  subscribeGasLimits: { daGas: number; l2Gas: number };
   teardownGasLimits: { daGas: number; l2Gas: number };
-  calibrationIndex: number;
+  /**
+   * Whether the sponsored call enqueues a public phase. Detected at
+   * calibration from the simulation result — not `sampleCall.type`,
+   * because private fns can enqueue public work too.
+   */
+  hasPublicCall: boolean;
 }
 
 interface CalibrationBaseParams {
   adminWallet: EmbeddedWallet;
   adminAddress: AztecAddress;
-  fpcAddress: AztecAddress;
+  fpc: SubscriptionFPC;
   artifact: ContractArtifact;
   contractInstance: ContractInstanceWithAddress;
   selectedFunction: FunctionAbi;
   argValues: string[];
 }
 
-async function buildSampleCall(params: CalibrationBaseParams) {
-  const { adminWallet, artifact, contractInstance, selectedFunction, argValues } = params;
+/**
+ * Operator-facing wrapper around the shared `calibrateSponsoredApp` helper.
+ * Builds the sample call from the wizard's form state, runs calibration
+ * through the FPC, and augments the result with the subscribe-wrapped
+ * composite + teardown limits for the UI's fee calculator.
+ */
+export async function runCalibration(params: CalibrationBaseParams): Promise<CalibrationResult> {
+  const {
+    adminWallet,
+    adminAddress,
+    fpc,
+    artifact,
+    contractInstance,
+    selectedFunction,
+    argValues,
+  } = params;
 
   const adminMeta = await adminWallet.getContractMetadata(contractInstance.address);
   if (!adminMeta.instance) {
@@ -104,120 +156,50 @@ async function buildSampleCall(params: CalibrationBaseParams) {
   const parsedArgs = selectedFunction.parameters.map((p, i) =>
     parseArg(argValues[i] ?? "0", p.type),
   );
-  return contract.methods[selectedFunction.name](...parsedArgs).getFunctionCall();
-}
+  const action = contract.methods[selectedFunction.name](...parsedArgs);
+  const sampleCall = await action.getFunctionCall();
 
-async function simulateSubscription(params: {
-  adminWallet: EmbeddedWallet;
-  adminAddress: AztecAddress;
-  fpcAddress: AztecAddress;
-  sampleCall: Awaited<ReturnType<typeof buildSampleCall>>;
-  calibrationIndex: number;
-}): Promise<CalibrationResult> {
-  const { adminWallet, adminAddress, fpcAddress, sampleCall, calibrationIndex } = params;
+  // Reuse a cached calibration slot if we've calibrated this contract+selector
+  // before. Only the slot is reusable — args may have changed, so we always
+  // re-simulate to get fresh gas numbers.
+  const cachedIndex = getCachedCalibrationIndex(
+    sampleCall.to.toString(),
+    sampleCall.selector.toString(),
+  );
 
-  const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-  const noirCall = await buildNoirFunctionCall(sampleCall);
-  console.log(noirCall);
-  console.log(sampleCall);
-  try {
-    const { estimatedGas } = await adminFpc.methods
-      .subscribe(noirCall, calibrationIndex, adminAddress)
-      .with({
-        extraHashedArgs: await buildExtraHashedArgs(sampleCall),
-      })
-      .simulate({
-        from: NO_FROM,
-        fee: { estimateGas: true, estimatedGasPadding: 0 },
-        additionalScopes: [adminAddress, fpcAddress],
-      });
-    return {
-      gasLimits: {
-        daGas: Number(estimatedGas.gasLimits.daGas),
-        l2Gas: Number(estimatedGas.gasLimits.l2Gas),
-      },
-      teardownGasLimits: {
-        daGas: Number(estimatedGas.teardownGasLimits.daGas),
-        l2Gas: Number(estimatedGas.teardownGasLimits.l2Gas),
-      },
-      calibrationIndex,
-    };
-  } catch (err) {
-    console.error(err);
-    throw err;
-  }
-}
-
-export class CalibrationError extends Error {
-  constructor(
-    message: string,
-    public readonly calibrationIndex: number,
-  ) {
-    super(message);
-  }
-}
-
-/**
- * Full calibration: sign_up (creates a slot) + simulate subscription.
- * Returns the calibrationIndex for retries.
- * If simulation fails after sign_up succeeds, throws CalibrationError with the index.
- */
-export async function runCalibration(params: CalibrationBaseParams): Promise<CalibrationResult> {
-  const { adminWallet, adminAddress, fpcAddress } = params;
-
-  const sampleCall = await buildSampleCall(params);
-  const cacheKey = {
-    contract: sampleCall.to.toString(),
-    selector: sampleCall.selector.toString(),
-  };
-
-  // Check for a cached calibration index (from a prior sign_up for this contract+selector)
-  const cachedIndex = getCachedCalibrationIndex(cacheKey.contract, cacheKey.selector);
-
-  let calibrationIndex: number;
-  if (cachedIndex !== null) {
-    // Reuse the existing slot — skip the expensive sign_up tx
-    calibrationIndex = cachedIndex;
-  } else {
-    // First calibration for this contract+selector — create a new slot
-    calibrationIndex = 1000000 + Math.floor(Math.random() * 1000000);
-    const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-    await adminFpc.methods
-      .sign_up(sampleCall.to, sampleCall.selector, calibrationIndex, 1, MAX_U128, 1)
-      .send({ from: adminAddress });
-    setCachedCalibrationIndex(cacheKey.contract, cacheKey.selector, calibrationIndex);
-  }
-
-  try {
-    return await simulateSubscription({
-      adminWallet,
-      adminAddress,
-      fpcAddress,
-      sampleCall,
-      calibrationIndex,
-    });
-  } catch (err) {
-    throw new CalibrationError(
-      err instanceof Error ? err.message : "Simulation failed",
-      calibrationIndex,
+  const calibrated = await fpc.helpers.calibrate({
+    adminWallet,
+    adminAddress,
+    sampleCall,
+    calibrationIndex: cachedIndex,
+  });
+  if (cachedIndex === undefined) {
+    setCachedCalibrationIndex(
+      sampleCall.to.toString(),
+      sampleCall.selector.toString(),
+      calibrated.calibrationIndex,
     );
   }
-}
+  const gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+  const hasPublicCall = calibrated.hasPublicCall;
 
-/**
- * Retry just the simulation with different args, reusing the existing calibration slot.
- * Simulation doesn't consume notes, so the same slot can be re-simulated.
- */
-export async function retryCalibrationSimulation(
-  params: CalibrationBaseParams & { calibrationIndex: number },
-): Promise<CalibrationResult> {
-  const sampleCall = await buildSampleCall(params);
+  const subscribeOverheadDa = hasPublicCall
+    ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC
+    : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE;
+  const subscribeOverheadL2 = hasPublicCall
+    ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC
+    : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE;
 
-  return simulateSubscription({
-    adminWallet: params.adminWallet,
-    adminAddress: params.adminAddress,
-    fpcAddress: params.fpcAddress,
-    sampleCall,
-    calibrationIndex: params.calibrationIndex,
-  });
+  return {
+    gasLimits,
+    subscribeGasLimits: {
+      daGas: gasLimits.daGas + subscribeOverheadDa,
+      l2Gas: gasLimits.l2Gas + subscribeOverheadL2,
+    },
+    teardownGasLimits: {
+      daGas: FPC_TEARDOWN_DA_GAS,
+      l2Gas: FPC_TEARDOWN_L2_GAS,
+    },
+    hasPublicCall,
+  };
 }

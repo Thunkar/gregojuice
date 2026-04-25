@@ -259,9 +259,9 @@ async function signUpOneApp(page: Page, args: SignUpArgs) {
 }
 
 test.describe.serial("fpc signs up sponsored apps", () => {
-  // Two signups × (calibrate ≤ 240s + submit ≤ 300s) is already 18 min in the
-  // worst case — `test.slow()`'s ×3 (15 min) cuts it too close on CI. Bump to
-  // 25 min for headroom on slow proof generation.
+  // Two signups × (calibrate ≤ 240s for standalone sim + submit ≤ 300s for
+  // the real sign_up tx). `test.slow()`'s ×3 (15 min) cuts it too close on
+  // CI when proving is slow. Bump to 25 min for headroom.
   test.setTimeout(25 * 60_000);
 
   // Mint BEFORE the browser starts. If we ran this inside the test body
@@ -333,9 +333,6 @@ test.describe.serial("fpc signs up sponsored apps", () => {
         token_out: swap.gregoCoinPremium,
         amount_out: "100",
         amount_in_max: "1000000",
-        // `authwit_nonce=0` short-circuits AMM's authwit check path and
-        // makes calibration fail to materialise the expected authwit.
-        // Any non-zero Field works.
         authwit_nonce: "1",
       },
       extras: [
@@ -369,16 +366,47 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     const popSelector = await FunctionSelector.fromNameAndParameters(popFn.name, popFn.parameters);
     const ammSelector = await FunctionSelector.fromNameAndParameters(ammFn.name, ammFn.parameters);
 
+    // Pull the sponsored fn's gas limits (no FPC overhead) from the
+    // app-list row's data-* attrs. Swap's helpers add the subscribe/sponsor
+    // FPC overhead on top at call time; committing the plain gas here keeps
+    // the slot's `max_fee` consistent with what runtime will send.
+    const readGasInfo = async (appAddress: string, selector: string) => {
+      const row = page.getByTestId(`app-list-row-${appAddress}-${selector}`);
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      const [daGas, l2Gas, hasPublicCallStr] = await Promise.all([
+        row.getAttribute("data-gas-da"),
+        row.getAttribute("data-gas-l2"),
+        row.getAttribute("data-has-public-call"),
+      ]);
+      if (daGas == null || l2Gas == null || hasPublicCallStr == null) {
+        throw new Error(`Missing gas data attrs on row ${appAddress}:${selector}`);
+      }
+      return {
+        gasLimits: { daGas: Number(daGas), l2Gas: Number(l2Gas) },
+        hasPublicCall: hasPublicCallStr === "true",
+      };
+    };
+    const popInfo = await readGasInfo(swap.pop, popSelector.toString());
+    const ammInfo = await readGasInfo(swap.amm, ammSelector.toString());
+
     const swapConfig = JSON.parse(await readFile(SWAP_LOCAL_JSON, "utf-8"));
     swapConfig.subscriptionFPC = {
       address: fpc.fpcAddress,
       secretKey: fpc.fpcSecretKey,
       functions: {
         [swap.pop]: {
-          [popSelector.toString()]: 0,
+          [popSelector.toString()]: {
+            configIndex: 0,
+            gasLimits: popInfo.gasLimits,
+            hasPublicCall: popInfo.hasPublicCall,
+          },
         },
         [swap.amm]: {
-          [ammSelector.toString()]: 0,
+          [ammSelector.toString()]: {
+            configIndex: 0,
+            gasLimits: ammInfo.gasLimits,
+            hasPublicCall: ammInfo.hasPublicCall,
+          },
         },
       },
     };

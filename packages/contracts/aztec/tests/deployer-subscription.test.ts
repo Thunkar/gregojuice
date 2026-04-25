@@ -6,9 +6,11 @@ import { getContractInstanceFromInstantiationParams } from "@aztec/aztec.js/cont
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { Ecdsa } from "@aztec/foundation/crypto/ecdsa";
 import type { AccountManager } from "@aztec/aztec.js/wallet";
+import { Gas } from "@aztec/stdlib/gas";
+import { DA_GAS_PER_FIELD, L2_GAS_PER_NULLIFIER } from "@aztec/constants";
 
 import { EcdsaAccountDeployerContract } from "../noir/artifacts/EcdsaAccountDeployer.js";
-import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "../lib/subscription-fpc.js";
 import { setupTestContext, type FPCTestContext } from "./utils.js";
 
 const PRODUCTION_INDEX = 100000 + Math.floor(Math.random() * 100000);
@@ -25,6 +27,8 @@ describe("Account deployment subscription", () => {
   let userWallet: EmbeddedWallet;
   let deployerAddress: AztecAddress;
   let subscribedAccountManager: AccountManager;
+  let gasLimits: { daGas: number; l2Gas: number };
+  let hasPublicCall: boolean;
 
   beforeAll(async () => {
     userWallet = await EmbeddedWallet.create(ctx.node, { ephemeral: true });
@@ -51,24 +55,30 @@ describe("Account deployment subscription", () => {
       await Fr.random(),
       SIGNING_PRIVATE_KEY,
     );
-    const sampleCall = await EcdsaAccountDeployerContract.at(deployerAddress, ctx.wallet)
-      .methods.deploy(
-        dummyAccount.address,
-        await Fr.random(),
-        Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
-        Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
-      )
-      .getFunctionCall();
+    const deploy = EcdsaAccountDeployerContract.at(deployerAddress, ctx.wallet).methods.deploy(
+      dummyAccount.address,
+      await Fr.random(),
+      Array.from(SIGNING_PUBLIC_KEY.subarray(0, 32)),
+      Array.from(SIGNING_PUBLIC_KEY.subarray(32, 64)),
+    );
+    const sampleCall = await deploy.getFunctionCall();
 
-    const { maxFee } = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
-      node: ctx.node,
       sampleCall,
-      feeMultiplier: 50,
       additionalScopes: [dummyAccount.address],
     });
+    gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    hasPublicCall = calibrated.hasPublicCall;
 
+    // Size max_fee against the subscribe-path composite with a 50× safety
+    // multiplier — local fees are cheap but stable enough not to need P75.
+    const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+      fpcSubscribeOverhead(hasPublicCall),
+    );
+    const currentFees = await ctx.node.getCurrentMinFees();
+    const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
     expect(maxFee).toBeGreaterThan(0n);
 
     await ctx.fpc.methods
@@ -98,10 +108,29 @@ describe("Account deployment subscription", () => {
       )
       .getFunctionCall();
 
+    // TODO(upstream stub fix): the SDK's `simulateViaEntrypoint` overrides the
+    // user account's contract artifact with a stub during simulation. The stub
+    // ECDSA constructor (`SimulatedEcdsaAccount`) doesn't carry `#[initializer]`,
+    // so it skips the address-init nullifier the real `#[initializer]` macro
+    // injects. That makes the simulated `gasUsed` come in 1 nullifier short of
+    // what the kernel meters at proveTx time — and the tx OOGs at the tail
+    // validator. Same applies to calibration: the calibrated standalone gas is
+    // also 1 nullifier short. Bump the limits by L2_GAS_PER_NULLIFIER (16k L2)
+    // and DA_GAS_PER_FIELD (32 DA) — the cost of the missing nullifier under
+    // private-only pricing — to cover the gap. Drop this once the upstream stub
+    // is fixed to mirror the real constructor's side effects, or once the SDK
+    // skips overrides for `from === NO_FROM`.
+    const adjustedGasLimits = {
+      daGas: gasLimits.daGas + DA_GAS_PER_FIELD,
+      l2Gas: gasLimits.l2Gas + L2_GAS_PER_NULLIFIER,
+    };
+
     await fpc.helpers.subscribe({
       call: sponsoredCall,
       configIndex: PRODUCTION_INDEX,
       userAddress: subscribedAccountManager.address,
+      gasLimits: adjustedGasLimits,
+      hasPublicCall,
     });
   });
 });

@@ -151,6 +151,8 @@ export function AppList({ fpc, fpcAddress }: AppListProps) {
       fpcAddress,
       fpcSecretKey: stored?.secretKey ?? "",
       configIndex: app.configIndex,
+      gasLimits: app.gasLimits,
+      hasPublicCall: app.hasPublicCall,
     };
   };
 
@@ -220,6 +222,9 @@ export function AppList({ fpc, fpcAddress }: AppListProps) {
                 <TableRow
                   key={i}
                   data-testid={`app-list-row-${app.appAddress}-${app.functionSelector}`}
+                  data-gas-da={app.gasLimits.daGas}
+                  data-gas-l2={app.gasLimits.l2Gas}
+                  data-has-public-call={String(app.hasPublicCall)}
                 >
                   <TableCell sx={{ fontFamily: "monospace", fontSize: "0.75rem" }}>
                     {shortAddress(app.appAddress)}

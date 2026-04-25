@@ -17,6 +17,11 @@ const FPC_SECRET_KEY = "gregojuice_fpc_secret";
 const FPC_SALT_KEY = "gregojuice_fpc_salt";
 const FPC_DEPLOYED_KEY = "gregojuice_fpc_deployed";
 const SIGNED_UP_APPS_KEY = "gregojuice_fpc_apps";
+// Mirror of `CALIBRATION_CACHE_KEY` from `calibration.ts`. Kept here as a
+// literal to avoid importing from calibration into fpcService (which is
+// imported by calibration), and because clearing it is just localStorage
+// access — no need to round-trip through the cache helpers.
+const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
 
 // ── Stored FPC state ─────────────────────────────────────────────────
 
@@ -64,6 +69,18 @@ export interface SignedUpApp {
   maxUses: number;
   maxFee: string;
   maxUsers: number;
+  /**
+   * Sponsored fn's own gas limits (no FPC overhead). Runtime callers add
+   * the subscribe/sponsor overhead at call time; swap persists this into
+   * its network config so the helpers can size each tx.
+   */
+  gasLimits: { daGas: number; l2Gas: number };
+  /**
+   * Whether the sponsored call enqueues a public phase. Detected at
+   * calibration. Runtime needs it to pick the correct FPC overhead
+   * constant (PUBLIC vs PRIVATE variant).
+   */
+  hasPublicCall: boolean;
   createdAt: number;
 }
 
@@ -101,6 +118,9 @@ export function clearFPC(): void {
   localStorage.removeItem(FPC_SALT_KEY);
   localStorage.removeItem(FPC_DEPLOYED_KEY);
   localStorage.removeItem(SIGNED_UP_APPS_KEY);
+  // Calibration slots are tied to the FPC instance — wiping the FPC
+  // invalidates them, so drop the cache too.
+  localStorage.removeItem(CALIBRATION_CACHE_KEY);
 }
 
 // ── Config ID computation (matches Noir contract) ────────────────────
@@ -220,6 +240,8 @@ export interface SignUpParams {
   maxUses: number;
   maxFee: bigint;
   maxUsers: number;
+  gasLimits: { daGas: number; l2Gas: number };
+  hasPublicCall: boolean;
 }
 
 export async function signUpApp(
@@ -245,6 +267,8 @@ export async function signUpApp(
     maxUses: params.maxUses,
     maxFee: params.maxFee.toString(),
     maxUsers: params.maxUsers,
+    gasLimits: params.gasLimits,
+    hasPublicCall: params.hasPublicCall,
     createdAt: Date.now(),
   });
 }

@@ -10,11 +10,15 @@ import {
   type SignedUpApp,
   type StoredFPC,
 } from "./fpcService";
+import {
+  getCalibrationIndices,
+  setCalibrationIndices,
+  type CalibrationIndices,
+} from "./calibration";
 
 // ── Backup format ────────────────────────────────────────────────────
 
 const BACKUP_VERSION = 1;
-const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
 const NETWORK_KEY = "gregojuice_network";
 
 export interface BackupData {
@@ -28,7 +32,13 @@ export interface BackupData {
   };
   fpc: StoredFPC | null;
   apps: SignedUpApp[];
-  calibrationIndices: Record<string, number>;
+  /**
+   * Cached calibration slot indices keyed by `contract:selector`. Reused
+   * across calibrations to skip the throwaway `sign_up` tx — backed up so
+   * an operator restoring on another machine doesn't have to redo them.
+   * Optional for backwards-compat with v1 backups that pre-date the cache.
+   */
+  calibrationIndices?: CalibrationIndices;
 }
 
 // ── Export ────────────────────────────────────────────────────────────
@@ -38,13 +48,6 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
 
   const fpc = getStoredFPC();
   const apps = getSignedUpApps();
-
-  let calibrationIndices: Record<string, number> = {};
-  try {
-    calibrationIndices = JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
-  } catch {
-    // ignore malformed cache
-  }
 
   const data: BackupData = {
     version: BACKUP_VERSION,
@@ -57,7 +60,7 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
     },
     fpc,
     apps,
-    calibrationIndices,
+    calibrationIndices: getCalibrationIndices(),
   };
 
   const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -142,9 +145,9 @@ export async function applyBackup(wallet: EmbeddedWallet, data: BackupData): Pro
     saveSignedUpApps(data.apps);
   }
 
-  // Restore calibration indices
-  if (data.calibrationIndices && Object.keys(data.calibrationIndices).length > 0) {
-    localStorage.setItem(CALIBRATION_CACHE_KEY, JSON.stringify(data.calibrationIndices));
+  // Restore calibration index cache (optional — older v1 backups omit it)
+  if (data.calibrationIndices) {
+    setCalibrationIndices(data.calibrationIndices);
   }
 
   // Reload to reinitialize everything from clean state

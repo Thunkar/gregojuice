@@ -2,10 +2,11 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { Fr } from "@aztec/aztec.js/fields";
+import { Gas } from "@aztec/stdlib/gas";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 
-import { SubscriptionFPC } from "../lib/subscription-fpc.js";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "../lib/subscription-fpc.js";
 import { GrieferWallet } from "./utils.js";
 import { setupTestContext, type FPCTestContext } from "./utils.js";
 
@@ -24,6 +25,8 @@ describe("Failure cases", () => {
   let token: TokenContract;
   let userAddress: AztecAddress;
   let recipientAddress: AztecAddress;
+  let gasLimits: { daGas: number; l2Gas: number };
+  let hasPublicCall: boolean;
 
   beforeAll(async () => {
     const {
@@ -63,23 +66,29 @@ describe("Failure cases", () => {
     await userWallet.registerSender(ctx.admin, "admin");
 
     // Set up a sponsored app with max_uses=1, max_users=1
-    const sampleCall = await token.methods
-      .transfer_in_private(ctx.admin, recipientAddress, 1n, 0)
-      .getFunctionCall();
+    const sampleAction = token.methods.transfer_in_private(ctx.admin, recipientAddress, 1n, 0);
+    const sampleCall = await sampleAction.getFunctionCall();
 
     const authwit = await ctx.wallet.createAuthWit(ctx.admin, {
       caller: ctx.fpc.address,
       call: sampleCall,
     });
 
-    const { maxFee } = await ctx.fpc.helpers.calibrate({
+    const calibrated = await ctx.fpc.helpers.calibrate({
       adminWallet: ctx.wallet,
       adminAddress: ctx.admin,
-      node: ctx.node,
       sampleCall,
-      feeMultiplier: 50,
       authWitnesses: [authwit],
     });
+    gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
+    hasPublicCall = calibrated.hasPublicCall;
+    // Size max_fee against the subscribe-path composite with a 50× safety
+    // multiplier.
+    const subscribeTotal = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
+      fpcSubscribeOverhead(hasPublicCall),
+    );
+    const currentFees = await ctx.node.getCurrentMinFees();
+    const maxFee = subscribeTotal.computeFee(currentFees.mul(50)).toBigInt();
 
     await ctx.fpc.methods
       .sign_up(sampleCall.to, sampleCall.selector, FAILURE_INDEX, 1, maxFee, 1)
@@ -101,6 +110,8 @@ describe("Failure cases", () => {
       configIndex: FAILURE_INDEX,
       userAddress,
       authWitnesses: [subscribeAuthWit],
+      gasLimits,
+      hasPublicCall,
     });
   });
 
@@ -123,6 +134,8 @@ describe("Failure cases", () => {
         configIndex: FAILURE_INDEX,
         userAddress,
         authWitnesses: [authWit],
+        gasLimits,
+        hasPublicCall,
       }),
     ).rejects.toThrow();
   });
@@ -169,6 +182,8 @@ describe("Failure cases", () => {
         configIndex: FAILURE_INDEX,
         userAddress: grieferAddress,
         authWitnesses: [griefAuthWit],
+        gasLimits,
+        hasPublicCall,
       }),
     ).rejects.toThrow();
   });
@@ -229,6 +244,8 @@ describe("Failure cases", () => {
         configIndex: TIGHT_INDEX,
         userAddress: tightUserAddress,
         authWitnesses: [tightAuthWit],
+        gasLimits,
+        hasPublicCall,
       }),
     ).rejects.toThrow(/Gas settings exceed subscription max_fee/);
   });

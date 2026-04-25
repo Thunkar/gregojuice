@@ -9,13 +9,32 @@
  * Local dev / e2e leave `local.json` in place and it becomes the default.
  */
 
+/**
+ * Per-function sponsorship record. `gasLimits` is the sponsored fn's own
+ * gas (no FPC overhead) — the subscribe/sponsor helpers add the
+ * appropriate FPC overhead on top at call time. Measured at calibration
+ * and committed alongside the slot's `max_fee`.
+ *
+ * `hasPublicCall` reflects whether the sponsored call enqueues a public
+ * phase. A private-typed fn can still enqueue public work (e.g. PoP's
+ * mint via the Token contract); when it does, the tx is priced under
+ * the public regime and the FPC's own private ops get repriced at AVM
+ * rates, so the subscribe/sponsor helpers must pick the PUBLIC overhead
+ * constant. Detected at calibration.
+ */
+export interface SubscriptionFunctionConfig {
+  configIndex: number;
+  gasLimits: { daGas: number; l2Gas: number };
+  hasPublicCall: boolean;
+}
+
 export interface SubscriptionFPCConfig {
   /** Address of the SubscriptionFPC contract */
   address: string;
   /** Secret key for registering the FPC in PXE (needed to decrypt slot notes) */
   secretKey: string;
-  /** Map of contractAddress → { functionSelector → configIndex } */
-  functions: Record<string, Record<string, number>>;
+  /** Map of contractAddress → { functionSelector → per-function config } */
+  functions: Record<string, Record<string, SubscriptionFunctionConfig>>;
 }
 
 export interface NetworkConfig {

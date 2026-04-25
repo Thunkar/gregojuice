@@ -17,6 +17,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -34,15 +36,11 @@ import {
 import { getDefaultInitializer, getInitializer } from "@aztec/stdlib/abi";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
 import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
 import { useWallet } from "../contexts/WalletContext";
 import { useAliases } from "../contexts/AliasContext";
 import { signUpApp } from "../services/fpcService";
-import {
-  runCalibration,
-  retryCalibrationSimulation,
-  CalibrationError,
-  type CalibrationResult as CalibrationData,
-} from "../services/calibration";
+import { runCalibration, type CalibrationResult as CalibrationData } from "../services/calibration";
 import {
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
@@ -62,11 +60,10 @@ const STEPS = ["Contract Artifact & Address", "Select Function", "Calibration", 
 interface AppSignUpProps {
   fpc: SubscriptionFPCContract;
   adminAddress: AztecAddress;
-  fpcAddress: string;
   onSignedUp?: () => void;
 }
 
-export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSignUpProps) {
+export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
   const { wallet, node } = useWallet();
   const {
     contracts: storedContracts,
@@ -120,6 +117,12 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     daGas: "",
     l2Gas: "",
   });
+  // Operator override for the `hasPublicCall` flag in manual mode. We seed it
+  // from the function's top-level type when the function is picked, but allow
+  // flipping it — a top-level-private fn can still enqueue a public call (e.g.
+  // via `self.call(...)` into a public fn), and the FPC's pricing depends on
+  // the *whole tx*'s regime, not just the entry fn's type.
+  const [manualHasPublicCall, setManualHasPublicCall] = useState(false);
 
   const isPrivateFunction = selectedFunction?.functionType === FunctionType.PRIVATE;
 
@@ -130,7 +133,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationData | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
-  const [calibrationIndex, setCalibrationIndex] = useState<number | null>(null);
 
   // Step 5: Sign up
   const [maxFeeFj, setMaxFeeFj] = useState("");
@@ -186,7 +188,9 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setSelectedFunction(fn);
     setArgValues(getDefaultArgs(fn));
     setCalibrationResult(null);
-    setCalibrationIndex(null);
+    // Default the manual `hasPublicCall` toggle from the fn's top-level type.
+    // Operator can flip it if the fn enqueues public work from private context.
+    setManualHasPublicCall(fn.functionType !== FunctionType.PRIVATE);
     setActiveStep(2);
   };
 
@@ -278,31 +282,18 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     setCalibrating(true);
     setCalibrationError(null);
     try {
-      const baseParams = {
+      const result = await runCalibration({
         adminWallet: wallet,
         adminAddress,
-        fpcAddress: AztecAddress.fromString(fpcAddress),
+        fpc: new SubscriptionFPC(fpc),
         artifact,
         contractInstance,
         selectedFunction,
         argValues,
-      };
-
-      const result =
-        calibrationIndex !== null
-          ? await retryCalibrationSimulation({
-              ...baseParams,
-              calibrationIndex,
-            })
-          : await runCalibration(baseParams);
-
+      });
       setCalibrationResult(result);
-      setCalibrationIndex(result.calibrationIndex);
       setActiveStep(3); // Auto-advance to Review & Sign Up
     } catch (err) {
-      if (err instanceof CalibrationError) {
-        setCalibrationIndex(err.calibrationIndex);
-      }
       setCalibrationError(err instanceof Error ? err.message : "Calibration failed");
     } finally {
       setCalibrating(false);
@@ -319,15 +310,16 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
     // overhead, which itself depends on whether the sponsored call enqueues
     // a public call — the FPC's internal note ops get repriced at AVM rates
     // when there is one. Pick the matching pre-measured constant.
-    const fpcOverheadDA = isPrivateFunction
-      ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE
-      : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC;
-    const fpcOverheadL2 = isPrivateFunction
-      ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE
-      : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
+    const fpcOverheadDA = manualHasPublicCall
+      ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC
+      : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE;
+    const fpcOverheadL2 = manualHasPublicCall
+      ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC
+      : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE;
 
     const result: CalibrationData = {
-      gasLimits: {
+      gasLimits: { daGas: standaloneDA, l2Gas: standaloneL2 },
+      subscribeGasLimits: {
         daGas: standaloneDA + fpcOverheadDA,
         l2Gas: standaloneL2 + fpcOverheadL2,
       },
@@ -335,7 +327,7 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         daGas: FPC_TEARDOWN_DA_GAS,
         l2Gas: FPC_TEARDOWN_L2_GAS,
       },
-      calibrationIndex: -1,
+      hasPublicCall: manualHasPublicCall,
     };
     setCalibrationResult(result);
     setActiveStep(3);
@@ -355,6 +347,9 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         selectedFunction.name,
         selectedFunction.parameters,
       );
+      if (!calibrationResult) {
+        throw new Error("Calibration must complete before signing up");
+      }
       await signUpApp(fpc, adminAddress, {
         appAddress: contractInstance.address,
         selector,
@@ -362,6 +357,8 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         maxUses: parseInt(maxUses),
         maxFee: parseUnits(maxFeeFj, 18),
         maxUsers: parseInt(maxUsers),
+        gasLimits: calibrationResult.gasLimits,
+        hasPublicCall: calibrationResult.hasPublicCall,
       });
       // Persist the signed-up app as an aliased contract so it's available as
       // an arg pick for future calibrations.
@@ -381,7 +378,6 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
         setContractAlias("");
         setArgValues([]);
         setCalibrationResult(null);
-        setCalibrationIndex(null);
         setCalibrationError(null);
         setMaxFeeFj("");
         setConfigIndex("0");
@@ -818,10 +814,10 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     {calibrating ? (
                       <>
                         <CircularProgress size={20} sx={{ mr: 1 }} />
-                        {calibrationIndex !== null ? "Retrying..." : "Calibrating..."}
+                        Calibrating...
                       </>
-                    ) : calibrationIndex !== null ? (
-                      "Retry Calibration"
+                    ) : calibrationResult ? (
+                      "Re-run Calibration"
                     ) : (
                       "Run Calibration"
                     )}
@@ -852,6 +848,32 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                   size="small"
                   color={isPrivateFunction ? "secondary" : "primary"}
                   sx={{ mb: 2 }}
+                />
+
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={manualHasPublicCall}
+                      onChange={(e) => setManualHasPublicCall(e.target.checked)}
+                      size="small"
+                      data-testid="app-signup-manual-has-public-call"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2">Has public call</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {isPrivateFunction
+                          ? "Enable if this private fn enqueues a public call (e.g. via self.call into a public fn). Switches to PUBLIC FPC overhead constants."
+                          : "Public fns always run a public phase. Disable only if you know better."}
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{
+                    mb: 2,
+                    alignItems: "flex-start",
+                    "& .MuiFormControlLabel-label": { mt: 0.25 },
+                  }}
                 />
 
                 <Typography
@@ -904,12 +926,12 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                     {(() => {
                       const sDA = parseInt(manualStandaloneGas.daGas) || 0;
                       const sL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
-                      const overheadDA = isPrivateFunction
-                        ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE
-                        : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC;
-                      const overheadL2 = isPrivateFunction
-                        ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE
-                        : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
+                      const overheadDA = manualHasPublicCall
+                        ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC
+                        : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE;
+                      const overheadL2 = manualHasPublicCall
+                        ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC
+                        : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE;
                       const totalDA = sDA + overheadDA;
                       const totalL2 = sL2 + overheadL2;
                       return (
@@ -921,7 +943,9 @@ export function AppSignUp({ fpc, adminAddress, fpcAddress, onSignedUp }: AppSign
                             </span>
                           </Box>
                           <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                            <span>+ FPC overhead ({isPrivateFunction ? "private" : "public"})</span>
+                            <span>
+                              + FPC overhead ({manualHasPublicCall ? "public" : "private"})
+                            </span>
                             <span>
                               DA=+{overheadDA.toLocaleString()} L2=+{overheadL2.toLocaleString()}
                             </span>
