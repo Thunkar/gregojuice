@@ -869,7 +869,11 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
                       </Typography>
                     </Box>
                   }
-                  sx={{ mb: 2, alignItems: "flex-start", "& .MuiFormControlLabel-label": { mt: 0.25 } }}
+                  sx={{
+                    mb: 2,
+                    alignItems: "flex-start",
+                    "& .MuiFormControlLabel-label": { mt: 0.25 },
+                  }}
                 />
 
                 <Typography
@@ -939,7 +943,9 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
                             </span>
                           </Box>
                           <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                            <span>+ FPC overhead ({manualHasPublicCall ? "public" : "private"})</span>
+                            <span>
+                              + FPC overhead ({manualHasPublicCall ? "public" : "private"})
+                            </span>
                             <span>
                               DA=+{overheadDA.toLocaleString()} L2=+{overheadL2.toLocaleString()}
                             </span>

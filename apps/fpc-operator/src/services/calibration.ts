@@ -137,8 +137,15 @@ interface CalibrationBaseParams {
  * composite + teardown limits for the UI's fee calculator.
  */
 export async function runCalibration(params: CalibrationBaseParams): Promise<CalibrationResult> {
-  const { adminWallet, adminAddress, fpc, artifact, contractInstance, selectedFunction, argValues } =
-    params;
+  const {
+    adminWallet,
+    adminAddress,
+    fpc,
+    artifact,
+    contractInstance,
+    selectedFunction,
+    argValues,
+  } = params;
 
   const adminMeta = await adminWallet.getContractMetadata(contractInstance.address);
   if (!adminMeta.instance) {
