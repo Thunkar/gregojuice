@@ -140,9 +140,7 @@ export async function calibrateSponsoredApp(params: {
   const subscribeOverhead = fpcSubscribeOverhead(hasPublicCall);
   const derivedDa = Math.max(0, subscribeDa - Number(subscribeOverhead.daGas));
   const derivedL2 = Math.max(0, subscribeL2 - Number(subscribeOverhead.l2Gas));
-  console.log(
-    `[calibrate] subscribe-measured DA=${subscribeDa} L2=${subscribeL2}  hasPublicCall=${hasPublicCall}  overhead DA=${Number(subscribeOverhead.daGas)} L2=${Number(subscribeOverhead.l2Gas)}  derived DA=${derivedDa} L2=${derivedL2}  (send will re-add overhead → DA=${derivedDa + Number(subscribeOverhead.daGas)} L2=${derivedL2 + Number(subscribeOverhead.l2Gas)})`,
-  );
+
   return { daGas: derivedDa, l2Gas: derivedL2, hasPublicCall };
 }
 
