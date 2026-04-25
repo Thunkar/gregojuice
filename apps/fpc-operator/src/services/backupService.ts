@@ -10,6 +10,11 @@ import {
   type SignedUpApp,
   type StoredFPC,
 } from "./fpcService";
+import {
+  getCalibrationIndices,
+  setCalibrationIndices,
+  type CalibrationIndices,
+} from "./calibration";
 
 // ── Backup format ────────────────────────────────────────────────────
 
@@ -27,6 +32,13 @@ export interface BackupData {
   };
   fpc: StoredFPC | null;
   apps: SignedUpApp[];
+  /**
+   * Cached calibration slot indices keyed by `contract:selector`. Reused
+   * across calibrations to skip the throwaway `sign_up` tx — backed up so
+   * an operator restoring on another machine doesn't have to redo them.
+   * Optional for backwards-compat with v1 backups that pre-date the cache.
+   */
+  calibrationIndices?: CalibrationIndices;
 }
 
 // ── Export ────────────────────────────────────────────────────────────
@@ -48,6 +60,7 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
     },
     fpc,
     apps,
+    calibrationIndices: getCalibrationIndices(),
   };
 
   const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -130,6 +143,11 @@ export async function applyBackup(wallet: EmbeddedWallet, data: BackupData): Pro
   // Restore signed-up apps
   if (data.apps?.length) {
     saveSignedUpApps(data.apps);
+  }
+
+  // Restore calibration index cache (optional — older v1 backups omit it)
+  if (data.calibrationIndices) {
+    setCalibrationIndices(data.calibrationIndices);
   }
 
   // Reload to reinitialize everything from clean state

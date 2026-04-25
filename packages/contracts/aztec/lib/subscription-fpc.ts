@@ -73,9 +73,14 @@ const MAX_U128 = 2n ** 128n - 1n;
  *
  * How: provision a throwaway slot with `max_fee = MAX_U128` at a random
  * index (so no fee gate trips during the estimator's inflated-limits pass),
- * simulate `fpc.subscribe(noirCall, ...)` with `estimateGas: true`, then
- * subtract the known subscribe overhead. Callers add whatever overhead
- * fits their path (subscribe/sponsor) when they actually send.
+ * simulate `fpc.subscribe(noirCall, ...)`, then subtract the known
+ * subscribe overhead. Callers add whatever overhead fits their path
+ * (subscribe/sponsor) when they actually send.
+ *
+ * Returns the `calibrationIndex` of the throwaway slot so callers can
+ * cache it per contract+selector. Pass it back in via `calibrationIndex`
+ * to reuse the slot — the `sign_up` tx is then skipped, since simulation
+ * doesn't consume the slot's notes.
  */
 export async function calibrateSponsoredApp(params: {
   /** FPC admin wallet — signs the throwaway sign_up tx and simulates subscribe */
@@ -90,7 +95,15 @@ export async function calibrateSponsoredApp(params: {
   authWitnesses?: AuthWitness[];
   /** Additional scopes required by the sponsored call during simulation */
   additionalScopes?: AztecAddress[];
-}): Promise<{ daGas: number; l2Gas: number; hasPublicCall: boolean }> {
+  /**
+   * Reuse a previously-provisioned calibration slot at this index. When set,
+   * the `sign_up` tx is skipped — caller is responsible for ensuring a slot
+   * was previously provisioned at this index for this contract+selector
+   * with `max_fee = MAX_U128, max_users = 1` (e.g. by caching the index
+   * returned from a prior call).
+   */
+  calibrationIndex?: number;
+}): Promise<{ daGas: number; l2Gas: number; hasPublicCall: boolean; calibrationIndex: number }> {
   const {
     adminWallet,
     adminAddress,
@@ -101,11 +114,14 @@ export async function calibrateSponsoredApp(params: {
   } = params;
 
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-  const calibrationIndex = 1_000_000 + Math.floor(Math.random() * 1_000_000);
+  const calibrationIndex =
+    params.calibrationIndex ?? 1_000_000 + Math.floor(Math.random() * 1_000_000);
 
-  await adminFpc.methods
-    .sign_up(sampleCall.to, sampleCall.selector, calibrationIndex, 1, MAX_U128, 1)
-    .send({ from: adminAddress });
+  if (params.calibrationIndex === undefined) {
+    await adminFpc.methods
+      .sign_up(sampleCall.to, sampleCall.selector, calibrationIndex, 1, MAX_U128, 1)
+      .send({ from: adminAddress });
+  }
 
   const noirCall = await buildNoirFunctionCall(sampleCall);
   const subscribeInteraction = adminFpc.methods
@@ -141,7 +157,7 @@ export async function calibrateSponsoredApp(params: {
   const derivedDa = Math.max(0, subscribeDa - Number(subscribeOverhead.daGas));
   const derivedL2 = Math.max(0, subscribeL2 - Number(subscribeOverhead.l2Gas));
 
-  return { daGas: derivedDa, l2Gas: derivedL2, hasPublicCall };
+  return { daGas: derivedDa, l2Gas: derivedL2, hasPublicCall, calibrationIndex };
 }
 
 /**
@@ -365,6 +381,12 @@ export class SubscriptionFPC {
         sampleCall: FunctionCall;
         authWitnesses?: AuthWitness[];
         additionalScopes?: AztecAddress[];
+        /**
+         * Reuse a previously-provisioned calibration slot at this index.
+         * Skips the throwaway `sign_up` tx — caller is responsible for
+         * caching the index returned by an earlier `calibrate` call.
+         */
+        calibrationIndex?: number;
       }) =>
         calibrateSponsoredApp({
           ...params,

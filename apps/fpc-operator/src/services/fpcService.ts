@@ -17,6 +17,11 @@ const FPC_SECRET_KEY = "gregojuice_fpc_secret";
 const FPC_SALT_KEY = "gregojuice_fpc_salt";
 const FPC_DEPLOYED_KEY = "gregojuice_fpc_deployed";
 const SIGNED_UP_APPS_KEY = "gregojuice_fpc_apps";
+// Mirror of `CALIBRATION_CACHE_KEY` from `calibration.ts`. Kept here as a
+// literal to avoid importing from calibration into fpcService (which is
+// imported by calibration), and because clearing it is just localStorage
+// access — no need to round-trip through the cache helpers.
+const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
 
 // ── Stored FPC state ─────────────────────────────────────────────────
 
@@ -113,6 +118,9 @@ export function clearFPC(): void {
   localStorage.removeItem(FPC_SALT_KEY);
   localStorage.removeItem(FPC_DEPLOYED_KEY);
   localStorage.removeItem(SIGNED_UP_APPS_KEY);
+  // Calibration slots are tied to the FPC instance — wiping the FPC
+  // invalidates them, so drop the cache too.
+  localStorage.removeItem(CALIBRATION_CACHE_KEY);
 }
 
 // ── Config ID computation (matches Noir contract) ────────────────────

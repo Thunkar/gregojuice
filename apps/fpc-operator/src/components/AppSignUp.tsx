@@ -17,6 +17,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
@@ -115,6 +117,12 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
     daGas: "",
     l2Gas: "",
   });
+  // Operator override for the `hasPublicCall` flag in manual mode. We seed it
+  // from the function's top-level type when the function is picked, but allow
+  // flipping it — a top-level-private fn can still enqueue a public call (e.g.
+  // via `self.call(...)` into a public fn), and the FPC's pricing depends on
+  // the *whole tx*'s regime, not just the entry fn's type.
+  const [manualHasPublicCall, setManualHasPublicCall] = useState(false);
 
   const isPrivateFunction = selectedFunction?.functionType === FunctionType.PRIVATE;
 
@@ -180,6 +188,9 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
     setSelectedFunction(fn);
     setArgValues(getDefaultArgs(fn));
     setCalibrationResult(null);
+    // Default the manual `hasPublicCall` toggle from the fn's top-level type.
+    // Operator can flip it if the fn enqueues public work from private context.
+    setManualHasPublicCall(fn.functionType !== FunctionType.PRIVATE);
     setActiveStep(2);
   };
 
@@ -299,12 +310,12 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
     // overhead, which itself depends on whether the sponsored call enqueues
     // a public call — the FPC's internal note ops get repriced at AVM rates
     // when there is one. Pick the matching pre-measured constant.
-    const fpcOverheadDA = isPrivateFunction
-      ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE
-      : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC;
-    const fpcOverheadL2 = isPrivateFunction
-      ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE
-      : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
+    const fpcOverheadDA = manualHasPublicCall
+      ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC
+      : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE;
+    const fpcOverheadL2 = manualHasPublicCall
+      ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC
+      : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE;
 
     const result: CalibrationData = {
       gasLimits: { daGas: standaloneDA, l2Gas: standaloneL2 },
@@ -316,12 +327,7 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
         daGas: FPC_TEARDOWN_DA_GAS,
         l2Gas: FPC_TEARDOWN_L2_GAS,
       },
-      // In manual mode the operator declares private-vs-public themselves;
-      // `isPrivateFunction` is what the wizard knows about the fn's top-
-      // level type. We can't detect enqueued-public-from-private without
-      // a simulation, so we assume top-level-private fns don't enqueue
-      // public work. If they do, operator should use simulation mode.
-      hasPublicCall: !isPrivateFunction,
+      hasPublicCall: manualHasPublicCall,
     };
     setCalibrationResult(result);
     setActiveStep(3);
@@ -844,6 +850,28 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
                   sx={{ mb: 2 }}
                 />
 
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={manualHasPublicCall}
+                      onChange={(e) => setManualHasPublicCall(e.target.checked)}
+                      size="small"
+                      data-testid="app-signup-manual-has-public-call"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2">Has public call</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {isPrivateFunction
+                          ? "Enable if this private fn enqueues a public call (e.g. via self.call into a public fn). Switches to PUBLIC FPC overhead constants."
+                          : "Public fns always run a public phase. Disable only if you know better."}
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ mb: 2, alignItems: "flex-start", "& .MuiFormControlLabel-label": { mt: 0.25 } }}
+                />
+
                 <Typography
                   variant="caption"
                   color="text.secondary"
@@ -894,12 +922,12 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
                     {(() => {
                       const sDA = parseInt(manualStandaloneGas.daGas) || 0;
                       const sL2 = parseInt(manualStandaloneGas.l2Gas) || 0;
-                      const overheadDA = isPrivateFunction
-                        ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE
-                        : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC;
-                      const overheadL2 = isPrivateFunction
-                        ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE
-                        : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC;
+                      const overheadDA = manualHasPublicCall
+                        ? FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC
+                        : FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE;
+                      const overheadL2 = manualHasPublicCall
+                        ? FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC
+                        : FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE;
                       const totalDA = sDA + overheadDA;
                       const totalL2 = sL2 + overheadL2;
                       return (
@@ -911,7 +939,7 @@ export function AppSignUp({ fpc, adminAddress, onSignedUp }: AppSignUpProps) {
                             </span>
                           </Box>
                           <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                            <span>+ FPC overhead ({isPrivateFunction ? "private" : "public"})</span>
+                            <span>+ FPC overhead ({manualHasPublicCall ? "public" : "private"})</span>
                             <span>
                               DA=+{overheadDA.toLocaleString()} L2=+{overheadL2.toLocaleString()}
                             </span>

@@ -13,6 +13,46 @@ import {
   FPC_TEARDOWN_L2_GAS,
 } from "@gregojuice/aztec/fpc-gas-constants";
 
+// ── Calibration index cache ─────────────────────────────────────────
+//
+// The throwaway `sign_up` tx that `calibrateSponsoredApp` issues is the
+// expensive part of calibration — the simulation that follows is essentially
+// free. Cache the index per contract+selector so subsequent runs reuse the
+// same slot and skip the sign_up. Backed up via `backupService` so an
+// operator can restore them along with the FPC and signed-up apps.
+
+const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
+
+export type CalibrationIndices = Record<string, number>;
+
+/** Returns the full cache map. Used by backup export. */
+export function getCalibrationIndices(): CalibrationIndices {
+  try {
+    return JSON.parse(localStorage.getItem(CALIBRATION_CACHE_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** Replaces the entire cache. Used by backup restore. */
+export function setCalibrationIndices(indices: CalibrationIndices): void {
+  localStorage.setItem(CALIBRATION_CACHE_KEY, JSON.stringify(indices));
+}
+
+function cacheKey(contract: string, selector: string): string {
+  return `${contract}:${selector}`;
+}
+
+function getCachedCalibrationIndex(contract: string, selector: string): number | undefined {
+  return getCalibrationIndices()[cacheKey(contract, selector)];
+}
+
+function setCachedCalibrationIndex(contract: string, selector: string, index: number): void {
+  const indices = getCalibrationIndices();
+  indices[cacheKey(contract, selector)] = index;
+  setCalibrationIndices(indices);
+}
+
 /**
  * Converts user-provided string args into the format expected by contract.methods[name]().
  * Fields and integers are passed as hex strings; the contract methods API handles encoding.
@@ -112,11 +152,27 @@ export async function runCalibration(params: CalibrationBaseParams): Promise<Cal
   const action = contract.methods[selectedFunction.name](...parsedArgs);
   const sampleCall = await action.getFunctionCall();
 
+  // Reuse a cached calibration slot if we've calibrated this contract+selector
+  // before. Only the slot is reusable — args may have changed, so we always
+  // re-simulate to get fresh gas numbers.
+  const cachedIndex = getCachedCalibrationIndex(
+    sampleCall.to.toString(),
+    sampleCall.selector.toString(),
+  );
+
   const calibrated = await fpc.helpers.calibrate({
     adminWallet,
     adminAddress,
     sampleCall,
+    calibrationIndex: cachedIndex,
   });
+  if (cachedIndex === undefined) {
+    setCachedCalibrationIndex(
+      sampleCall.to.toString(),
+      sampleCall.selector.toString(),
+      calibrated.calibrationIndex,
+    );
+  }
   const gasLimits = { daGas: calibrated.daGas, l2Gas: calibrated.l2Gas };
   const hasPublicCall = calibrated.hasPublicCall;
 
