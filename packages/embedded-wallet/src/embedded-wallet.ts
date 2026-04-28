@@ -403,10 +403,10 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         opts.from,
         { ...feeOptions, gasSettings },
       );
-      const provenTx = await this.pxe.proveTx(
-        txRequest,
-        this.scopesFrom(opts.from, opts.additionalScopes),
-      );
+      const provenTx = await this.pxe.proveTx(txRequest, {
+        scopes: this.scopesFrom(opts.from, opts.additionalScopes),
+        senderForTags: this.senderForTagsFrom(opts.from, opts.sendMessagesAs),
+      });
       const provingDuration = Date.now() - provingStart;
       const stats = provenTx.stats;
       if (stats?.timings) {
