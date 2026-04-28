@@ -35,7 +35,7 @@ import {
 } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
 import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
 import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
-import { TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
+import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 import { SubscriptionFPC, fpcSubscribeOverhead } from "@gregojuice/aztec/subscription-fpc";
 import { Gas } from "@aztec/stdlib/gas";
 import { fetchFeeStats, computeMaxFeeFromP75 } from "@gregojuice/common/fees";
@@ -112,7 +112,7 @@ const SIGNUPS: SignupSpec[] = [
   },
   {
     artifact: TokenContractArtifact,
-    functionName: "transfer_in_private_deliver_offchain",
+    functionName: "transfer_in_private_with_offchain_delivery",
     contractAlias: ["gregoCoin", "gregoCoinPremium"],
     sampleArgs: ({ admin }) => [admin.toString(), admin.toString(), 10n, 0n],
   },

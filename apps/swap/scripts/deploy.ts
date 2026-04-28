@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
 
-import { TokenContract, TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
+import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 import { AMMContract, AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { Fr } from "@aztec/foundation/curves/bn254";

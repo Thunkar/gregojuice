@@ -55,10 +55,6 @@ export default defineConfig(({ command, mode }) => {
           import.meta.dirname,
           "../../packages/contracts/aztec/noir/artifacts/SubscriptionFPC.ts",
         ),
-        "@gregojuice/aztec/artifacts/Token": resolve(
-          import.meta.dirname,
-          "../../packages/contracts/aztec/noir/artifacts/Token.ts",
-        ),
         "@gregojuice/aztec/artifacts/AMM": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/noir/artifacts/AMM.ts",

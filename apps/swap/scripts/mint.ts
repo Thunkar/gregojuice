@@ -11,7 +11,7 @@
 import fs from "fs";
 import path from "path";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { TokenContract, TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
+import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 import { BatchCall } from "@aztec/aztec.js/contracts";
 import {
   parseNetwork,
