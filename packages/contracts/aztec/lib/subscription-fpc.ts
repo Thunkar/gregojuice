@@ -95,6 +95,8 @@ export async function calibrateSponsoredApp(params: {
   authWitnesses?: AuthWitness[];
   /** Additional scopes required by the sponsored call during simulation */
   additionalScopes?: AztecAddress[];
+  /** Overrides the sender address used to derive discovery tags. Defaults to adminAddress. */
+  sendMessagesAs?: AztecAddress;
   /**
    * Reuse a previously-provisioned calibration slot at this index. When set,
    * the `sign_up` tx is skipped — caller is responsible for ensuring a slot
@@ -111,6 +113,7 @@ export async function calibrateSponsoredApp(params: {
     sampleCall,
     authWitnesses = [],
     additionalScopes = [],
+    sendMessagesAs,
   } = params;
 
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
@@ -139,6 +142,7 @@ export async function calibrateSponsoredApp(params: {
   const payload = await subscribeInteraction.request();
   const simulated = await adminWallet.simulateTx(payload, {
     from: NO_FROM,
+    sendMessagesAs: sendMessagesAs ?? adminAddress,
     fee: { gasSettings: {} },
     additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
   });
@@ -220,6 +224,8 @@ export async function subscribeAndCall(params: {
   hasPublicCall: boolean;
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
+  /** Overrides the sender address used to derive discovery tags. Defaults to userAddress. */
+  sendMessagesAs?: AztecAddress;
 }) {
   const {
     fpc,
@@ -229,6 +235,7 @@ export async function subscribeAndCall(params: {
     gasLimits,
     hasPublicCall,
     authWitnesses = [],
+    sendMessagesAs,
   } = params;
 
   const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
@@ -245,6 +252,7 @@ export async function subscribeAndCall(params: {
     })
     .send({
       from: NO_FROM,
+      sendMessagesAs: sendMessagesAs ?? userAddress,
       additionalScopes: [userAddress, fpc.address],
       fee: {
         gasSettings: {
@@ -277,6 +285,8 @@ export async function sendSponsoredCall(params: {
   hasPublicCall: boolean;
   /** Auth witnesses required by the sponsored call */
   authWitnesses?: AuthWitness[];
+  /** Overrides the sender address used to derive discovery tags. Defaults to userAddress. */
+  sendMessagesAs?: AztecAddress;
 }) {
   const {
     fpc,
@@ -286,6 +296,7 @@ export async function sendSponsoredCall(params: {
     gasLimits,
     hasPublicCall,
     authWitnesses = [],
+    sendMessagesAs,
   } = params;
 
   const totalGasLimits = new Gas(gasLimits.daGas, gasLimits.l2Gas).add(
@@ -302,6 +313,7 @@ export async function sendSponsoredCall(params: {
     })
     .send({
       from: NO_FROM,
+      sendMessagesAs: sendMessagesAs ?? userAddress,
       additionalScopes: [userAddress, fpc.address],
       fee: {
         gasSettings: {
@@ -381,11 +393,7 @@ export class SubscriptionFPC {
         sampleCall: FunctionCall;
         authWitnesses?: AuthWitness[];
         additionalScopes?: AztecAddress[];
-        /**
-         * Reuse a previously-provisioned calibration slot at this index.
-         * Skips the throwaway `sign_up` tx — caller is responsible for
-         * caching the index returned by an earlier `calibrate` call.
-         */
+        sendMessagesAs?: AztecAddress;
         calibrationIndex?: number;
       }) =>
         calibrateSponsoredApp({
@@ -403,6 +411,7 @@ export class SubscriptionFPC {
         gasLimits: { daGas: number; l2Gas: number };
         hasPublicCall: boolean;
         authWitnesses?: AuthWitness[];
+        sendMessagesAs?: AztecAddress;
       }) =>
         subscribeAndCall({
           ...params,
@@ -419,6 +428,7 @@ export class SubscriptionFPC {
         gasLimits: { daGas: number; l2Gas: number };
         hasPublicCall: boolean;
         authWitnesses?: AuthWitness[];
+        sendMessagesAs?: AztecAddress;
       }) =>
         sendSponsoredCall({
           ...params,
