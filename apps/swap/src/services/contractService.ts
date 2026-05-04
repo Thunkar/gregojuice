@@ -62,8 +62,7 @@ export async function registerSwapContracts(
   const contractSalt = Fr.fromString(network.contracts.salt);
 
   // Import contract artifacts
-  const { TokenContract, TokenContractArtifact } =
-    await import("@aztec/noir-contracts.js/Token");
+  const { TokenContract, TokenContractArtifact } = await import("@aztec/noir-contracts.js/Token");
   const { AMMContract, AMMContractArtifact } =
     await import("@aztec-kit/contracts-aztec/artifacts/AMM");
 
