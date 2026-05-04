@@ -53,6 +53,9 @@ describe("ProofOfPassword subscription", () => {
     await token.methods.set_minter(pop.address, true).send({ from: ctx.admin });
 
     userWallet = await EmbeddedWallet.create(ctx.node, { ephemeral: true });
+    // Base fee rises quickly in the test sandbox; give enough headroom so the
+    // proven tx's maxFeesPerGas still covers the block's gasFees.
+    userWallet.setMinFeePadding(10);
     await userWallet.registerContract(ctx.fpcInstance, SubscriptionFPC.artifact, ctx.fpcSecretKey);
     await userWallet.registerContract(tokenInstance, TokenContractArtifact);
     await userWallet.registerContract(popInstance, ProofOfPasswordContractArtifact);
