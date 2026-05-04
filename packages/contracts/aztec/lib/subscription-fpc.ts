@@ -139,6 +139,7 @@ export async function calibrateSponsoredApp(params: {
   const payload = await subscribeInteraction.request();
   const simulated = await adminWallet.simulateTx(payload, {
     from: NO_FROM,
+    sendMessagesAs: adminAddress,
     fee: { gasSettings: {} },
     additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
   });
@@ -245,6 +246,7 @@ export async function subscribeAndCall(params: {
     })
     .send({
       from: NO_FROM,
+      sendMessagesAs: userAddress,
       additionalScopes: [userAddress, fpc.address],
       fee: {
         gasSettings: {
@@ -302,6 +304,7 @@ export async function sendSponsoredCall(params: {
     })
     .send({
       from: NO_FROM,
+      sendMessagesAs: userAddress,
       additionalScopes: [userAddress, fpc.address],
       fee: {
         gasSettings: {
