@@ -30,6 +30,8 @@ vite.config.ts.*
 packages/contracts/aztec/noir/target
 packages/contracts/aztec/noir/artifacts
 packages/contracts/aztec/dist
+packages/contracts/target
+packages/contracts/artifacts
 
 # Ethereum (Foundry) build outputs
 packages/contracts/ethereum/solidity/out
