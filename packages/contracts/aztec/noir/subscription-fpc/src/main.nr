@@ -4,7 +4,7 @@ use aztec::macros::aztec;
 contract SubscriptionFPC {
 
     use aztec::{
-        authwit::entrypoint::FunctionCall,
+        authwit::{auth::{compute_inner_authwit_hash, IS_VALID_SELECTOR}, entrypoint::FunctionCall},
         macros::{
             functions::{allow_phase_change, external, initializer, internal},
             notes::note,
@@ -183,6 +183,64 @@ contract SubscriptionFPC {
                 call.is_static,
             );
         }
+    }
+
+    /// Admin-gated entrypoint used solely by `calibrateSponsoredApp` to estimate
+    /// gas for a sponsored function under the FPC's dispatch path, without
+    /// touching state or paying fees. Mirrors `subscribe`'s call dispatch
+    /// (`_call_sponsored_fn`) so a simulation measures the same execution
+    /// cost minus the slot/subscription bookkeeping.
+    ///
+    /// Top-of-stack like `subscribe`/`sponsor` (msg_sender must be none) so
+    /// the gas profile matches the runtime call path. The admin gate is what
+    /// makes this safe to expose: a sponsored call dispatched here runs with
+    /// `msg_sender == FPC_ADDRESS`, so without the gate any user could
+    /// impersonate the FPC. Auth uses an inner-hash authwit because the
+    /// standard `assert_current_call_valid_authwit` expects a present
+    /// `msg_sender`, which we don't have at top-of-stack. Admin signs off on
+    /// the (selector, args_hash) inner hash for this specific calibration
+    /// call, with `fpc.address` as the consumer.
+    #[external("private")]
+    #[allow_phase_change]
+    fn calibrate(call: FunctionCall, user: AztecAddress) {
+        // Assert we're at the top of the stack
+        assert(
+            self.context.maybe_msg_sender() == Option::none(),
+            "msg_sender must be none for calibrate",
+        );
+
+        let inner_hash = compute_inner_authwit_hash([
+            self.context.selector().to_field(),
+            self.context.get_args_hash(),
+        ]);
+        // Inlined `assert_inner_hash_valid_authwit` minus the nullifier push.
+        // The standard helper emits a replay-protection nullifier on the
+        // authwit, but `calibrate` is simulation-only (never sent on chain)
+        // so replay isn't a concern, and the nullifier emission is the
+        // entire measured calibrate overhead. Skipping it makes the calibrate path
+        // gas-equivalent to the runtime sponsor/subscribe path minus their
+        // bookkeeping, so the helper that wraps this entrypoint can return
+        // the sponsored fn's standalone gas without subtracting an overhead
+        // constant.
+        let result: Field = self
+            .context
+            .static_call_private_function(
+                self.storage.admin.read(),
+                comptime { FunctionSelector::from_signature("verify_private_authwit(Field)") },
+                [inner_hash],
+            )
+            .get_preimage();
+        assert(result == IS_VALID_SELECTOR, "Message not authorized by account");
+
+        // Safety: The sender for tags is only used to compute unconstrained shared secrets for emitting logs.
+        // Since this value is only used for unconstrained tagging and not for any constrained logic,
+        // it is safe to set from a constrained context.
+        unsafe {
+            set_sender_for_tags(user);
+        }
+
+        self.context.end_setup();
+        self.internal._call_sponsored_fn(call);
     }
 
     #[external("private")]

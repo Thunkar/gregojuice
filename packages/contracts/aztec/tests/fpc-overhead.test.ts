@@ -16,10 +16,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { EmbeddedWallet } from "@aztec/wallets/embedded";
 import { Fr } from "@aztec/aztec.js/fields";
+import { Gas } from "@aztec/stdlib/gas";
 import { randomBytes } from "@aztec/foundation/crypto/random";
 import { TokenContract, TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { SetPublicAuthwitContractInteraction } from "@aztec/aztec.js/authorization";
+
+import { computeInnerAuthWitHash } from "@aztec/stdlib/auth-witness";
+import { computeVarArgsHash } from "@aztec/stdlib/hash";
 
 import {
   SubscriptionFPC,
@@ -48,12 +52,12 @@ const SALT = Fr.random();
 const SIGNING_PRIVATE_KEY = randomBytes(32);
 
 let ctx: FPCTestContext;
-let standalonePublicGas: GasValues;
-let standalonePrivateGas: GasValues;
 let subscribePublicGas: GasValues;
 let subscribePrivateGas: GasValues;
 let sponsorPublicGas: GasValues;
 let sponsorPrivateGas: GasValues;
+let calibratePublicGas: GasValues;
+let calibratePrivateGas: GasValues;
 
 beforeAll(async () => {
   ctx = await setupTestContext();
@@ -103,24 +107,6 @@ describe("FPC gas overhead", () => {
 
     const adminFpc = SubscriptionFPCContract.at(ctx.fpc.address, ctx.wallet);
 
-    // ── Standalone measurements ──────────────────────────────────────
-
-    const { estimatedGas: pubGas } = await token.methods
-      .transfer_in_public(ctx.admin, recipientAddress, 10n, 0)
-      .simulate({
-        from: ctx.admin,
-        fee: { estimateGas: true, estimatedGasPadding: 0 },
-      });
-    standalonePublicGas = toGas(pubGas);
-
-    const { estimatedGas: privGas } = await token.methods
-      .transfer_in_private(ctx.admin, recipientAddress, 10n, 0)
-      .simulate({
-        from: ctx.admin,
-        fee: { estimateGas: true, estimatedGasPadding: 0 },
-      });
-    standalonePrivateGas = toGas(privGas);
-
     // ── Public subscribe + sponsor ───────────────────────────────────
 
     // Sign up with max_uses=2
@@ -157,15 +143,25 @@ describe("FPC gas overhead", () => {
         });
       subscribePublicGas = toGas(estimatedGas);
 
-      // Execute subscribe to create subscription for sponsor test
-      const fpc = ctx.fpc.withWallet(ctx.wallet);
-      await fpc.helpers.subscribe({
-        call: sampleCall,
-        configIndex: PUBLIC_INDEX,
-        userAddress: ctx.admin,
-        gasLimits: standalonePublicGas.gasLimits,
-        hasPublicCall: true,
-      });
+      // Execute subscribe to create subscription for the sponsor test.
+      // Use the just-measured `subscribePublicGas` directly (it's the full
+      // gas the subscribe path takes); no need to add overhead through
+      // `fpc.helpers.subscribe`.
+      await adminFpc.methods
+        .subscribe(noirCall, PUBLIC_INDEX, ctx.admin)
+        .with({ extraHashedArgs: await buildExtraHashedArgs(sampleCall) })
+        .send({
+          from: NO_FROM,
+          additionalScopes: [ctx.admin, ctx.fpc.address],
+          fee: {
+            gasSettings: {
+              gasLimits: new Gas(
+                subscribePublicGas.gasLimits.daGas,
+                subscribePublicGas.gasLimits.l2Gas,
+              ),
+            },
+          },
+        });
     }
 
     // Measure sponsor
@@ -196,6 +192,54 @@ describe("FPC gas overhead", () => {
           additionalScopes: [ctx.admin, ctx.fpc.address],
         });
       sponsorPublicGas = toGas(estimatedGas);
+    }
+
+    // Measure calibrate (public). `calibrate` is top-of-stack like
+    // `subscribe`/`sponsor` (no admin-account hop), gated by an inner-hash
+    // authwit signed by admin.
+    {
+      const authwitNonce = Fr.random();
+      const action = token.methods.transfer_in_public(
+        ctx.admin,
+        recipientAddress,
+        10n,
+        authwitNonce,
+      );
+      const setAuthwit = await SetPublicAuthwitContractInteraction.create(
+        ctx.wallet,
+        ctx.admin,
+        { caller: ctx.fpc.address, action },
+        true,
+      );
+      await setAuthwit.send();
+      const sampleCall = await action.getFunctionCall();
+      const noirCall = await buildNoirFunctionCall(sampleCall);
+
+      const calibrateInteraction = adminFpc.methods.calibrate(noirCall, ctx.admin);
+      const calibrateCall = await calibrateInteraction.getFunctionCall();
+      const calibrateArgsHash = await computeVarArgsHash(calibrateCall.args);
+      const innerHash = await computeInnerAuthWitHash([
+        calibrateCall.selector.toField(),
+        calibrateArgsHash,
+      ]);
+      const calibrateAuthwit = await ctx.wallet.createAuthWit(ctx.admin, {
+        consumer: ctx.fpc.address,
+        innerHash,
+      });
+
+      const { estimatedGas } = await calibrateInteraction
+        .with({
+          authWitnesses: [calibrateAuthwit],
+          extraHashedArgs: await buildExtraHashedArgs(sampleCall),
+        })
+        .simulate({
+          from: NO_FROM,
+          fee: { estimateGas: true, estimatedGasPadding: 0 },
+          additionalScopes: [ctx.admin, ctx.fpc.address],
+          skipTxValidation: true,
+          skipFeeEnforcement: true,
+        });
+      calibratePublicGas = toGas(estimatedGas);
     }
 
     // ── Private subscribe + sponsor ──────────────────────────────────
@@ -236,7 +280,9 @@ describe("FPC gas overhead", () => {
       subscribePrivateGas = toGas(estimatedGas);
     }
 
-    // Execute subscribe (unique nonce for the real tx)
+    // Execute subscribe (unique nonce for the real tx). Use the just-
+    // measured `subscribePrivateGas` directly to avoid the
+    // `fpc.helpers.subscribe` overhead-addition path during test setup.
     {
       const nonce2 = Fr.random();
       const subCall = await token.methods
@@ -246,15 +292,25 @@ describe("FPC gas overhead", () => {
         caller: ctx.fpc.address,
         call: subCall,
       });
-      const fpc = ctx.fpc.withWallet(ctx.wallet);
-      await fpc.helpers.subscribe({
-        call: subCall,
-        configIndex: PRIVATE_INDEX,
-        userAddress: ctx.admin,
-        authWitnesses: [subAuthwit],
-        gasLimits: standalonePrivateGas.gasLimits,
-        hasPublicCall: false,
-      });
+      const subNoirCall = await buildNoirFunctionCall(subCall);
+      await adminFpc.methods
+        .subscribe(subNoirCall, PRIVATE_INDEX, ctx.admin)
+        .with({
+          authWitnesses: [subAuthwit],
+          extraHashedArgs: await buildExtraHashedArgs(subCall),
+        })
+        .send({
+          from: NO_FROM,
+          additionalScopes: [ctx.admin, ctx.fpc.address],
+          fee: {
+            gasSettings: {
+              gasLimits: new Gas(
+                subscribePrivateGas.gasLimits.daGas,
+                subscribePrivateGas.gasLimits.l2Gas,
+              ),
+            },
+          },
+        });
     }
 
     // Measure sponsor (unique nonce)
@@ -283,11 +339,50 @@ describe("FPC gas overhead", () => {
       sponsorPrivateGas = toGas(estimatedGas);
     }
 
+    // Measure calibrate (private)
+    {
+      const nonce4 = Fr.random();
+      const sampleCall = await token.methods
+        .transfer_in_private(ctx.admin, recipientAddress, 10n, nonce4)
+        .getFunctionCall();
+      const sponsoredAuthwit = await ctx.wallet.createAuthWit(ctx.admin, {
+        caller: ctx.fpc.address,
+        call: sampleCall,
+      });
+      const noirCall = await buildNoirFunctionCall(sampleCall);
+
+      const calibrateInteraction = adminFpc.methods.calibrate(noirCall, ctx.admin);
+      const calibrateCall = await calibrateInteraction.getFunctionCall();
+      const calibrateArgsHash = await computeVarArgsHash(calibrateCall.args);
+      const innerHash = await computeInnerAuthWitHash([
+        calibrateCall.selector.toField(),
+        calibrateArgsHash,
+      ]);
+      const calibrateAuthwit = await ctx.wallet.createAuthWit(ctx.admin, {
+        consumer: ctx.fpc.address,
+        innerHash,
+      });
+
+      const { estimatedGas } = await calibrateInteraction
+        .with({
+          authWitnesses: [calibrateAuthwit, sponsoredAuthwit],
+          extraHashedArgs: await buildExtraHashedArgs(sampleCall),
+        })
+        .simulate({
+          from: NO_FROM,
+          fee: { estimateGas: true, estimatedGasPadding: 0 },
+          additionalScopes: [ctx.admin, ctx.fpc.address],
+          skipTxValidation: true,
+          skipFeeEnforcement: true,
+        });
+      calibratePrivateGas = toGas(estimatedGas);
+    }
+
     // ── Print all measurements ───────────────────────────────────────
 
     console.log("=== ALL MEASUREMENTS ===");
-    logGas("Standalone public ", standalonePublicGas);
-    logGas("Standalone private", standalonePrivateGas);
+    logGas("Calibrate public  ", calibratePublicGas);
+    logGas("Calibrate private ", calibratePrivateGas);
     logGas("Subscribe public  ", subscribePublicGas);
     logGas("Subscribe private ", subscribePrivateGas);
     logGas("Sponsor public    ", sponsorPublicGas);
@@ -309,9 +404,8 @@ describe("FPC gas overhead", () => {
 
   it("subscribe is equal or more expensive than sponsor", () => {
     const subscribeOverheadL2 =
-      subscribePublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas;
-    const sponsorOverheadL2 =
-      sponsorPublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas;
+      subscribePublicGas.gasLimits.l2Gas - calibratePublicGas.gasLimits.l2Gas;
+    const sponsorOverheadL2 = sponsorPublicGas.gasLimits.l2Gas - calibratePublicGas.gasLimits.l2Gas;
     const boostL2 = subscribeOverheadL2 - sponsorOverheadL2;
 
     console.log(
@@ -319,6 +413,43 @@ describe("FPC gas overhead", () => {
     );
 
     expect(subscribeOverheadL2).greaterThanOrEqual(sponsorOverheadL2);
+  });
+
+  // The contract that wraps `calibrateSponsoredApp` returns the raw simulation
+  // gas as the "standalone" cost, and runtime callers add the appropriate
+  // FPC overhead constant. For that pipeline to produce the *exact* runtime
+  // gas, calibrate must already include everything that runs at runtime
+  // except the slot/subscription bookkeeping that subscribe/sponsor add on
+  // top. This test pins that invariant: calibrate gas + FPC overhead must
+  // equal the measured subscribe/sponsor gas, exactly.
+  it("calibrate + FPC overhead exactly matches subscribe/sponsor gas", () => {
+    expect(calibratePublicGas.gasLimits.l2Gas + FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC).toBe(
+      subscribePublicGas.gasLimits.l2Gas,
+    );
+    expect(calibratePublicGas.gasLimits.daGas + FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC).toBe(
+      subscribePublicGas.gasLimits.daGas,
+    );
+
+    expect(calibratePrivateGas.gasLimits.l2Gas + FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE).toBe(
+      subscribePrivateGas.gasLimits.l2Gas,
+    );
+    expect(calibratePrivateGas.gasLimits.daGas + FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE).toBe(
+      subscribePrivateGas.gasLimits.daGas,
+    );
+
+    expect(calibratePublicGas.gasLimits.l2Gas + FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC).toBe(
+      sponsorPublicGas.gasLimits.l2Gas,
+    );
+    expect(calibratePublicGas.gasLimits.daGas + FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC).toBe(
+      sponsorPublicGas.gasLimits.daGas,
+    );
+
+    expect(calibratePrivateGas.gasLimits.l2Gas + FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE).toBe(
+      sponsorPrivateGas.gasLimits.l2Gas,
+    );
+    expect(calibratePrivateGas.gasLimits.daGas + FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE).toBe(
+      sponsorPrivateGas.gasLimits.daGas,
+    );
   });
 
   it("captured constants match measured values", () => {
@@ -331,16 +462,14 @@ describe("FPC gas overhead", () => {
     // `gasLimits = standalone + FPC_{SPONSOR,SUBSCRIBE}_OVERHEAD_{L2,DA}_GAS_{PRIVATE,PUBLIC}` pick
     // the right value for their sponsored fn's publicness.
     const measured = {
-      subscribePublicL2: subscribePublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas,
-      subscribePublicDA: subscribePublicGas.gasLimits.daGas - standalonePublicGas.gasLimits.daGas,
-      subscribePrivateL2:
-        subscribePrivateGas.gasLimits.l2Gas - standalonePrivateGas.gasLimits.l2Gas,
-      subscribePrivateDA:
-        subscribePrivateGas.gasLimits.daGas - standalonePrivateGas.gasLimits.daGas,
-      sponsorPublicL2: sponsorPublicGas.gasLimits.l2Gas - standalonePublicGas.gasLimits.l2Gas,
-      sponsorPublicDA: sponsorPublicGas.gasLimits.daGas - standalonePublicGas.gasLimits.daGas,
-      sponsorPrivateL2: sponsorPrivateGas.gasLimits.l2Gas - standalonePrivateGas.gasLimits.l2Gas,
-      sponsorPrivateDA: sponsorPrivateGas.gasLimits.daGas - standalonePrivateGas.gasLimits.daGas,
+      subscribePublicL2: subscribePublicGas.gasLimits.l2Gas - calibratePublicGas.gasLimits.l2Gas,
+      subscribePublicDA: subscribePublicGas.gasLimits.daGas - calibratePublicGas.gasLimits.daGas,
+      subscribePrivateL2: subscribePrivateGas.gasLimits.l2Gas - calibratePrivateGas.gasLimits.l2Gas,
+      subscribePrivateDA: subscribePrivateGas.gasLimits.daGas - calibratePrivateGas.gasLimits.daGas,
+      sponsorPublicL2: sponsorPublicGas.gasLimits.l2Gas - calibratePublicGas.gasLimits.l2Gas,
+      sponsorPublicDA: sponsorPublicGas.gasLimits.daGas - calibratePublicGas.gasLimits.daGas,
+      sponsorPrivateL2: sponsorPrivateGas.gasLimits.l2Gas - calibratePrivateGas.gasLimits.l2Gas,
+      sponsorPrivateDA: sponsorPrivateGas.gasLimits.daGas - calibratePrivateGas.gasLimits.daGas,
       teardownL2: subscribePublicGas.teardownGasLimits.l2Gas,
       teardownDA: subscribePublicGas.teardownGasLimits.daGas,
     };

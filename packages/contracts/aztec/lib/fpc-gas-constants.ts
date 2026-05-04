@@ -1,10 +1,9 @@
 /**
- * Gas constants for manual calibration of sponsored transactions.
+ * Gas constants for sponsored transactions.
  *
- * For operators who compute sponsored gas limits from a standalone gas
- * estimate:
+ * Operators compute sponsored gas limits as:
  *
- *   gasLimits      = standalone.gasLimits + FPC_{SPONSOR,SUBSCRIBE}_OVERHEAD
+ *   gasLimits      = calibrate.gasLimits + FPC_{SPONSOR,SUBSCRIBE}_OVERHEAD
  *   teardownLimits = 0
  *
  * The overhead depends on whether the sponsored function has an enqueued
@@ -13,42 +12,44 @@
  *   - Sponsored function is private-only → use the `*_PRIVATE` overhead.
  *   - Sponsored function has a public call → use the `*_PUBLIC` overhead.
  *
- * The two differ by ≈70k L2 gas for `subscribe` and ≈61k L2 gas for `sponsor`.
- * The FPC emits its own private side effects (note hashes + nullifiers from
- * `sponsor`/`subscribe` bookkeeping) and those get charged at AVM rates
- * whenever the tx contains a public call.
+ * `calibrateSponsoredApp` measures the sponsored function gas under the
+ * exact same call path it'll take at runtime (top-of-stack FPC entrypoint,
+ * `msg_sender == FPC`, with public-authwit consumption when applicable),
+ * so `calibrate + FPC_*_OVERHEAD` lands on the exact runtime gas — pinned
+ * by the invariant test in `fpc-overhead.test.ts`.
  *
- * The standalone measurement already bakes in the pricing regime appropriate
- * to the sponsored function, so `standalone + FPC_*_OVERHEAD` is the complete
- * answer — no further repricing needed on the caller side.
+ * The public/private overheads differ because when the sponsored function
+ * enqueues a public call, the tx shifts into the public-pricing regime and
+ * the FPC's own private side effects (note hashes + nullifiers from
+ * `sponsor`/`subscribe` bookkeeping) get charged at AVM rates.
  *
  * Measurements live in `fpc-overhead.test.ts`, which pins these values
  * against a real deployment.
  */
 
 /** Subscribe overhead on L2 gas when the sponsored fn is private-only */
-export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE = 39400;
+export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PRIVATE = 23400;
 
 /** Subscribe overhead on DA gas when the sponsored fn is private-only */
-export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE = 1184;
+export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE = 1152;
 
 /** Subscribe overhead on L2 gas when the sponsored fn has a public call */
-export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC = 110656;
+export const FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC = 43550;
 
 /** Subscribe overhead on DA gas when the sponsored fn has a public call */
-export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC = 1216;
+export const FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC = 1152;
 
 /** Sponsor overhead on L2 gas when the sponsored fn is private-only */
-export const FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE = 27700;
+export const FPC_SPONSOR_OVERHEAD_L2_GAS_PRIVATE = 11700;
 
 /** Sponsor overhead on DA gas when the sponsored fn is private-only */
-export const FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE = 608;
+export const FPC_SPONSOR_OVERHEAD_DA_GAS_PRIVATE = 576;
 
 /** Sponsor overhead on L2 gas when the sponsored fn has a public call */
-export const FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC = 88881;
+export const FPC_SPONSOR_OVERHEAD_L2_GAS_PUBLIC = 21775;
 
 /** Sponsor overhead on DA gas when the sponsored fn has a public call */
-export const FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC = 640;
+export const FPC_SPONSOR_OVERHEAD_DA_GAS_PUBLIC = 576;
 
 /** FPC teardown L2 gas */
 export const FPC_TEARDOWN_L2_GAS = 0;
