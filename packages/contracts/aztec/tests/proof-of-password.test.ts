@@ -15,6 +15,9 @@ let ctx: FPCTestContext;
 
 beforeAll(async () => {
   ctx = await setupTestContext();
+  // Base fee rises during heavy test setup; give enough headroom so the
+  // proven tx's maxFeesPerGas still covers the block's gasFees.
+  ctx.wallet.setMinFeePadding(10);
 });
 
 describe("ProofOfPassword", () => {

@@ -236,6 +236,7 @@ describe("FPC gas overhead", () => {
         })
         .simulate({
           from: NO_FROM,
+          sendMessagesAs: ctx.admin,
           fee: { estimateGas: true, estimatedGasPadding: 0 },
           additionalScopes: [ctx.admin, ctx.fpc.address],
           skipTxValidation: true,
@@ -374,6 +375,7 @@ describe("FPC gas overhead", () => {
         })
         .simulate({
           from: NO_FROM,
+          sendMessagesAs: ctx.admin,
           fee: { estimateGas: true, estimatedGasPadding: 0 },
           additionalScopes: [ctx.admin, ctx.fpc.address],
           skipTxValidation: true,
