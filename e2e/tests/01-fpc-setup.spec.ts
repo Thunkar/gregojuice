@@ -32,7 +32,7 @@ import { pumpL2Blocks } from "../fixtures/pump-l2-blocks.ts";
  */
 
 /** Session key used by the bridge app to persist wizard progress. */
-const BRIDGE_SESSION_KEY = "gregojuice_bridge_session";
+const BRIDGE_SESSION_KEY = "gobridge_session";
 
 /** Reads the bridge-iframe session phase. Returns null if no session. */
 async function getBridgeSessionPhase(
@@ -70,7 +70,7 @@ test.describe.serial("fpc-dashboard setup", () => {
     // network id via the `?network=local` query param the dashboard injects.
     await page.addInitScript(() => {
       try {
-        localStorage.setItem("gregojuice_network", "local");
+        localStorage.setItem("aztec_kit_network", "local");
       } catch {
         /* ignore */
       }

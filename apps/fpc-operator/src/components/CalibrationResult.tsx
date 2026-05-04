@@ -12,7 +12,7 @@ import { formatUnits, parseUnits } from "viem";
 import { useWallet } from "../contexts/WalletContext";
 import { useNetwork } from "../contexts/NetworkContext";
 import { FeePricingService } from "../services/fee-pricing";
-import { fetchFeeStats, type FeeStats } from "@gregojuice/common/fees";
+import { fetchFeeStats, type FeeStats } from "@aztec-kit/common/fees";
 import type { CalibrationResult as CalibrationData } from "../services/calibration";
 
 interface CalibrationResultProps {

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { createAztecNodeClient, type AztecNode } from "@aztec/aztec.js/node";
-import { EmbeddedWallet, txProgress } from "@gregojuice/embedded-wallet";
+import { EmbeddedWallet, txProgress } from "@aztec-kit/embedded-wallet";
 import { useNetwork } from "./NetworkContext";
 
 type WalletStatus = "disconnected" | "loading" | "ready" | "error";

@@ -1,6 +1,6 @@
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { Fr } from "@aztec/aztec.js/fields";
-import type { EmbeddedWallet } from "@gregojuice/embedded-wallet";
+import type { EmbeddedWallet } from "@aztec-kit/embedded-wallet";
 import {
   getStoredFPC,
   getSignedUpApps,
@@ -19,7 +19,7 @@ import {
 // ── Backup format ────────────────────────────────────────────────────
 
 const BACKUP_VERSION = 1;
-const NETWORK_KEY = "gregojuice_network";
+const NETWORK_KEY = "aztec_kit_network";
 
 export interface BackupData {
   version: number;
@@ -70,7 +70,7 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
   const a = document.createElement("a");
   a.href = url;
   const date = new Date().toISOString().slice(0, 10);
-  a.download = `gregojuice-backup-${date}.json`;
+  a.download = `gojuice-backup-${date}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

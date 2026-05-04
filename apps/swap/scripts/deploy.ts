@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
 
-import { TokenContract, TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
-import { AMMContract, AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
+import { TokenContract, TokenContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/Token";
+import { AMMContract, AMMContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/AMM";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import { Fr } from "@aztec/foundation/curves/bn254";
 import type { EmbeddedWallet } from "@aztec/wallets/embedded";
@@ -11,7 +11,7 @@ import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 import {
   ProofOfPasswordContract,
   ProofOfPasswordContractArtifact,
-} from "@gregojuice/aztec/artifacts/ProofOfPassword";
+} from "@aztec-kit/contracts-aztec/artifacts/ProofOfPassword";
 import { BatchCall, NO_WAIT, type DeployOptions, type WaitOpts } from "@aztec/aztec.js/contracts";
 import { waitForTx, type AztecNode } from "@aztec/aztec.js/node";
 
@@ -27,7 +27,7 @@ import {
   type NetworkName,
   type PaymentMode,
   type PaymentMethod,
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 import { TxStatus } from "@aztec/stdlib/tx";
 
 const INITIAL_TOKEN_BALANCE = 1_000_000_000n;
@@ -56,8 +56,8 @@ export interface SwapDeployResult {
   rollupVersion: string;
   deployerAddress: string;
   contracts: {
-    gregoCoin: string;
-    gregoCoinPremium: string;
+    goCoin: string;
+    goCoinPremium: string;
     liquidityToken: string;
     amm: string;
     pop: string;
@@ -80,14 +80,14 @@ async function deployContracts(
   // ── Build every deployment method + derive its deterministic address ──
   //
   // The AMM depends on token addresses, so tokens must resolve first. PoP
-  // depends on GregoCoin. Everything uses the same salt so re-runs with the
+  // depends on GoCoin. Everything uses the same salt so re-runs with the
   // same admin + SALT produce the same addresses and can be skipped.
-  const gregoCoinDeploy = TokenContract.deploy(wallet, deployer, "GregoCoin", "GRG", 18);
-  const gregoCoinPremiumDeploy = TokenContract.deploy(
+  const goCoinDeploy = TokenContract.deploy(wallet, deployer, "GoCoin", "GO", 18);
+  const goCoinPremiumDeploy = TokenContract.deploy(
     wallet,
     deployer,
-    "GregoCoinPremium",
-    "GRGP",
+    "GoCoinPremium",
+    "GOP",
     18,
   );
   const liquidityTokenDeploy = TokenContract.deploy(wallet, deployer, "LiquidityToken", "LQT", 18);
@@ -97,24 +97,24 @@ async function deployContracts(
   // one the eventual .send({ from: deployer }) writes to chain. See
   // DeployMethod.getInstance in aztec.js for the default.
   const instanceOpts = { contractAddressSalt, deployer };
-  const gregoCoinInstance = await gregoCoinDeploy.getInstance(instanceOpts);
-  const gregoCoinPremiumInstance = await gregoCoinPremiumDeploy.getInstance(instanceOpts);
+  const goCoinInstance = await goCoinDeploy.getInstance(instanceOpts);
+  const goCoinPremiumInstance = await goCoinPremiumDeploy.getInstance(instanceOpts);
   const liquidityTokenInstance = await liquidityTokenDeploy.getInstance(instanceOpts);
 
   const ammDeploy = AMMContract.deploy(
     wallet,
-    gregoCoinInstance.address,
-    gregoCoinPremiumInstance.address,
+    goCoinInstance.address,
+    goCoinPremiumInstance.address,
     liquidityTokenInstance.address,
   );
   const ammInstance = await ammDeploy.getInstance(instanceOpts);
 
-  const popDeploy = ProofOfPasswordContract.deploy(wallet, gregoCoinInstance.address, password);
+  const popDeploy = ProofOfPasswordContract.deploy(wallet, goCoinInstance.address, password);
   const popInstance = await popDeploy.getInstance(instanceOpts);
 
   await Promise.all([
-    wallet.registerContract(gregoCoinInstance, TokenContractArtifact),
-    wallet.registerContract(gregoCoinPremiumInstance, TokenContractArtifact),
+    wallet.registerContract(goCoinInstance, TokenContractArtifact),
+    wallet.registerContract(goCoinPremiumInstance, TokenContractArtifact),
     wallet.registerContract(liquidityTokenInstance, TokenContractArtifact),
     wallet.registerContract(ammInstance, AMMContractArtifact),
     wallet.registerContract(popInstance, ProofOfPasswordContractArtifact),
@@ -124,17 +124,17 @@ async function deployContracts(
   //
   // registerContract is idempotent + fast, so we always register. Deploy is
   // only sent when node.getContract returns null for that address.
-  const [gregoCoinExists, gregoCoinPremiumExists, liquidityTokenExists, ammExists, popExists] =
+  const [goCoinExists, goCoinPremiumExists, liquidityTokenExists, ammExists, popExists] =
     await Promise.all([
-      node.getContract(gregoCoinInstance.address),
-      node.getContract(gregoCoinPremiumInstance.address),
+      node.getContract(goCoinInstance.address),
+      node.getContract(goCoinPremiumInstance.address),
       node.getContract(liquidityTokenInstance.address),
       node.getContract(ammInstance.address),
       node.getContract(popInstance.address),
     ]);
 
   const { isContractClassPubliclyRegistered: isTokenPubliclyRegistered } =
-    await wallet.getContractClassMetadata(gregoCoinInstance.currentContractClassId);
+    await wallet.getContractClassMetadata(goCoinInstance.currentContractClassId);
 
   const currentMinFees = await node.getCurrentMinFees();
   const baseOpts: DeployOptions<WaitOpts> = {
@@ -147,7 +147,7 @@ async function deployContracts(
   // In a fresh chain (local network) we deploy the first token so class registration
   // is done before the other deployments happen
   if (!isTokenPubliclyRegistered) {
-    await gregoCoinDeploy.send(baseOpts);
+    await goCoinDeploy.send(baseOpts);
   }
 
   // Fire every missing deploy in parallel with NO_WAIT so simulate+prove+
@@ -160,10 +160,10 @@ async function deployContracts(
   // wrapped helper would widen the option type and fall back to the default
   // `DeployResultMined` overload.
   const pending = [
-    gregoCoinExists || !isTokenPubliclyRegistered
+    goCoinExists || !isTokenPubliclyRegistered
       ? null
-      : gregoCoinDeploy.send({ ...baseOpts, wait: NO_WAIT }),
-    gregoCoinPremiumExists ? null : gregoCoinPremiumDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+      : goCoinDeploy.send({ ...baseOpts, wait: NO_WAIT }),
+    goCoinPremiumExists ? null : goCoinPremiumDeploy.send({ ...baseOpts, wait: NO_WAIT }),
     liquidityTokenExists ? null : liquidityTokenDeploy.send({ ...baseOpts, wait: NO_WAIT }),
     ammExists ? null : ammDeploy.send({ ...baseOpts, wait: NO_WAIT }),
     popExists ? null : popDeploy.send({ ...baseOpts, wait: NO_WAIT }),
@@ -173,8 +173,8 @@ async function deployContracts(
     sent.map((r) => waitForTx(node, r.txHash, { waitForStatus: TxStatus.PROPOSED, timeout: 120 })),
   );
 
-  const gregoCoin = TokenContract.at(gregoCoinInstance.address, wallet);
-  const gregoCoinPremium = TokenContract.at(gregoCoinPremiumInstance.address, wallet);
+  const goCoin = TokenContract.at(goCoinInstance.address, wallet);
+  const goCoinPremium = TokenContract.at(goCoinPremiumInstance.address, wallet);
   const liquidityToken = TokenContract.at(liquidityTokenInstance.address, wallet);
   const amm = AMMContract.at(ammInstance.address, wallet);
   const pop = ProofOfPasswordContract.at(popInstance.address, wallet);
@@ -188,23 +188,23 @@ async function deployContracts(
   if (!ammExists) {
     const extraMints = mintToAddresses.flatMap((addr) => {
       const recipient = AztecAddress.fromString(addr);
-      console.log(`Will mint ${INITIAL_TOKEN_BALANCE} GregoCoin + GregoCoinPremium to ${addr}`);
+      console.log(`Will mint ${INITIAL_TOKEN_BALANCE} GoCoin + GoCoinPremium to ${addr}`);
       return [
-        gregoCoin.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
-        gregoCoinPremium.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
+        goCoin.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
+        goCoinPremium.methods.mint_to_private(recipient, INITIAL_TOKEN_BALANCE),
       ];
     });
 
     await new BatchCall(wallet, [
       liquidityToken.methods.set_minter(amm.address, true),
-      gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-      gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      goCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      goCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
       ...extraMints,
     ]).send(baseOpts);
 
     const nonceForAuthwits = Fr.random();
     const [token0Authwit, token1Authwit] = await Promise.all(
-      [gregoCoin, gregoCoinPremium].map(async (token) =>
+      [goCoin, goCoinPremium].map(async (token) =>
         wallet.createAuthWit(deployer, {
           caller: amm.address,
           call: await token.methods
@@ -221,8 +221,8 @@ async function deployContracts(
 
     await new BatchCall(wallet, [
       liquidityToken.methods.set_minter(amm.address, true),
-      gregoCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-      gregoCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      goCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
+      goCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
       amm.methods
         .add_liquidity(
           INITIAL_TOKEN_BALANCE,
@@ -236,12 +236,12 @@ async function deployContracts(
   }
 
   if (!popExists) {
-    await gregoCoin.methods.set_minter(pop.address, true).send(baseOpts);
+    await goCoin.methods.set_minter(pop.address, true).send(baseOpts);
   }
 
   return {
-    gregoCoinAddress: gregoCoin.address.toString(),
-    gregoCoinPremiumAddress: gregoCoinPremium.address.toString(),
+    goCoinAddress: goCoin.address.toString(),
+    goCoinPremiumAddress: goCoinPremium.address.toString(),
     liquidityTokenAddress: liquidityToken.address.toString(),
     ammAddress: amm.address.toString(),
     popAddress: pop.address.toString(),
@@ -255,8 +255,8 @@ function writeNetworkConfig(
   deploymentInfo: {
     chainId: string;
     rollupVersion: string;
-    gregoCoinAddress: string;
-    gregoCoinPremiumAddress: string;
+    goCoinAddress: string;
+    goCoinPremiumAddress: string;
     ammAddress: string;
     liquidityTokenAddress: string;
     popAddress: string;
@@ -275,8 +275,8 @@ function writeNetworkConfig(
     chainId: deploymentInfo.chainId,
     rollupVersion: deploymentInfo.rollupVersion,
     contracts: {
-      gregoCoin: deploymentInfo.gregoCoinAddress,
-      gregoCoinPremium: deploymentInfo.gregoCoinPremiumAddress,
+      goCoin: deploymentInfo.goCoinAddress,
+      goCoinPremium: deploymentInfo.goCoinPremiumAddress,
       amm: deploymentInfo.ammAddress,
       liquidityToken: deploymentInfo.liquidityTokenAddress,
       pop: deploymentInfo.popAddress,
@@ -297,8 +297,8 @@ function writeNetworkConfig(
       Network config saved to: ${configPath}
 
       Deployed contracts:
-      - GregoCoin: ${deploymentInfo.gregoCoinAddress}
-      - GregoCoinPremium: ${deploymentInfo.gregoCoinPremiumAddress}
+      - GoCoin: ${deploymentInfo.goCoinAddress}
+      - GoCoinPremium: ${deploymentInfo.goCoinPremiumAddress}
       - AMM: ${deploymentInfo.ammAddress}
       - Liquidity Token: ${deploymentInfo.liquidityTokenAddress}
       - Proof of password: ${deploymentInfo.popAddress}
@@ -360,8 +360,8 @@ export async function runSwapDeploy(opts: SwapDeployOptions): Promise<SwapDeploy
     rollupVersion: deploymentInfo.rollupVersion,
     deployerAddress: deploymentInfo.deployerAddress,
     contracts: {
-      gregoCoin: deploymentInfo.gregoCoinAddress,
-      gregoCoinPremium: deploymentInfo.gregoCoinPremiumAddress,
+      goCoin: deploymentInfo.goCoinAddress,
+      goCoinPremium: deploymentInfo.goCoinPremiumAddress,
       liquidityToken: deploymentInfo.liquidityTokenAddress,
       amm: deploymentInfo.ammAddress,
       pop: deploymentInfo.popAddress,

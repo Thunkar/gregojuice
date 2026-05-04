@@ -10,14 +10,14 @@
     "allowImportingTsExtensions": true,
     "allowArbitraryExtensions": true,
     "paths": {
-      "@gregojuice/embedded-wallet/ui": ["../../packages/embedded-wallet/src/ui.ts"],
-      "@gregojuice/embedded-wallet": ["../../packages/embedded-wallet/src/index.ts"],
-      "@gregojuice/common/ui": ["../../packages/common/src/ui/index.ts"],
-      "@gregojuice/common/bridging": ["../../packages/common/src/bridging/index.ts"],
-      "@gregojuice/common/fees": ["../../packages/common/src/fees/index.ts"],
-      "@gregojuice/common/testing": ["../../packages/common/src/testing/index.ts"],
-      "@gregojuice/aztec/*": ["../../packages/contracts/aztec/lib/*"],
-      "@gregojuice/aztec/artifacts/*": ["../../packages/contracts/aztec/noir/artifacts/*"]
+      "@aztec-kit/embedded-wallet/ui": ["../../packages/embedded-wallet/src/ui.ts"],
+      "@aztec-kit/embedded-wallet": ["../../packages/embedded-wallet/src/index.ts"],
+      "@aztec-kit/common/ui": ["../../packages/common/src/ui/index.ts"],
+      "@aztec-kit/common/bridging": ["../../packages/common/src/bridging/index.ts"],
+      "@aztec-kit/common/fees": ["../../packages/common/src/fees/index.ts"],
+      "@aztec-kit/common/testing": ["../../packages/common/src/testing/index.ts"],
+      "@aztec-kit/contracts-aztec/*": ["../../packages/contracts/aztec/lib/*"],
+      "@aztec-kit/contracts-aztec/artifacts/*": ["../../packages/contracts/aztec/noir/artifacts/*"]
     }
   },
   "include": [

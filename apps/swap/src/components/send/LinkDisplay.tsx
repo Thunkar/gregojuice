@@ -13,7 +13,7 @@ interface LinkDisplayProps {
 
 export function LinkDisplay({ link, amount, token, recipient, onReset }: LinkDisplayProps) {
   const [copied, setCopied] = useState(false);
-  const tokenName = token === "gc" ? "GregoCoin" : "GregoCoinPremium";
+  const tokenName = token === "gc" ? "GoCoin" : "GoCoinPremium";
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(link);

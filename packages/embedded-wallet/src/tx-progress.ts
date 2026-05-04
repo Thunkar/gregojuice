@@ -29,7 +29,7 @@ export interface TxProgressEvent {
 
 type TxProgressListener = (event: TxProgressEvent) => void;
 
-const STORAGE_PREFIX = "gregojuice_tx_history_";
+const STORAGE_PREFIX = "aztec_kit_tx_history_";
 const MAX_STORED = 50;
 
 class TxProgressEmitter {

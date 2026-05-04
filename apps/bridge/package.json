@@ -1,5 +1,5 @@
 {
-  "name": "@gregojuice/bridge",
+  "name": "@aztec-kit/bridge",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,6 +12,9 @@
     "preview": "NODE_OPTIONS=--max_http_header_size=128000 vite preview"
   },
   "dependencies": {
+    "@aztec-kit/common": "workspace:*",
+    "@aztec-kit/contracts-ethereum": "workspace:*",
+    "@aztec-kit/embedded-wallet": "workspace:*",
     "@aztec/aztec.js": "v4.3.0-nightly.20260423",
     "@aztec/entrypoints": "v4.3.0-nightly.20260423",
     "@aztec/foundation": "v4.3.0-nightly.20260423",
@@ -19,9 +22,6 @@
     "@aztec/wallet-sdk": "v4.3.0-nightly.20260423",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
-    "@gregojuice/common": "workspace:*",
-    "@gregojuice/embedded-wallet": "workspace:*",
-    "@gregojuice/ethereum": "workspace:*",
     "@mui/icons-material": "^6.3.1",
     "@mui/material": "^6.3.1",
     "react": "^18.3.1",

@@ -1,5 +1,5 @@
 /**
- * CLI wrapper around `deployL1Bridge` from `@gregojuice/ethereum`.
+ * CLI wrapper around `deployL1Bridge` from `@aztec-kit/contracts-ethereum`.
  *
  * Usage:
  *   DEPLOYER_KEY=0x… node --experimental-transform-types scripts/deploy-l1-bridge.ts [chain]
@@ -12,7 +12,7 @@
  *   RPC_URL      — override the default RPC endpoint.
  */
 import type { Hex } from "viem";
-import { deployL1Bridge, type ChainName } from "@gregojuice/ethereum";
+import { deployL1Bridge, type ChainName } from "@aztec-kit/contracts-ethereum";
 
 const VALID: ChainName[] = ["sepolia", "mainnet", "anvil"];
 

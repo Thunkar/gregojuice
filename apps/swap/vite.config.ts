@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
-import { aztecVitePlugin, chunkSizeValidator } from "@gregojuice/common/vite";
+import { aztecVitePlugin, chunkSizeValidator } from "@aztec-kit/common/vite";
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -19,51 +19,51 @@ export default defineConfig(({ command, mode }) => {
     logLevel: process.env.CI ? "error" : undefined,
     resolve: {
       alias: {
-        "@gregojuice/embedded-wallet/ui": resolve(
+        "@aztec-kit/embedded-wallet/ui": resolve(
           import.meta.dirname,
           "../../packages/embedded-wallet/src/ui.ts",
         ),
-        "@gregojuice/embedded-wallet": resolve(
+        "@aztec-kit/embedded-wallet": resolve(
           import.meta.dirname,
           "../../packages/embedded-wallet/src/index.ts",
         ),
-        "@gregojuice/common/ui": resolve(
+        "@aztec-kit/common/ui": resolve(
           import.meta.dirname,
           "../../packages/common/src/ui/index.ts",
         ),
-        "@gregojuice/common/bridging": resolve(
+        "@aztec-kit/common/bridging": resolve(
           import.meta.dirname,
           "../../packages/common/src/bridging/index.ts",
         ),
-        "@gregojuice/common/fees": resolve(
+        "@aztec-kit/common/fees": resolve(
           import.meta.dirname,
           "../../packages/common/src/fees/index.ts",
         ),
-        "@gregojuice/common/testing": resolve(
+        "@aztec-kit/common/testing": resolve(
           import.meta.dirname,
           "../../packages/common/src/testing/index.ts",
         ),
-        "@gregojuice/aztec/subscription-fpc": resolve(
+        "@aztec-kit/contracts-aztec/subscription-fpc": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/lib/subscription-fpc.ts",
         ),
-        "@gregojuice/aztec/fpc-gas-constants": resolve(
+        "@aztec-kit/contracts-aztec/fpc-gas-constants": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/lib/fpc-gas-constants.ts",
         ),
-        "@gregojuice/aztec/artifacts/SubscriptionFPC": resolve(
+        "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/noir/artifacts/SubscriptionFPC.ts",
         ),
-        "@gregojuice/aztec/artifacts/Token": resolve(
+        "@aztec-kit/contracts-aztec/artifacts/Token": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/noir/artifacts/Token.ts",
         ),
-        "@gregojuice/aztec/artifacts/AMM": resolve(
+        "@aztec-kit/contracts-aztec/artifacts/AMM": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/noir/artifacts/AMM.ts",
         ),
-        "@gregojuice/aztec/artifacts/ProofOfPassword": resolve(
+        "@aztec-kit/contracts-aztec/artifacts/ProofOfPassword": resolve(
           import.meta.dirname,
           "../../packages/contracts/aztec/noir/artifacts/ProofOfPassword.ts",
         ),

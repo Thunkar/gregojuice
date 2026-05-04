@@ -1,11 +1,11 @@
-# @gregojuice/fpc-operator
+# @aztec-kit/fpc-operator
 
 Operator dashboard for deploying and running a [SubscriptionFPC](../../packages/contracts/aztec/noir/src/subscription_fpc) — the fee-payment contract that sponsors user transactions on the swap app.
 
 ## Dev
 
 ```bash
-yarn workspace @gregojuice/fpc-operator dev
+yarn workspace @aztec-kit/fpc-operator dev
 ```
 
 Requires an Aztec node (local sandbox or testnet RPC).
@@ -19,7 +19,7 @@ Requires an Aztec node (local sandbox or testnet RPC).
 
 ## Scripts
 
-All run with `yarn workspace @gregojuice/fpc-operator <name>`. Each accepts `--network local|testnet`.
+All run with `yarn workspace @aztec-kit/fpc-operator <name>`. Each accepts `--network local|testnet`.
 
 | Script                   | Purpose                                                                                                                                                 |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,11 +1,11 @@
 import { ThemeProvider, CssBaseline, Container, Box, Typography } from "@mui/material";
-import { NetworkSwitcher } from "@gregojuice/common/ui";
+import { NetworkSwitcher } from "@aztec-kit/common/ui";
 import { theme } from "./theme";
 import { WalletChip } from "./components/WalletChip";
 import { useNetwork } from "./contexts/NetworkContext";
 import { BridgeWizard } from "./components/BridgeWizard";
-import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
-import { TxNotificationCenter } from "@gregojuice/embedded-wallet/ui";
+import { GoBridgeLogo } from "./components/GoBridgeLogo";
+import { TxNotificationCenter } from "@aztec-kit/embedded-wallet/ui";
 import { useAztecWallet } from "./contexts/AztecWalletContext";
 import { getQueryParams } from "./config/query-params";
 
@@ -51,7 +51,7 @@ export function App() {
           {!isIframe && (
             <Box sx={{ textAlign: "center", mb: 6, mt: 4 }}>
               <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
-                <GregoJuiceLogo height={56} />
+                <GoBridgeLogo height={56} />
               </Box>
               <Typography variant="body1" color="text.secondary">
                 Bridge fee juice to any Aztec address

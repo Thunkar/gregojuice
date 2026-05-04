@@ -26,7 +26,7 @@ import * as immutables from "./immutables";
 
 async function loadArtifact() {
   const { SchnorrInitializerlessAccountContractArtifact } =
-    await import("@gregojuice/aztec/artifacts/SchnorrInitializerlessAccount");
+    await import("@aztec-kit/contracts-aztec/artifacts/SchnorrInitializerlessAccount");
   return SchnorrInitializerlessAccountContractArtifact;
 }
 

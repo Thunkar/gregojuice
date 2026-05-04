@@ -1,8 +1,8 @@
-import { createNetworkContext } from "@gregojuice/common/ui";
+import { createNetworkContext } from "@aztec-kit/common/ui";
 import { type NetworkConfig, getNetworks, getDefaultNetwork } from "../config/networks";
 
 const ctx = createNetworkContext<NetworkConfig>({
-  storageKey: "gregojuice_network",
+  storageKey: "aztec_kit_network",
   getNetworks,
   getDefaultNetwork,
 });

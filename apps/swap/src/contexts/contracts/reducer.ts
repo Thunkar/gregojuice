@@ -3,10 +3,10 @@
  * Manages contract instances and registration state
  */
 
-import type { TokenContract } from "@gregojuice/aztec/artifacts/Token";
-import type { AMMContract } from "@gregojuice/aztec/artifacts/AMM";
-import type { ProofOfPasswordContract } from "@gregojuice/aztec/artifacts/ProofOfPassword";
-import type { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import type { TokenContract } from "@aztec-kit/contracts-aztec/artifacts/Token";
+import type { AMMContract } from "@aztec-kit/contracts-aztec/artifacts/AMM";
+import type { ProofOfPasswordContract } from "@aztec-kit/contracts-aztec/artifacts/ProofOfPassword";
+import type { SubscriptionFPC } from "@aztec-kit/contracts-aztec/subscription-fpc";
 import { createReducerHook, type ActionsFrom } from "../utils";
 
 // =============================================================================
@@ -14,8 +14,8 @@ import { createReducerHook, type ActionsFrom } from "../utils";
 // =============================================================================
 
 export interface Contracts {
-  gregoCoin: TokenContract | null;
-  gregoCoinPremium: TokenContract | null;
+  goCoin: TokenContract | null;
+  goCoinPremium: TokenContract | null;
   amm: AMMContract | null;
   pop: ProofOfPasswordContract | null;
   fpc: SubscriptionFPC | null;
@@ -30,8 +30,8 @@ export interface ContractsState {
 
 export const initialContractsState: ContractsState = {
   contracts: {
-    gregoCoin: null,
-    gregoCoinPremium: null,
+    goCoin: null,
+    goCoinPremium: null,
     amm: null,
     pop: null,
     fpc: null,

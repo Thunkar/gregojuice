@@ -21,12 +21,12 @@ interface IFeeJuicePortal {
 }
 
 /**
- * @title GregoJuiceBridge
+ * @title GoBridge
  * @notice Atomic multi-bridge: deposits fee juice to N Aztec recipients in a single L1 tx.
  *         Supports single and multiple recipient flows, with both faucet (testnet) and
  *         user-funded (mainnet) paths.
  */
-contract GregoJuiceBridge {
+contract GoBridge {
     /**
      * @notice Mint from faucet and bridge to multiple recipients atomically.
      * @param feeAssetHandler  Address of the fee asset handler (faucet)

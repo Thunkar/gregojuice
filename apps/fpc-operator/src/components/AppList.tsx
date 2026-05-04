@@ -18,10 +18,10 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DownloadIcon from "@mui/icons-material/Download";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { shortAddress } from "@gregojuice/common/ui";
+import { shortAddress } from "@aztec-kit/common/ui";
 import { FunctionSelector } from "@aztec/aztec.js/abi";
 import { formatUnits } from "viem";
-import type { SubscriptionFPCContract as SubscriptionFPC } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+import type { SubscriptionFPCContract as SubscriptionFPC } from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
 import {
   getSignedUpApps,
   getStoredFPC,

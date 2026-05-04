@@ -5,7 +5,7 @@
  */
 
 import { pollMessageReadiness, waitForAztecTx, resumePendingBridge } from "../../services";
-import { txProgress } from "@gregojuice/embedded-wallet";
+import { txProgress } from "@aztec-kit/embedded-wallet";
 import { PHASE_COLOR_MINING } from "./constants";
 import type { BridgePhase, BridgeAction, ClaimCredentials } from "./types";
 

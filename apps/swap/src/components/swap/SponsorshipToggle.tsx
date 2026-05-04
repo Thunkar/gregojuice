@@ -1,7 +1,7 @@
 import { ToggleButtonGroup, ToggleButton, Box, Typography, Skeleton, Link } from "@mui/material";
 import type { SubscriptionStatus } from "../../services/contractService";
 
-const BRIDGE_URL = "https://bridge.gregojuice.anothercoffeefor.me";
+const BRIDGE_URL = "https://bridge.aztec-kit.anothercoffeefor.me";
 
 interface SponsorshipToggleProps {
   status: SubscriptionStatus;

@@ -23,7 +23,7 @@ import {
   setupWallet,
   loadOrCreateSecret,
   deployAdmin,
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 
 async function main() {
   const network = parseNetwork();

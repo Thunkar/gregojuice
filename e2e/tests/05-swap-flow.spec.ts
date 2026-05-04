@@ -16,11 +16,11 @@ import {
  *   2. Balance is 0 → drip password form appears. Submit the password
  *      that spec 03 baked into the PoP contract → fpc-admin sponsors the
  *      mint via PoP::check_password_and_mint → modal closes with a fresh
- *      GregoCoin balance.
+ *      GoCoin balance.
  *   3. Balance > 0 → swap UI enables. Enter a small FROM amount, click
  *      Swap → fpc-admin sponsors the AMM swap_tokens_for_exact_tokens_from
  *      tx → wait for phase=success.
- *   4. Verify balances moved: GregoCoin went down, GregoCoinPremium went up.
+ *   4. Verify balances moved: GoCoin went down, GoCoinPremium went up.
  *
  * Assumes specs 01-04 ran (fpc.json + swap.json + local.json all present
  * with the subscriptionFPC section wired up).
@@ -33,7 +33,7 @@ async function openOnboarding(page: Page) {
   // rather than its default (testnet). NetworkSwitcher reads this key.
   await page.addInitScript(() => {
     try {
-      localStorage.setItem("gregoswap_network", "local");
+      localStorage.setItem("goswap_network", "local");
     } catch {
       /* ignore */
     }
@@ -48,13 +48,13 @@ async function openOnboarding(page: Page) {
   await walletChip.click();
 }
 
-test.describe.serial("gregoswap end-user flow", () => {
+test.describe.serial("goswap end-user flow", () => {
   test.slow();
 
   test("onboards with embedded wallet, drips, and swaps", async ({ page }) => {
     const global = await readState<GlobalState>(STATE_FILES.global);
     const swap = await readState<SwapDeploymentState>(STATE_FILES.swapDeployment);
-    console.log(`[e2e] target node=${global.nodeUrl}, gregoCoin=${swap.gregoCoin}`);
+    console.log(`[e2e] target node=${global.nodeUrl}, goCoin=${swap.goCoin}`);
 
     await openOnboarding(page);
 
@@ -98,7 +98,7 @@ test.describe.serial("gregoswap end-user flow", () => {
     const toBalanceBefore = BigInt(
       (await page.getByTestId("swap-to").getAttribute("data-balance")) ?? "0",
     );
-    console.log(`[e2e] pre-swap balances: GRG=${fromBalanceBefore} GRGP=${toBalanceBefore}`);
+    console.log(`[e2e] pre-swap balances: GO=${fromBalanceBefore} GOP=${toBalanceBefore}`);
 
     await page.getByTestId("swap-from-input").fill(FROM_AMOUNT);
 

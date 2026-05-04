@@ -5,7 +5,7 @@ import { AztecAddress } from "@aztec/aztec.js/addresses";
 import { extractClaimPayload, type TransferLink } from "../../services/offchainLinkService";
 import { ClaimProgress } from "./ClaimProgress";
 import { ClaimSuccess } from "./ClaimSuccess";
-import { GregoSwapLogo } from "../GregoSwapLogo";
+import { GoSwapLogo } from "../GoSwapLogo";
 import { useContracts } from "../../contexts/contracts";
 import { useWallet } from "../../contexts/wallet";
 
@@ -68,7 +68,7 @@ export function ClaimPage({ onClaimComplete }: ClaimPageProps) {
       }
 
       // Reconstruct Fr values and call offchain_receive
-      const tokenKey = data.token === "gc" ? ("gregoCoin" as const) : ("gregoCoinPremium" as const);
+      const tokenKey = data.token === "gc" ? ("goCoin" as const) : ("goCoinPremium" as const);
 
       await claimOffchainTransfer(tokenKey, {
         ciphertext: data.payload.map((s: string) => Fr.fromString(s)),
@@ -106,13 +106,13 @@ export function ClaimPage({ onClaimComplete }: ClaimPageProps) {
   // user's session (wallet, onboarding, contracts) is preserved.
   const handleGoToSend = onClaimComplete;
 
-  const tokenName = (t: string) => (t === "gc" ? "GregoCoin" : "GregoCoinPremium");
+  const tokenName = (t: string) => (t === "gc" ? "GoCoin" : "GoCoinPremium");
 
   return (
     <Box sx={{ py: 4 }}>
       <Box sx={{ textAlign: "center", mb: 6, mt: 4 }}>
         <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
-          <GregoSwapLogo height={56} />
+          <GoSwapLogo height={56} />
         </Box>
       </Box>
       <Box

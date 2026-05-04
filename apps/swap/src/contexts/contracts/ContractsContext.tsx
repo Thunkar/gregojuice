@@ -7,9 +7,9 @@ import { createContext, useContext, useEffect, type ReactNode, useCallback } fro
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import type { Fr } from "@aztec/foundation/curves/bn254";
 import type { TxReceipt } from "@aztec/stdlib/tx";
-import type { AMMContract } from "@gregojuice/aztec/artifacts/AMM";
+import type { AMMContract } from "@aztec-kit/contracts-aztec/artifacts/AMM";
 import type { OffchainMessage } from "@aztec/aztec.js/contracts";
-import type { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import type { SubscriptionFPC } from "@aztec-kit/contracts-aztec/subscription-fpc";
 import { useWallet } from "../wallet";
 import { useNetwork } from "../network";
 import * as contractService from "../../services/contractService";
@@ -32,12 +32,12 @@ interface ContractsContextType {
   simulateOnboardingQueries: () => Promise<[number, bigint, bigint]>;
   drip: (password: string, recipient: AztecAddress) => Promise<TxReceipt>;
   sendOffchain: (
-    tokenKey: "gregoCoin" | "gregoCoinPremium",
+    tokenKey: "goCoin" | "goCoinPremium",
     recipient: AztecAddress,
     amount: bigint,
   ) => Promise<{ receipt: TxReceipt; offchainMessages: OffchainMessage[] }>;
   claimOffchainTransfer: (
-    tokenKey: "gregoCoin" | "gregoCoinPremium",
+    tokenKey: "goCoin" | "goCoinPremium",
     message: {
       ciphertext: Fr[];
       recipient: AztecAddress;
@@ -131,8 +131,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
       !wallet ||
       !currentAddress ||
       !state.contracts.amm ||
-      !state.contracts.gregoCoin ||
-      !state.contracts.gregoCoinPremium
+      !state.contracts.goCoin ||
+      !state.contracts.goCoinPremium
     ) {
       throw new Error("Contracts not initialized");
     }
@@ -140,8 +140,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
     return contractService.getExchangeRate(
       wallet,
       {
-        gregoCoin: state.contracts.gregoCoin,
-        gregoCoinPremium: state.contracts.gregoCoinPremium,
+        goCoin: state.contracts.goCoin,
+        goCoinPremium: state.contracts.goCoinPremium,
         amm: state.contracts.amm,
         fpc: state.contracts.fpc,
       },
@@ -156,8 +156,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
         !wallet ||
         !currentAddress ||
         !state.contracts.amm ||
-        !state.contracts.gregoCoin ||
-        !state.contracts.gregoCoinPremium ||
+        !state.contracts.goCoin ||
+        !state.contracts.goCoinPremium ||
         !state.contracts.fpc
       ) {
         throw new Error("Contracts not initialized");
@@ -166,8 +166,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
       return contractService.executeSponsoredSwap(
         activeNetwork,
         state.contracts.amm,
-        state.contracts.gregoCoin,
-        state.contracts.gregoCoinPremium,
+        state.contracts.goCoin,
+        state.contracts.goCoinPremium,
         state.contracts.fpc,
         currentAddress,
         amountOut,
@@ -184,16 +184,16 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
         !wallet ||
         !currentAddress ||
         !state.contracts.amm ||
-        !state.contracts.gregoCoin ||
-        !state.contracts.gregoCoinPremium
+        !state.contracts.goCoin ||
+        !state.contracts.goCoinPremium
       ) {
         throw new Error("Contracts not initialized");
       }
 
       return contractService.executeUnsponsoredSwap(
         {
-          gregoCoin: state.contracts.gregoCoin,
-          gregoCoinPremium: state.contracts.gregoCoinPremium,
+          goCoin: state.contracts.goCoin,
+          goCoinPremium: state.contracts.goCoinPremium,
           amm: state.contracts.amm,
           fpc: state.contracts.fpc,
         },
@@ -210,8 +210,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
     if (
       !wallet ||
       !currentAddress ||
-      !state.contracts.gregoCoin ||
-      !state.contracts.gregoCoinPremium
+      !state.contracts.goCoin ||
+      !state.contracts.goCoinPremium
     ) {
       throw new Error("Contracts not initialized");
     }
@@ -219,8 +219,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
     return contractService.fetchBalances(
       wallet,
       {
-        gregoCoin: state.contracts.gregoCoin,
-        gregoCoinPremium: state.contracts.gregoCoinPremium,
+        goCoin: state.contracts.goCoin,
+        goCoinPremium: state.contracts.goCoinPremium,
         amm: state.contracts.amm!,
         fpc: state.contracts.fpc,
       },
@@ -234,8 +234,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
       !wallet ||
       !currentAddress ||
       !state.contracts.amm ||
-      !state.contracts.gregoCoin ||
-      !state.contracts.gregoCoinPremium
+      !state.contracts.goCoin ||
+      !state.contracts.goCoinPremium
     ) {
       throw new Error("Contracts not initialized");
     }
@@ -243,15 +243,15 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
     const result = await contractService.simulateOnboardingQueries(
       wallet,
       {
-        gregoCoin: state.contracts.gregoCoin,
-        gregoCoinPremium: state.contracts.gregoCoinPremium,
+        goCoin: state.contracts.goCoin,
+        goCoinPremium: state.contracts.goCoinPremium,
         amm: state.contracts.amm,
         fpc: state.contracts.fpc,
       },
       currentAddress,
     );
 
-    return [result.exchangeRate, result.balances.gregoCoin, result.balances.gregoCoinPremium];
+    return [result.exchangeRate, result.balances.goCoin, result.balances.goCoinPremium];
   }, [wallet, currentAddress, state.contracts]);
 
   // Execute drip
@@ -275,12 +275,12 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
 
   // Execute offchain transfer (send with link)
   const sendOffchain = useCallback(
-    async (tokenKey: "gregoCoin" | "gregoCoinPremium", recipient: AztecAddress, amount: bigint) => {
+    async (tokenKey: "goCoin" | "goCoinPremium", recipient: AztecAddress, amount: bigint) => {
       if (
         !wallet ||
         !currentAddress ||
-        !state.contracts.gregoCoin ||
-        !state.contracts.gregoCoinPremium ||
+        !state.contracts.goCoin ||
+        !state.contracts.goCoinPremium ||
         !state.contracts.amm
       ) {
         throw new Error("Contracts not initialized");
@@ -288,8 +288,8 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
       return contractService.executeTransferOffchain(
         activeNetwork,
         {
-          gregoCoin: state.contracts.gregoCoin,
-          gregoCoinPremium: state.contracts.gregoCoinPremium,
+          goCoin: state.contracts.goCoin,
+          goCoinPremium: state.contracts.goCoinPremium,
           amm: state.contracts.amm,
           fpc: state.contracts.fpc,
         },
@@ -305,7 +305,7 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
   // Claim an offchain transfer via offchain_receive
   const claimOffchainTransfer = useCallback(
     async (
-      tokenKey: "gregoCoin" | "gregoCoinPremium",
+      tokenKey: "goCoin" | "goCoinPremium",
       message: {
         ciphertext: Fr[];
         recipient: AztecAddress;
@@ -316,13 +316,13 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
       if (
         !wallet ||
         !currentAddress ||
-        !state.contracts.gregoCoin ||
-        !state.contracts.gregoCoinPremium
+        !state.contracts.goCoin ||
+        !state.contracts.goCoinPremium
       ) {
         throw new Error("Contracts not initialized");
       }
       const token =
-        tokenKey === "gregoCoin" ? state.contracts.gregoCoin : state.contracts.gregoCoinPremium;
+        tokenKey === "goCoin" ? state.contracts.goCoin : state.contracts.goCoinPremium;
       await token.methods.offchain_receive([message]).simulate({ from: currentAddress });
     },
     [wallet, currentAddress, state.contracts],

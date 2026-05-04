@@ -1,10 +1,10 @@
 import { Box } from "@mui/material";
 
-interface GregoJuiceLogoProps {
+interface GoJuiceLogoProps {
   height?: number;
 }
 
-export function GregoJuiceLogo({ height = 48 }: GregoJuiceLogoProps) {
+export function GoJuiceLogo({ height = 48 }: GoJuiceLogoProps) {
   return (
     <Box
       sx={{
@@ -14,22 +14,18 @@ export function GregoJuiceLogo({ height = 48 }: GregoJuiceLogoProps) {
         lineHeight: 1,
       }}
     >
-      {/* GREGO in Martel - GRE normal, GO italic */}
+      {/* GO in Martel italic */}
       <Box
         component="span"
         sx={{
           fontFamily: "Martel, serif",
           fontWeight: 300,
+          fontStyle: "italic",
           color: "#D4FF28",
           letterSpacing: "0.02em",
         }}
       >
-        <Box component="span" sx={{ fontStyle: "normal" }}>
-          GRE
-        </Box>
-        <Box component="span" sx={{ fontStyle: "italic" }}>
-          GO&nbsp;
-        </Box>
+        GO&nbsp;
       </Box>
 
       {/* JUICE in Workbench */}

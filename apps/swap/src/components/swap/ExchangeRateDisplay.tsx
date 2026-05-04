@@ -29,7 +29,7 @@ export function ExchangeRateDisplay({ exchangeRate, isLoadingRate }: ExchangeRat
         </Box>
       ) : (
         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
-          1 GRG = {exchangeRate.toFixed(18)} GRGP
+          1 GO = {exchangeRate.toFixed(18)} GOP
         </Typography>
       )}
     </Box>

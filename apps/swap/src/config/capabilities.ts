@@ -1,5 +1,5 @@
 /**
- * GregoSwap Capability Manifest
+ * GoSwap Capability Manifest
  * Declares all permissions needed for the app to function with external wallets
  */
 
@@ -8,7 +8,7 @@ import { AztecAddress } from "@aztec/aztec.js/addresses";
 import type { NetworkConfig } from "./networks";
 
 /**
- * Creates a comprehensive capability manifest for GregoSwap based on network configuration.
+ * Creates a comprehensive capability manifest for GoSwap based on network configuration.
  *
  * This manifest requests upfront authorization for all operations needed during:
  * - Onboarding (account access, contract registration, initial simulations)
@@ -24,15 +24,15 @@ import type { NetworkConfig } from "./networks";
  * @param network - Network configuration with contract addresses
  * @returns AppCapabilities manifest with specific contract addresses and functions
  */
-export function createGregoSwapCapabilities(network: NetworkConfig): AppCapabilities {
+export function createGoSwapCapabilities(network: NetworkConfig): AppCapabilities {
   // Parse contract addresses from network config
-  const gregoCoinAddress = AztecAddress.fromString(network.contracts.gregoCoin);
-  const gregoCoinPremiumAddress = AztecAddress.fromString(network.contracts.gregoCoinPremium);
+  const goCoinAddress = AztecAddress.fromString(network.contracts.goCoin);
+  const goCoinPremiumAddress = AztecAddress.fromString(network.contracts.goCoinPremium);
   const ammAddress = AztecAddress.fromString(network.contracts.amm);
   const popAddress = AztecAddress.fromString(network.contracts.pop);
 
   // All contracts that need registration
-  const contractAddresses = [ammAddress, gregoCoinAddress, gregoCoinPremiumAddress, popAddress];
+  const contractAddresses = [ammAddress, goCoinAddress, goCoinPremiumAddress, popAddress];
 
   // Include subscription FPC if configured
   const hasSubFPC = !!network.subscriptionFPC;
@@ -42,13 +42,13 @@ export function createGregoSwapCapabilities(network: NetworkConfig): AppCapabili
 
   // Simulation patterns
   const txSimulationPatterns: ContractFunctionPattern[] = [
-    { contract: gregoCoinAddress, function: "balance_of_public" },
-    { contract: gregoCoinPremiumAddress, function: "balance_of_public" },
+    { contract: goCoinAddress, function: "balance_of_public" },
+    { contract: goCoinPremiumAddress, function: "balance_of_public" },
   ];
 
   const utilitySimulationPatterns: ContractFunctionPattern[] = [
-    { contract: gregoCoinAddress, function: "balance_of_private" },
-    { contract: gregoCoinPremiumAddress, function: "balance_of_private" },
+    { contract: goCoinAddress, function: "balance_of_private" },
+    { contract: goCoinPremiumAddress, function: "balance_of_private" },
   ];
 
   // Transaction patterns
@@ -80,10 +80,10 @@ export function createGregoSwapCapabilities(network: NetworkConfig): AppCapabili
   return {
     version: "1.0",
     metadata: {
-      name: "GregoSwap",
+      name: "GoSwap",
       version: "2.1.0",
       description: "Decentralized exchange for private token swaps on Aztec",
-      url: "https://gregoswap.aztec.network",
+      url: "https://swap.aztec-kit.anothercoffeefor.me",
     },
     capabilities: [
       // Account access - needed for wallet connection and account selection

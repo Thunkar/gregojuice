@@ -3,25 +3,25 @@ import type { AztecNode } from "@aztec/aztec.js/node";
 import type { FunctionSelector } from "@aztec/aztec.js/abi";
 import { Fr } from "@aztec/aztec.js/fields";
 import { poseidon2Hash } from "@aztec/foundation/crypto/poseidon";
-import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
+import { EmbeddedWallet } from "@aztec-kit/embedded-wallet";
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
-} from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+} from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
 import { deriveKeys } from "@aztec/aztec.js/keys";
 
 // ── localStorage keys ────────────────────────────────────────────────
 
-const FPC_ADDRESS_KEY = "gregojuice_fpc_address";
-const FPC_SECRET_KEY = "gregojuice_fpc_secret";
-const FPC_SALT_KEY = "gregojuice_fpc_salt";
-const FPC_DEPLOYED_KEY = "gregojuice_fpc_deployed";
-const SIGNED_UP_APPS_KEY = "gregojuice_fpc_apps";
+const FPC_ADDRESS_KEY = "gojuice_fpc_address";
+const FPC_SECRET_KEY = "gojuice_fpc_secret";
+const FPC_SALT_KEY = "gojuice_fpc_salt";
+const FPC_DEPLOYED_KEY = "gojuice_fpc_deployed";
+const SIGNED_UP_APPS_KEY = "gojuice_fpc_apps";
 // Mirror of `CALIBRATION_CACHE_KEY` from `calibration.ts`. Kept here as a
 // literal to avoid importing from calibration into fpcService (which is
 // imported by calibration), and because clearing it is just localStorage
 // access — no need to round-trip through the cache helpers.
-const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
+const CALIBRATION_CACHE_KEY = "gojuice_calibration_indices";
 
 // ── Stored FPC state ─────────────────────────────────────────────────
 

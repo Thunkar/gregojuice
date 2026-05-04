@@ -65,7 +65,7 @@ export function SendProvider({ children }: SendProviderProps) {
       const recipient = AztecAddress.fromString(state.recipientAddress);
       const amount = BigInt(Math.round(parseFloat(state.amount)));
       const tokenKey =
-        state.token === "gc" ? ("gregoCoin" as const) : ("gregoCoinPremium" as const);
+        state.token === "gc" ? ("goCoin" as const) : ("goCoinPremium" as const);
       const contractAddress = activeNetwork.contracts[tokenKey];
 
       const { receipt, offchainMessages } = await sendOffchain(tokenKey, recipient, amount);

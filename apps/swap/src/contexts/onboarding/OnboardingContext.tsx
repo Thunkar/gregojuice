@@ -168,8 +168,8 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           const result: OnboardingResult = {
             exchangeRate,
             balances: {
-              gregoCoin: gcBalance,
-              gregoCoinPremium: gcpBalance,
+              goCoin: gcBalance,
+              goCoinPremium: gcpBalance,
             },
           };
           actions.setResult(result);

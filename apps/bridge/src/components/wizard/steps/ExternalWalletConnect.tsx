@@ -77,7 +77,7 @@ export function ExternalWalletConnect() {
           webWallets: { urls: WEB_WALLET_URLS },
         }).getAvailableWallets({
           chainInfo,
-          appId: "gregojuice",
+          appId: "gobridge",
           timeout: 5000,
         });
         const wallets: WalletProvider[] = [];
@@ -102,7 +102,7 @@ export function ExternalWalletConnect() {
     setIsConnecting(true);
     setErr(null);
     try {
-      const pending = await provider.establishSecureChannel("gregojuice");
+      const pending = await provider.establishSecureChannel("gobridge");
       setPendingProvider(provider);
       setPendingConnection(pending);
       setIsConnecting(false);

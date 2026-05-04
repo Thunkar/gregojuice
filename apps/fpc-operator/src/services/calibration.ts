@@ -2,8 +2,8 @@ import { AztecAddress } from "@aztec/aztec.js/addresses";
 import { type AbiType, type ContractArtifact, type FunctionAbi } from "@aztec/aztec.js/abi";
 import { Contract } from "@aztec/aztec.js/contracts";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
-import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
-import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import { EmbeddedWallet } from "@aztec-kit/embedded-wallet";
+import { SubscriptionFPC } from "@aztec-kit/contracts-aztec/subscription-fpc";
 import {
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PUBLIC,
@@ -11,7 +11,7 @@ import {
   FPC_SUBSCRIBE_OVERHEAD_L2_GAS_PUBLIC,
   FPC_TEARDOWN_DA_GAS,
   FPC_TEARDOWN_L2_GAS,
-} from "@gregojuice/aztec/fpc-gas-constants";
+} from "@aztec-kit/contracts-aztec/fpc-gas-constants";
 
 // ── Calibration index cache ─────────────────────────────────────────
 //
@@ -21,7 +21,7 @@ import {
 // same slot and skip the sign_up. Backed up via `backupService` so an
 // operator can restore them along with the FPC and signed-up apps.
 
-const CALIBRATION_CACHE_KEY = "gregojuice_calibration_indices";
+const CALIBRATION_CACHE_KEY = "gojuice_calibration_indices";
 
 export type CalibrationIndices = Record<string, number>;
 

@@ -1,6 +1,6 @@
 /**
  * DripPasswordInput Component
- * Password input form for claiming GregoCoin tokens
+ * Password input form for claiming GoCoin tokens
  */
 
 import { useState } from "react";
@@ -41,7 +41,7 @@ export function DripPasswordInput({ onSubmit }: DripPasswordInputProps) {
       }}
     >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Enter the password to claim your free GregoCoin tokens:
+        Enter the password to claim your free GoCoin tokens:
       </Typography>
 
       <TextField

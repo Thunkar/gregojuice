@@ -16,7 +16,7 @@ export interface SentTransfer {
 }
 
 function storageKey(senderAddress: string): string {
-  return `gregoswap_sent_transfers_${senderAddress}`;
+  return `goswap_sent_transfers_${senderAddress}`;
 }
 
 export function getSentTransfers(senderAddress: string): SentTransfer[] {
