@@ -319,6 +319,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
         additionalScopes: opts.additionalScopes,
         skipTxValidation: true,
         skipFeeEnforcement: true,
+        sendMessagesAs: opts.sendMessagesAs,
       });
       const simElapsed = Date.now() - simStart;
       const offchainEffects = collectOffchainEffects(simulationResult.privateExecutionResult);
