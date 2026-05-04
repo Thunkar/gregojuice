@@ -112,6 +112,14 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
   // Ref to prevent duplicate drip execution
   const dripTriggeredRef = useRef(false);
 
+  // Refs to prevent duplicate execution under React StrictMode (which double-invokes
+  // effects in dev) and from stale-closure re-runs after state updates trigger renders
+  // mid-await. Without these, two parallel calls of registerBaseContracts both pass
+  // the metadata check and both attempt registerContract → SQLite UNIQUE violation.
+  const registerBaseTriggeredRef = useRef(false);
+  const simulateTriggeredRef = useRef(false);
+  const registerDripTriggeredRef = useRef(false);
+
   // Computed values
   const steps = state.needsDrip
     ? getOnboardingStepsWithDrip(state.hasSimulationGrant, state.useEmbeddedWallet)
@@ -135,8 +143,10 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           state.status === "connecting" &&
           currentAddress &&
           !isUsingEmbeddedWallet &&
-          !state.hasRegisteredBase
+          !state.hasRegisteredBase &&
+          !registerBaseTriggeredRef.current
         ) {
+          registerBaseTriggeredRef.current = true;
           actions.markRegistered();
           actions.advanceStatus("registering");
           await registerBaseContracts();
@@ -147,8 +157,10 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           state.status === "registering" &&
           currentAddress &&
           isUsingEmbeddedWallet &&
-          !state.hasRegisteredBase
+          !state.hasRegisteredBase &&
+          !registerBaseTriggeredRef.current
         ) {
+          registerBaseTriggeredRef.current = true;
           actions.markRegistered();
           await registerBaseContracts();
         }
@@ -158,8 +170,10 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           state.status === "registering" &&
           !isLoadingContracts &&
           currentAddress &&
-          !state.hasSimulated
+          !state.hasSimulated &&
+          !simulateTriggeredRef.current
         ) {
+          simulateTriggeredRef.current = true;
           actions.markSimulated();
           actions.advanceStatus("simulating");
 
@@ -178,10 +192,13 @@ export function OnboardingProvider({ children }: OnboardingProviderProps) {
           const hasNoTokens = gcBalance === 0n;
 
           if (hasNoTokens) {
-            actions.markNeedsDrip();
-            actions.advanceStatus("registering_drip");
-            await registerDripContracts();
-            actions.advanceStatus("awaiting_drip");
+            if (!registerDripTriggeredRef.current) {
+              registerDripTriggeredRef.current = true;
+              actions.markNeedsDrip();
+              actions.advanceStatus("registering_drip");
+              await registerDripContracts();
+              actions.advanceStatus("awaiting_drip");
+            }
           } else {
             // User has tokens, complete onboarding
             setStoredOnboardingStatus(currentAddress, true);
