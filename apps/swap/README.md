@@ -20,7 +20,7 @@ All run with `yarn workspace @aztec-kit/swap <name>` (or `cd apps/swap && yarn <
 | Script                           | Purpose                                                                                                                |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `deploy-admin:<network>`         | Deploy the swap-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx.        |
-| `deploy:<network>`               | Deploy GoCoin, GoCoinPremium, LiquidityToken, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`. |
+| `deploy:<network>`               | Deploy GoCoin, GoCoinPremium, GoLiquidity, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`. |
 | `mint:<network>`                 | Mint GO/GOP to `--to <addr>` (repeatable) or `MINT_TO=<addr,addr>` env.                                              |
 | `register-fpc-signups:<network>` | Signs up the swap app's sponsored functions on the FPC. On testnet, calibrates `maxFee` from the clustec P75.          |
 

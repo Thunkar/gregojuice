@@ -17,7 +17,7 @@ import { getStoredFPC, loadExistingFPC } from "./services/fpcService";
 import { SetupWizard } from "./components/SetupWizard";
 import { Dashboard } from "./components/Dashboard";
 import { TxNotificationCenter } from "@aztec-kit/embedded-wallet/ui";
-import { GoJuiceLogo } from "./components/GoJuiceLogo";
+import { GoFPCLogo } from "./components/GoFPCLogo";
 import { NetworkSwitcher } from "@aztec-kit/common/ui";
 import { useNetwork } from "./contexts/NetworkContext";
 import type { SubscriptionFPCContract } from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
@@ -85,7 +85,7 @@ export function App() {
           {/* Header */}
           <Box sx={{ textAlign: "center", mb: 4, mt: 4 }}>
             <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
-              <GoJuiceLogo height={56} />
+              <GoFPCLogo height={56} />
             </Box>
             <Typography variant="body1" color="text.secondary">
               FPC Operator Dashboard

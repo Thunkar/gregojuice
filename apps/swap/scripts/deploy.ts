@@ -83,14 +83,8 @@ async function deployContracts(
   // depends on GoCoin. Everything uses the same salt so re-runs with the
   // same admin + SALT produce the same addresses and can be skipped.
   const goCoinDeploy = TokenContract.deploy(wallet, deployer, "GoCoin", "GO", 18);
-  const goCoinPremiumDeploy = TokenContract.deploy(
-    wallet,
-    deployer,
-    "GoCoinPremium",
-    "GOP",
-    18,
-  );
-  const liquidityTokenDeploy = TokenContract.deploy(wallet, deployer, "LiquidityToken", "LQT", 18);
+  const goCoinPremiumDeploy = TokenContract.deploy(wallet, deployer, "GoCoinPremium", "GOP", 18);
+  const liquidityTokenDeploy = TokenContract.deploy(wallet, deployer, "GoLiquidity", "GOLP", 18);
 
   // `deployer` has to be passed explicitly to getInstance — it defaults to
   // AztecAddress.ZERO, which would produce an address different from the
@@ -221,8 +215,6 @@ async function deployContracts(
 
     await new BatchCall(wallet, [
       liquidityToken.methods.set_minter(amm.address, true),
-      goCoin.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
-      goCoinPremium.methods.mint_to_private(deployer, INITIAL_TOKEN_BALANCE),
       amm.methods
         .add_liquidity(
           INITIAL_TOKEN_BALANCE,

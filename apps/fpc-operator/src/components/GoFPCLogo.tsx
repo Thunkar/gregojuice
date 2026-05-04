@@ -1,10 +1,10 @@
 import { Box } from "@mui/material";
 
-interface GoJuiceLogoProps {
+interface GoFPCLogoProps {
   height?: number;
 }
 
-export function GoJuiceLogo({ height = 48 }: GoJuiceLogoProps) {
+export function GoFPCLogo({ height = 48 }: GoFPCLogoProps) {
   return (
     <Box
       sx={{
@@ -28,7 +28,7 @@ export function GoJuiceLogo({ height = 48 }: GoJuiceLogoProps) {
         GO&nbsp;
       </Box>
 
-      {/* JUICE in Workbench */}
+      {/* FPC in Workbench */}
       <Box
         component="span"
         sx={{
@@ -39,7 +39,7 @@ export function GoJuiceLogo({ height = 48 }: GoJuiceLogoProps) {
           letterSpacing: "0.05em",
         }}
       >
-        JUICE
+        FPC
       </Box>
     </Box>
   );

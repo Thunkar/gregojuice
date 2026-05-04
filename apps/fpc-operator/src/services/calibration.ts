@@ -21,7 +21,7 @@ import {
 // same slot and skip the sign_up. Backed up via `backupService` so an
 // operator can restore them along with the FPC and signed-up apps.
 
-const CALIBRATION_CACHE_KEY = "gojuice_calibration_indices";
+const CALIBRATION_CACHE_KEY = "gofpc_calibration_indices";
 
 export type CalibrationIndices = Record<string, number>;
 

@@ -36,7 +36,7 @@ pub(crate) unconstrained fn setup() -> (TestEnvironment, AztecAddress, AztecAddr
 
     let liquidity_token_initializer = Token::interface().constructor(
         admin,
-        "LiquidityToken00000000000000000",
+        "GoLiquidity00000000000000000000",
         "LT00000000000000000000000000000",
         18,
     );

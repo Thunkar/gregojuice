@@ -70,7 +70,7 @@ export async function exportBackup(wallet: EmbeddedWallet, address: AztecAddress
   const a = document.createElement("a");
   a.href = url;
   const date = new Date().toISOString().slice(0, 10);
-  a.download = `gojuice-backup-${date}.json`;
+  a.download = `gofpc-backup-${date}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
