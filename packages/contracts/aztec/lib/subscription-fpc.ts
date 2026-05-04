@@ -14,6 +14,7 @@ import {
   SubscriptionFPCContractArtifact,
 } from "../noir/artifacts/SubscriptionFPC.js";
 import { computeVarArgsHash, computeCalldataHash } from "@aztec/stdlib/hash";
+import { computeInnerAuthWitHash } from "@aztec/stdlib/auth-witness";
 import { HashedValues } from "@aztec/stdlib/tx";
 import { NO_FROM } from "@aztec/aztec.js/account";
 import { Fr } from "@aztec/aztec.js/fields";
@@ -60,32 +61,30 @@ export function fpcSponsorOverhead(hasPublicCall: boolean): Gas {
 
 const FPC_TEARDOWN_GAS = new Gas(FPC_TEARDOWN_DA_GAS, FPC_TEARDOWN_L2_GAS);
 
-const MAX_U128 = 2n ** 128n - 1n;
-
 /**
- * Measures the gas a sponsored fn uses when dispatched from the FPC's
- * `subscribe` entrypoint, and returns it standalone (overhead subtracted).
+ * Measures the gas a sponsored fn uses when dispatched through the FPC,
+ * and returns it standalone (overhead subtracted).
  *
- * Can't just simulate the fn directly: the standalone path runs through
- * the admin's account entrypoint, which has different gas than the FPC's
- * `subscribe` dispatch. At runtime the FPC's entrypoint is what executes,
- * so we need to measure under those same conditions.
+ * Calibrates by simulating `fpc.calibrate(noirCall, adminAddress)` at top
+ * of stack (`from: NO_FROM`), matching the call shape of `subscribe`/
+ * `sponsor` at runtime. The `calibrate` entrypoint mirrors `subscribe`'s
+ * dispatch (`_call_sponsored_fn`) but skips slot pop / subscription
+ * insert / fee-payer / phase-change machinery, so it has no on-chain
+ * side effects and no fee. Auth uses an inner-hash authwit signed by the
+ * admin (consumer = FPC, innerHash = poseidon over (selector, args_hash)
+ * with the AUTHWIT_INNER domain separator). The admin gate is what makes
+ * this safe to expose: a sponsored call dispatched here runs with
+ * `msg_sender == FPC_ADDRESS`, so without the gate any user could
+ * impersonate the FPC.
  *
- * How: provision a throwaway slot with `max_fee = MAX_U128` at a random
- * index (so no fee gate trips during the estimator's inflated-limits pass),
- * simulate `fpc.subscribe(noirCall, ...)`, then subtract the known
- * subscribe overhead. Callers add whatever overhead fits their path
- * (subscribe/sponsor) when they actually send.
- *
- * Returns the `calibrationIndex` of the throwaway slot so callers can
- * cache it per contract+selector. Pass it back in via `calibrationIndex`
- * to reuse the slot — the `sign_up` tx is then skipped, since simulation
- * doesn't consume the slot's notes.
+ * The returned `daGas` / `l2Gas` are the sponsored fn's own gas — callers
+ * add whatever overhead fits their runtime path (`fpcSubscribeOverhead` /
+ * `fpcSponsorOverhead`) when they actually send.
  */
 export async function calibrateSponsoredApp(params: {
-  /** FPC admin wallet — signs the throwaway sign_up tx and simulates subscribe */
+  /** FPC admin wallet — signs the calibrate authwit and simulates */
   adminWallet: EmbeddedWallet;
-  /** FPC admin address — used as the sponsored call's `from` in simulation */
+  /** FPC admin address — the authwit signer */
   adminAddress: AztecAddress;
   /** Address of the already-deployed FPC */
   fpcAddress: AztecAddress;
@@ -95,15 +94,7 @@ export async function calibrateSponsoredApp(params: {
   authWitnesses?: AuthWitness[];
   /** Additional scopes required by the sponsored call during simulation */
   additionalScopes?: AztecAddress[];
-  /**
-   * Reuse a previously-provisioned calibration slot at this index. When set,
-   * the `sign_up` tx is skipped — caller is responsible for ensuring a slot
-   * was previously provisioned at this index for this contract+selector
-   * with `max_fee = MAX_U128, max_users = 1` (e.g. by caching the index
-   * returned from a prior call).
-   */
-  calibrationIndex?: number;
-}): Promise<{ daGas: number; l2Gas: number; hasPublicCall: boolean; calibrationIndex: number }> {
+}): Promise<{ daGas: number; l2Gas: number; hasPublicCall: boolean }> {
   const {
     adminWallet,
     adminAddress,
@@ -114,33 +105,42 @@ export async function calibrateSponsoredApp(params: {
   } = params;
 
   const adminFpc = SubscriptionFPCContract.at(fpcAddress, adminWallet);
-  const calibrationIndex =
-    params.calibrationIndex ?? 1_000_000 + Math.floor(Math.random() * 1_000_000);
-
-  if (params.calibrationIndex === undefined) {
-    await adminFpc.methods
-      .sign_up(sampleCall.to, sampleCall.selector, calibrationIndex, 1, MAX_U128, 1)
-      .send({ from: adminAddress });
-  }
-
   const noirCall = await buildNoirFunctionCall(sampleCall);
-  const subscribeInteraction = adminFpc.methods
-    .subscribe(noirCall, calibrationIndex, adminAddress)
-    .with({
-      authWitnesses,
-      extraHashedArgs: await buildExtraHashedArgs(sampleCall),
-    });
+  const calibrateInteraction = adminFpc.methods.calibrate(noirCall, adminAddress);
+
+  // Mint an inner-hash authwit binding admin's signature to this exact
+  // calibrate call (selector + args_hash). The Noir contract recomputes
+  // the same inner_hash and verifies via `assert_inner_hash_valid_authwit`
+  // — admin is consumer-bound to `fpcAddress`. Top-of-stack means no
+  // msg_sender, which is why we can't use the standard call-intent flow.
+  const calibrateCall = await calibrateInteraction.getFunctionCall();
+  const calibrateArgsHash = await computeVarArgsHash(calibrateCall.args);
+  const innerHash = await computeInnerAuthWitHash([
+    calibrateCall.selector.toField(),
+    calibrateArgsHash,
+  ]);
+  const calibrateAuthwit = await adminWallet.createAuthWit(adminAddress, {
+    consumer: fpcAddress,
+    innerHash,
+  });
+
+  const calibrateInteractionWithAuth = calibrateInteraction.with({
+    authWitnesses: [calibrateAuthwit, ...authWitnesses],
+    extraHashedArgs: await buildExtraHashedArgs(sampleCall),
+  });
 
   // Build the execution payload ourselves so we can call wallet.simulateTx
   // directly and inspect publicInputs for enqueued public calls — the
   // top-level `simulate({ estimateGas })` API only returns gas numbers and
   // loses the public-phase signal we need to pick the right overhead
   // constant.
-  const payload = await subscribeInteraction.request();
+  const payload = await calibrateInteractionWithAuth.request();
   const simulated = await adminWallet.simulateTx(payload, {
     from: NO_FROM,
     fee: { gasSettings: {} },
     additionalScopes: [adminAddress, fpcAddress, ...additionalScopes],
+    skipTxValidation: true,
+    skipFeeEnforcement: true,
   });
 
   // A private fn can enqueue public work (e.g. `self.call(...)` to a
@@ -151,13 +151,17 @@ export async function calibrateSponsoredApp(params: {
   // and public calls enqueued from private.
   const hasPublicCall = simulated.publicInputs.numberOfPublicCallRequests() > 0;
 
-  const subscribeDa = Number(simulated.gasUsed.totalGas.daGas);
-  const subscribeL2 = Number(simulated.gasUsed.totalGas.l2Gas);
-  const subscribeOverhead = fpcSubscribeOverhead(hasPublicCall);
-  const derivedDa = Math.max(0, subscribeDa - Number(subscribeOverhead.daGas));
-  const derivedL2 = Math.max(0, subscribeL2 - Number(subscribeOverhead.l2Gas));
-
-  return { daGas: derivedDa, l2Gas: derivedL2, hasPublicCall, calibrationIndex };
+  // Return raw simulation gas. `calibrate` runs the sponsored fn under the
+  // exact same call path it'll take at runtime (top-of-stack FPC entrypoint,
+  // `msg_sender == FPC`, with authwit consumption when applicable),
+  // so this number IS the "standalone" gas from the operator's perspective —
+  // runtime callers add `fpcSubscribeOverhead`/`fpcSponsorOverhead` on top
+  // and land on the exact runtime gas. Pinned by `fpc-overhead.test.ts`.
+  return {
+    daGas: Number(simulated.gasUsed.totalGas.daGas),
+    l2Gas: Number(simulated.gasUsed.totalGas.l2Gas),
+    hasPublicCall,
+  };
 }
 
 /**
@@ -202,8 +206,11 @@ export async function buildExtraHashedArgs(call: FunctionCall): Promise<HashedVa
 /**
  * Subscribes to the SubscriptionFPC and sends a call in a single tx.
  *
- * `gasLimits` is the sponsored fn's own gas (no FPC overhead) — the helper
- * adds the `subscribe`-path FPC overhead on top.
+ * `gasLimits` is the sponsored fn's gas as it runs through the FPC dispatch
+ * path — i.e. the value returned by `calibrateSponsoredApp`, or any
+ * equivalent measurement of the function with `msg_sender == FPC` (so any
+ * authwit consumption is accounted for). The helper adds the `subscribe`-
+ * path FPC overhead on top.
  */
 export async function subscribeAndCall(params: {
   /** SubscriptionFPC contract instance (connected to the user's wallet) */
@@ -214,7 +221,7 @@ export async function subscribeAndCall(params: {
   configIndex: number;
   /** The subscribing user's address */
   userAddress: AztecAddress;
-  /** Sponsored fn's own gas limits (no FPC overhead) */
+  /** Sponsored fn's gas under FPC dispatch (no subscribe/sponsor overhead) */
   gasLimits: { daGas: number; l2Gas: number };
   /** Whether the sponsored call has a public phase (from calibration) */
   hasPublicCall: boolean;
@@ -258,9 +265,11 @@ export async function subscribeAndCall(params: {
 /**
  * Sends a sponsored call through the SubscriptionFPC.
  *
- * `gasLimits` is the sponsored fn's own gas (no FPC overhead) — the helper
- * adds the `sponsor`-path FPC overhead on top. `sponsor`'s overhead is
- * smaller than `subscribe`'s because the subscription already exists.
+ * `gasLimits` is the sponsored fn's gas as it runs through the FPC dispatch
+ * path — i.e. the value returned by `calibrateSponsoredApp`, or any
+ * equivalent measurement of the function with `msg_sender == FPC`. The
+ * helper adds the `sponsor`-path FPC overhead on top. `sponsor`'s overhead
+ * is smaller than `subscribe`'s because the subscription already exists.
  */
 export async function sendSponsoredCall(params: {
   /** SubscriptionFPC contract instance (connected to the user's wallet) */
@@ -271,7 +280,7 @@ export async function sendSponsoredCall(params: {
   configIndex: number;
   /** The subscribing user's address */
   userAddress: AztecAddress;
-  /** Sponsored fn's own gas limits (no FPC overhead) */
+  /** Sponsored fn's gas under FPC dispatch (no subscribe/sponsor overhead) */
   gasLimits: { daGas: number; l2Gas: number };
   /** Whether the sponsored call has a public phase (from calibration) */
   hasPublicCall: boolean;
@@ -372,8 +381,9 @@ export class SubscriptionFPC {
     const fpc = this;
     return {
       /**
-       * Measures a sponsored fn's standalone gas under the same entrypoint
-       * (the FPC's `subscribe`) that it runs through at send-time.
+       * Measures a sponsored fn's standalone gas by simulating the FPC's
+       * admin-only `calibrate` entrypoint. Pure simulation — no on-chain
+       * state changes, no fees.
        */
       calibrate: (params: {
         adminWallet: EmbeddedWallet;
@@ -381,12 +391,6 @@ export class SubscriptionFPC {
         sampleCall: FunctionCall;
         authWitnesses?: AuthWitness[];
         additionalScopes?: AztecAddress[];
-        /**
-         * Reuse a previously-provisioned calibration slot at this index.
-         * Skips the throwaway `sign_up` tx — caller is responsible for
-         * caching the index returned by an earlier `calibrate` call.
-         */
-        calibrationIndex?: number;
       }) =>
         calibrateSponsoredApp({
           ...params,
