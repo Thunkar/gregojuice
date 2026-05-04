@@ -153,6 +153,7 @@ describe("FPC gas overhead", () => {
         .with({ extraHashedArgs: await buildExtraHashedArgs(sampleCall) })
         .send({
           from: NO_FROM,
+          sendMessagesAs: ctx.admin,
           additionalScopes: [ctx.admin, ctx.fpc.address],
           fee: {
             gasSettings: {
@@ -305,6 +306,7 @@ describe("FPC gas overhead", () => {
         })
         .send({
           from: NO_FROM,
+          sendMessagesAs: ctx.admin,
           additionalScopes: [ctx.admin, ctx.fpc.address],
           fee: {
             gasSettings: {
