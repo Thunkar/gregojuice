@@ -30,7 +30,7 @@ function detectViteMajor(): number {
 }
 
 /**
- * Drop-in Vite plugin for all gregojuice apps. Sets the headers, pre-bundle
+ * Drop-in Vite plugin for all aztec-kit apps. Sets the headers, pre-bundle
  * config, and polyfill plumbing that every app needs, adapting to the
  * installed Vite major version.
  *

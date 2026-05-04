@@ -84,7 +84,7 @@ if (existsSync(swapLocalPath)) {
 } else {
   log(
     COLORS.gray,
-    "  - swap/local.json missing — generate via `yarn workspace @gregojuice/swap deploy:local` or run the e2e setup chain.",
+    "  - swap/local.json missing — generate via `yarn workspace @aztec-kit/swap deploy:local` or run the e2e setup chain.",
   );
 }
 

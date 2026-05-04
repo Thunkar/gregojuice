@@ -229,7 +229,7 @@ jobs:
 
             // Update the existing bot comment in place if present, so PRs
             // don't accumulate one comment per push.
-            const marker = '<!-- gregojuice-deploy-urls -->';
+            const marker = '<!-- gojuice-deploy-urls -->';
             const { data: comments } = await github.rest.issues.listComments({
               issue_number: prNumber,
               owner: context.repo.owner,

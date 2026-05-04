@@ -13,8 +13,8 @@ import type { LocalNetwork } from "./local-network.ts";
 export interface DeployedNetwork {
   subscriptionFpc?: string;
   amm?: string;
-  gregoCoin?: string;
-  gregoCoinPremium?: string;
+  goCoin?: string;
+  goCoinPremium?: string;
   proofOfPassword?: string;
   bridge?: string;
 }

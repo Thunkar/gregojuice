@@ -1,8 +1,8 @@
 import type { BridgeStep } from "./types";
 
 // ── localStorage keys ────────────────────────────────────────────────
-export const SESSION_KEY = "gregojuice_bridge_session";
-export const NETWORK_STORAGE_KEY = "gregojuice_network";
+export const SESSION_KEY = "gobridge_session";
+export const NETWORK_STORAGE_KEY = "aztec_kit_network";
 
 export const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 

@@ -19,8 +19,8 @@ import { Fr } from "@aztec/aztec.js/fields";
 import {
   SchnorrInitializerlessAccountContract,
   SchnorrInitializerlessAccountContractArtifact,
-} from "@gregojuice/aztec/artifacts/SchnorrInitializerlessAccount";
-import { setupLocalNetwork, type LocalNetwork } from "@gregojuice/common/testing";
+} from "@aztec-kit/contracts-aztec/artifacts/SchnorrInitializerlessAccount";
+import { setupLocalNetwork, type LocalNetwork } from "@aztec-kit/common/testing";
 import {
   computeContractSalt,
   createSchnorrInitializerlessAccount,

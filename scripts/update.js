@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Update gregojuice to a given Aztec nightly version across the whole monorepo.
+ * Update aztec-kit to a given Aztec nightly version across the whole monorepo.
  *
  * Scope:
  *   - every workspace package.json under apps/, packages/, e2e/
@@ -195,8 +195,8 @@ function installAztecCLI(version) {
 }
 
 function compileContracts() {
-  log(COLORS.yellow, "[5/5] Building @gregojuice/aztec (compile + codegen)...");
-  exec("yarn workspace @gregojuice/aztec build");
+  log(COLORS.yellow, "[5/5] Building @aztec-kit/contracts-aztec (compile + codegen)...");
+  exec("yarn workspace @aztec-kit/contracts-aztec build");
   log(COLORS.green, "✓ Contracts compiled\n");
 }
 
@@ -245,7 +245,7 @@ function parseArgs() {
 }
 
 async function main() {
-  log(COLORS.green, "=== Gregojuice Nightly Update Script ===\n");
+  log(COLORS.green, "=== Gojuice Nightly Update Script ===\n");
 
   let { version, skipAztecUp, skipCompile } = parseArgs();
 

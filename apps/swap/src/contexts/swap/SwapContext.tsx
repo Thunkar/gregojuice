@@ -16,7 +16,7 @@ import { useContracts } from "../contracts";
 import { useWallet } from "../wallet";
 import { useOnboarding } from "../onboarding";
 import { useSwapReducer, type SwapState } from "./reducer";
-import { GREGOCOIN_USD_PRICE, EXCHANGE_RATE_POLL_INTERVAL_MS } from "../../types";
+import { GOCOIN_USD_PRICE, EXCHANGE_RATE_POLL_INTERVAL_MS } from "../../types";
 
 interface SwapContextType extends SwapState {
   // Computed values
@@ -106,7 +106,7 @@ export function SwapProvider({ children }: SwapProviderProps) {
           error.message.includes("Insufficient") ||
           error.message.includes("insufficient")
         ) {
-          errorMessage = "Insufficient GregoCoin balance for swap";
+          errorMessage = "Insufficient GoCoin balance for swap";
         } else {
           errorMessage = error.message;
         }
@@ -262,8 +262,8 @@ export function SwapProvider({ children }: SwapProviderProps) {
   );
 
   // Computed values
-  const fromAmountUSD = state.fromAmount ? parseFloat(state.fromAmount) * GREGOCOIN_USD_PRICE : 0;
-  const toAmountUSD = state.toAmount ? parseFloat(state.toAmount) * GREGOCOIN_USD_PRICE : 0;
+  const fromAmountUSD = state.fromAmount ? parseFloat(state.fromAmount) * GOCOIN_USD_PRICE : 0;
+  const toAmountUSD = state.toAmount ? parseFloat(state.toAmount) * GOCOIN_USD_PRICE : 0;
 
   const canSwap =
     !!state.fromAmount &&

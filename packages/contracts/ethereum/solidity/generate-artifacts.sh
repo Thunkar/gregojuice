@@ -10,7 +10,7 @@ cd "$SCRIPT_DIR"
 echo "Compiling with forge..."
 forge build
 
-ARTIFACT="out/GregoJuiceBridge.sol/GregoJuiceBridge.json"
+ARTIFACT="out/GoBridge.sol/GoBridge.json"
 OUTPUT_DIR="../generated"
 OUTPUT="$OUTPUT_DIR/bridge-contract-artifacts.ts"
 

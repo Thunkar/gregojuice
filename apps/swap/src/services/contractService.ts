@@ -18,10 +18,10 @@ import {
 } from "@aztec/aztec.js/contracts";
 import { poseidon2Hash } from "@aztec/foundation/crypto/poseidon";
 import type { TxReceipt } from "@aztec/stdlib/tx";
-import type { TokenContract } from "@gregojuice/aztec/artifacts/Token";
-import type { AMMContract } from "@gregojuice/aztec/artifacts/AMM";
-import type { ProofOfPasswordContract } from "@gregojuice/aztec/artifacts/ProofOfPassword";
-import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import type { TokenContract } from "@aztec-kit/contracts-aztec/artifacts/Token";
+import type { AMMContract } from "@aztec-kit/contracts-aztec/artifacts/AMM";
+import type { ProofOfPasswordContract } from "@aztec-kit/contracts-aztec/artifacts/ProofOfPassword";
+import { SubscriptionFPC } from "@aztec-kit/contracts-aztec/subscription-fpc";
 import { BigDecimal } from "../utils/bigDecimal";
 import type { NetworkConfig } from "../config/networks";
 import type { OnboardingResult } from "../contexts/onboarding/reducer";
@@ -30,8 +30,8 @@ import type { OnboardingResult } from "../contexts/onboarding/reducer";
  * Contracts returned after swap registration
  */
 export interface SwapContracts {
-  gregoCoin: TokenContract;
-  gregoCoinPremium: TokenContract;
+  goCoin: TokenContract;
+  goCoinPremium: TokenContract;
   amm: AMMContract;
   fpc: SubscriptionFPC | null;
 }
@@ -54,8 +54,8 @@ export async function registerSwapContracts(
   node: AztecNode,
   network: NetworkConfig,
 ): Promise<SwapContracts> {
-  const gregoCoinAddress = AztecAddressClass.fromString(network.contracts.gregoCoin);
-  const gregoCoinPremiumAddress = AztecAddressClass.fromString(network.contracts.gregoCoinPremium);
+  const goCoinAddress = AztecAddressClass.fromString(network.contracts.goCoin);
+  const goCoinPremiumAddress = AztecAddressClass.fromString(network.contracts.goCoinPremium);
   const liquidityTokenAddress = AztecAddressClass.fromString(network.contracts.liquidityToken);
   const ammAddress = AztecAddressClass.fromString(network.contracts.amm);
   const deployerAddress = AztecAddressClass.fromString(network.deployer.address);
@@ -63,8 +63,9 @@ export async function registerSwapContracts(
 
   // Import contract artifacts
   const { TokenContract, TokenContractArtifact } =
-    await import("@gregojuice/aztec/artifacts/Token");
-  const { AMMContract, AMMContractArtifact } = await import("@gregojuice/aztec/artifacts/AMM");
+    await import("@aztec-kit/contracts-aztec/artifacts/Token");
+  const { AMMContract, AMMContractArtifact } =
+    await import("@aztec-kit/contracts-aztec/artifacts/AMM");
 
   // Determine subscription FPC for sponsored swaps
   const subFPC = network.subscriptionFPC;
@@ -73,36 +74,36 @@ export async function registerSwapContracts(
   // Check which contracts are already registered
   const metadataChecks: { name: "getContractMetadata"; args: [AztecAddress] }[] = [
     { name: "getContractMetadata", args: [ammAddress] },
-    { name: "getContractMetadata", args: [gregoCoinAddress] },
-    { name: "getContractMetadata", args: [gregoCoinPremiumAddress] },
+    { name: "getContractMetadata", args: [goCoinAddress] },
+    { name: "getContractMetadata", args: [goCoinPremiumAddress] },
   ];
   if (fpcAddress) {
     metadataChecks.push({ name: "getContractMetadata", args: [fpcAddress] });
   }
   const metadataResults = await wallet.batch(metadataChecks);
-  const [ammMetadata, gregoCoinMetadata, gregoCoinPremiumMetadata] = metadataResults;
+  const [ammMetadata, goCoinMetadata, goCoinPremiumMetadata] = metadataResults;
 
   // Reconstruct contract instances for unregistered contracts
-  const [ammInstance, gregoCoinInstance, gregoCoinPremiumInstance] = await Promise.all([
+  const [ammInstance, goCoinInstance, goCoinPremiumInstance] = await Promise.all([
     !ammMetadata.result.instance
       ? getContractInstanceFromInstantiationParams(AMMContractArtifact, {
           salt: contractSalt,
           deployer: deployerAddress,
-          constructorArgs: [gregoCoinAddress, gregoCoinPremiumAddress, liquidityTokenAddress],
+          constructorArgs: [goCoinAddress, goCoinPremiumAddress, liquidityTokenAddress],
         })
       : null,
-    !gregoCoinMetadata.result.instance
+    !goCoinMetadata.result.instance
       ? getContractInstanceFromInstantiationParams(TokenContractArtifact, {
           salt: contractSalt,
           deployer: deployerAddress,
-          constructorArgs: [deployerAddress, "GregoCoin", "GRG", 18],
+          constructorArgs: [deployerAddress, "GoCoin", "GO", 18],
         })
       : null,
-    !gregoCoinPremiumMetadata.result.instance
+    !goCoinPremiumMetadata.result.instance
       ? getContractInstanceFromInstantiationParams(TokenContractArtifact, {
           salt: contractSalt,
           deployer: deployerAddress,
-          constructorArgs: [deployerAddress, "GregoCoinPremium", "GRGP", 18],
+          constructorArgs: [deployerAddress, "GoCoinPremium", "GOP", 18],
         })
       : null,
   ]);
@@ -119,17 +120,17 @@ export async function registerSwapContracts(
       args: [ammInstance, AMMContractArtifact, undefined],
     });
   }
-  if (gregoCoinInstance) {
+  if (goCoinInstance) {
     registrationBatch.push({
       name: "registerContract",
-      args: [gregoCoinInstance, TokenContractArtifact, undefined],
+      args: [goCoinInstance, TokenContractArtifact, undefined],
     });
   }
-  if (gregoCoinPremiumInstance) {
-    // gregoCoinPremium shares the same artifact as gregoCoin, so we can omit it
+  if (goCoinPremiumInstance) {
+    // goCoinPremium shares the same artifact as goCoin, so we can omit it
     registrationBatch.push({
       name: "registerContract",
-      args: [gregoCoinPremiumInstance, undefined, undefined],
+      args: [goCoinPremiumInstance, undefined, undefined],
     });
   }
 
@@ -143,7 +144,7 @@ export async function registerSwapContracts(
       }
       const secretKey = Fr.fromString(subFPC.secretKey);
       const { SubscriptionFPCContractArtifact } =
-        await import("@gregojuice/aztec/artifacts/SubscriptionFPC");
+        await import("@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC");
       registrationBatch.push({
         name: "registerContract",
         args: [instance, SubscriptionFPCContractArtifact, secretKey],
@@ -157,14 +158,14 @@ export async function registerSwapContracts(
   }
 
   // Instantiate the contracts
-  const gregoCoin = TokenContract.at(gregoCoinAddress, wallet);
-  const gregoCoinPremium = TokenContract.at(gregoCoinPremiumAddress, wallet);
+  const goCoin = TokenContract.at(goCoinAddress, wallet);
+  const goCoinPremium = TokenContract.at(goCoinPremiumAddress, wallet);
   const amm = AMMContract.at(ammAddress, wallet);
 
   // Instantiate FPC wrapper if configured
   const fpc = subFPC && fpcAddress ? SubscriptionFPC.at(fpcAddress, wallet) : null;
 
-  return { gregoCoin, gregoCoinPremium, amm, fpc };
+  return { goCoin, goCoinPremium, amm, fpc };
 }
 
 /**
@@ -180,7 +181,7 @@ export async function registerDripContracts(
   const popAddress = AztecAddressClass.fromString(network.contracts.pop);
 
   const { ProofOfPasswordContract, ProofOfPasswordContractArtifact } =
-    await import("@gregojuice/aztec/artifacts/ProofOfPassword");
+    await import("@aztec-kit/contracts-aztec/artifacts/ProofOfPassword");
 
   // Determine which FPC to use: subscription FPC (preferred) or fallback to Aztec's sponsored FPC
   const subFPC = network.subscriptionFPC;
@@ -226,7 +227,7 @@ export async function registerDripContracts(
       throw new Error(`Subscription FPC at ${subFPC.address} not found on-chain`);
     }
     const { SubscriptionFPCContractArtifact } =
-      await import("@gregojuice/aztec/artifacts/SubscriptionFPC");
+      await import("@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC");
     registrationBatch.push({
       name: "registerContract",
       args: [instance, SubscriptionFPCContractArtifact, secretKey],
@@ -256,11 +257,11 @@ export async function getExchangeRate(
   contracts: SwapContracts,
   fromAddress: AztecAddress,
 ): Promise<number> {
-  const { gregoCoin, gregoCoinPremium, amm } = contracts;
+  const { goCoin, goCoinPremium, amm } = contracts;
 
   const batchCall = new BatchCall(wallet, [
-    gregoCoin.methods.balance_of_public(amm.address),
-    gregoCoinPremium.methods.balance_of_public(amm.address),
+    goCoin.methods.balance_of_public(amm.address),
+    goCoinPremium.methods.balance_of_public(amm.address),
   ]);
 
   const results = await batchCall.simulate({ from: fromAddress });
@@ -277,11 +278,11 @@ export async function fetchBalances(
   contracts: SwapContracts,
   address: AztecAddress,
 ): Promise<[bigint, bigint]> {
-  const { gregoCoin, gregoCoinPremium } = contracts;
+  const { goCoin, goCoinPremium } = contracts;
 
   const batchCall = new BatchCall(wallet, [
-    gregoCoin.methods.balance_of_private(address),
-    gregoCoinPremium.methods.balance_of_private(address),
+    goCoin.methods.balance_of_private(address),
+    goCoinPremium.methods.balance_of_private(address),
   ]);
 
   const results = await batchCall.simulate({ from: address });
@@ -297,16 +298,16 @@ export async function simulateOnboardingQueries(
   contracts: SwapContracts,
   address: AztecAddress,
 ): Promise<OnboardingResult> {
-  const { gregoCoin, gregoCoinPremium, amm } = contracts;
+  const { goCoin, goCoinPremium, amm } = contracts;
 
   // Create a batched simulation that includes:
   // 1. Exchange rate data (public balances of AMM)
   // 2. User's private balances
   const batchCall = new BatchCall(wallet, [
-    gregoCoin.methods.balance_of_public(amm.address),
-    gregoCoinPremium.methods.balance_of_public(amm.address),
-    gregoCoin.methods.balance_of_private(address),
-    gregoCoinPremium.methods.balance_of_private(address),
+    goCoin.methods.balance_of_public(amm.address),
+    goCoinPremium.methods.balance_of_public(amm.address),
+    goCoin.methods.balance_of_private(address),
+    goCoinPremium.methods.balance_of_private(address),
   ]);
 
   const results = await batchCall.simulate({ from: address });
@@ -318,8 +319,8 @@ export async function simulateOnboardingQueries(
   return {
     exchangeRate,
     balances: {
-      gregoCoin: gcBalance,
-      gregoCoinPremium: gcpBalance,
+      goCoin: gcBalance,
+      goCoinPremium: gcpBalance,
     },
   };
 }
@@ -333,13 +334,13 @@ export async function executeSwap(
   amountOut: number,
   amountInMax: number,
 ): Promise<TxReceipt> {
-  const { gregoCoin, gregoCoinPremium, amm } = contracts;
+  const { goCoin, goCoinPremium, amm } = contracts;
 
   const authwitNonce = Fr.random();
   const { receipt } = await amm.methods
     .swap_tokens_for_exact_tokens(
-      gregoCoin.address,
-      gregoCoinPremium.address,
+      goCoin.address,
+      goCoinPremium.address,
       BigInt(Math.round(amountOut)),
       BigInt(Math.round(amountInMax)),
       authwitNonce,
@@ -350,7 +351,7 @@ export async function executeSwap(
 
 // ── Subscription state tracking ─────────────────────────────────────
 
-const SUBSCRIPTION_KEY = "gregoswap_subscriptions";
+const SUBSCRIPTION_KEY = "goswap_subscriptions";
 
 function subscriptionKey(fpcAddress: string, configIndex: number, userAddress: string): string {
   return `${fpcAddress}:${configIndex}:${userAddress}`;
@@ -382,8 +383,8 @@ function markSubscribed(fpcAddress: string, configIndex: number, userAddress: st
 export async function executeSponsoredSwap(
   network: NetworkConfig,
   amm: SwapContracts["amm"],
-  gregoCoin: SwapContracts["gregoCoin"],
-  gregoCoinPremium: SwapContracts["gregoCoinPremium"],
+  goCoin: SwapContracts["goCoin"],
+  goCoinPremium: SwapContracts["goCoinPremium"],
   fpc: SubscriptionFPC,
   userAddress: AztecAddress,
   amountOut: number,
@@ -398,8 +399,8 @@ export async function executeSponsoredSwap(
   const call = await amm.methods
     .swap_tokens_for_exact_tokens_from(
       userAddress,
-      gregoCoin.address,
-      gregoCoinPremium.address,
+      goCoin.address,
+      goCoinPremium.address,
       BigInt(Math.round(amountOut)),
       BigInt(Math.round(amountInMax)),
       authwitNonce,
@@ -447,12 +448,12 @@ export async function executeUnsponsoredSwap(
   amountOut: number,
   amountInMax: number,
 ): Promise<TxReceipt> {
-  const { gregoCoin, gregoCoinPremium, amm } = contracts;
+  const { goCoin, goCoinPremium, amm } = contracts;
   const authwitNonce = Fr.random();
   const { receipt } = await amm.methods
     .swap_tokens_for_exact_tokens(
-      gregoCoin.address,
-      gregoCoinPremium.address,
+      goCoin.address,
+      goCoinPremium.address,
       BigInt(Math.round(amountOut)),
       BigInt(Math.round(amountInMax)),
       authwitNonce,
@@ -541,7 +542,7 @@ export function parseSwapError(error: unknown): string {
     return "Transaction was rejected in wallet";
   }
   if (message.includes("Insufficient") || message.includes("insufficient")) {
-    return "Insufficient GregoCoin balance for swap";
+    return "Insufficient GoCoin balance for swap";
   }
 
   return message;
@@ -594,7 +595,7 @@ export async function executeDrip(
 export async function executeTransferOffchain(
   network: NetworkConfig,
   contracts: SwapContracts,
-  tokenKey: "gregoCoin" | "gregoCoinPremium",
+  tokenKey: "goCoin" | "goCoinPremium",
   fromAddress: AztecAddress,
   recipient: AztecAddress,
   amount: bigint,
@@ -675,7 +676,7 @@ export async function executeTransferOffchain(
  */
 export function parseDripError(error: unknown): string {
   if (!(error instanceof Error)) {
-    return "Failed to claim GregoCoin. Please try again.";
+    return "Failed to claim GoCoin. Please try again.";
   }
 
   const message = error.message;
@@ -690,7 +691,7 @@ export function parseDripError(error: unknown): string {
     return "Invalid password. Please try again.";
   }
   if (message.includes("already claimed") || message.includes("Already claimed")) {
-    return "You have already claimed your GregoCoin tokens.";
+    return "You have already claimed your GoCoin tokens.";
   }
 
   return message;

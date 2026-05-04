@@ -1,11 +1,11 @@
-# @gregojuice/bridge
+# @aztec-kit/bridge
 
 A wizard for bridging fee juice from L1 → L2 so a fresh Aztec address can pay its own gas. Embedded as an iframe by `fpc-operator`; also runs standalone for manual bridging.
 
 ## Dev
 
 ```bash
-yarn workspace @gregojuice/bridge dev
+yarn workspace @aztec-kit/bridge dev
 ```
 
 Requires an Aztec node + L1 RPC at the URLs in `src/config/networks/local.json`. For local: `aztec start --local-network` provides both.
@@ -18,7 +18,7 @@ Requires an Aztec node + L1 RPC at the URLs in `src/config/networks/local.json`.
 4. **Step 4** — mint FJ via the L1 bridge contract's faucet handler (if available) or transfer existing FJ, then bridge to L2. Poll for L1→L2 message inclusion.
 5. **Step 5** — claim on L2. First claim uses `FeeJuicePaymentMethodWithClaim` to pay for its own gas from the freshly-claimed FJ; subsequent claims pay normally.
 
-Session state is persisted under `gregojuice_bridge_session` in `localStorage` so a refresh mid-bridge doesn't lose progress.
+Session state is persisted under `gobridge_session` in `localStorage` so a refresh mid-bridge doesn't lose progress.
 
 ## Config
 

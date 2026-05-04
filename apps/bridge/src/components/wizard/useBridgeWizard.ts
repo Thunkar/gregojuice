@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useReducer, useRef } from "react";
 import { formatUnits } from "viem";
-import { shortAddress } from "@gregojuice/common/ui";
+import { shortAddress } from "@aztec-kit/common/ui";
 import { useWallet } from "../../contexts/WalletContext";
 import { useNetwork } from "../../contexts/NetworkContext";
 import { useAztecWallet } from "../../contexts/AztecWalletContext";
@@ -227,7 +227,7 @@ export function useBridgeWizard() {
   // ── Effect: postMessage to parent iframe ──────────────────────────
   useEffect(() => {
     if (!isIframe) return;
-    const msg: Record<string, unknown> = { type: "gregojuice-bridge" };
+    const msg: Record<string, unknown> = { type: "gobridge" };
     switch (bridge.type) {
       case "l1-pending":
         msg.status = "bridging";

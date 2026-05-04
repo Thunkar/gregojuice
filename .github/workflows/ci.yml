@@ -46,11 +46,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
 
-      - name: Run @gregojuice/aztec integration tests
-        run: yarn workspace @gregojuice/aztec test
+      - name: Run @aztec-kit/contracts-aztec integration tests
+        run: yarn workspace @aztec-kit/contracts-aztec test
 
-      - name: Run @gregojuice/embedded-wallet integration tests
-        run: yarn workspace @gregojuice/embedded-wallet test
+      - name: Run @aztec-kit/embedded-wallet integration tests
+        run: yarn workspace @aztec-kit/embedded-wallet test
 
   # Playwright e2e tests. Runs on the host runner (not in a container) so
   # it shares the same actions/cache scope as `build` + `integration`: yarn
@@ -123,13 +123,13 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: yarn workspace @gregojuice/e2e exec playwright install
+        run: yarn workspace @aztec-kit/e2e exec playwright install
 
       - name: Run e2e tests
         # --fail-on-flaky-tests makes Playwright exit 1 when a test passes only
         # on retry. Default behaviour marks flakies as "passed" which hides
         # real regressions.
-        run: yarn workspace @gregojuice/e2e test --fail-on-flaky-tests
+        run: yarn workspace @aztec-kit/e2e test --fail-on-flaky-tests
         env:
           CI: "1"
 

@@ -1,5 +1,5 @@
 {
-  "name": "@gregojuice/ethereum",
+  "name": "@aztec-kit/contracts-ethereum",
   "version": "0.0.18",
   "type": "module",
   "main": "dist/lib/deterministic.js",

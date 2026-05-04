@@ -3,7 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FullConfig } from "@playwright/test";
 import { startLocalNetwork, type LocalNetwork } from "./local-network.ts";
-import { deployL1Bridge } from "@gregojuice/ethereum";
+import { deployL1Bridge } from "@aztec-kit/contracts-ethereum";
 import { deriveSwapAdmin } from "./derive-swap-admin.ts";
 import {
   resetStateDir,

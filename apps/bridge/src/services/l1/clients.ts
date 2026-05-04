@@ -168,9 +168,9 @@ export function extractAllDepositEvents(receipt: TransactionReceipt): DepositEve
 // ── Bridge contract address ──────────────────────────────────────────
 
 /**
- * GregoJuiceBridge is deployed at a deterministic CREATE2 address on every
+ * GoBridge is deployed at a deterministic CREATE2 address on every
  * chain, so the app just returns that address — no env var, no cache, no
  * auto-deploy. Operators are responsible for ensuring the contract exists
- * at that address on each network before first use (see `@gregojuice/ethereum`).
+ * at that address on each network before first use (see `@aztec-kit/contracts-ethereum`).
  */
-export { getBridgeAddress } from "@gregojuice/ethereum";
+export { getBridgeAddress } from "@aztec-kit/contracts-ethereum";

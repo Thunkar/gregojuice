@@ -69,7 +69,7 @@ export function SwapContainer() {
   }, [dripPhase]);
 
   // Local balance state
-  const [balances, setBalances] = useState<Balances>({ gregoCoin: null, gregoCoinPremium: null });
+  const [balances, setBalances] = useState<Balances>({ goCoin: null, goCoinPremium: null });
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
 
   const swapErrorRef = useRef<HTMLDivElement | null>(null);
@@ -79,16 +79,16 @@ export function SwapContainer() {
   // Fetch balances
   const refetchBalances = useCallback(async () => {
     if (!isOnboarded || !currentAddress) {
-      setBalances({ gregoCoin: null, gregoCoinPremium: null });
+      setBalances({ goCoin: null, goCoinPremium: null });
       return;
     }
 
     setIsLoadingBalances(true);
     try {
       const [gcBalance, gcpBalance] = await fetchBalances();
-      setBalances({ gregoCoin: gcBalance, gregoCoinPremium: gcpBalance });
+      setBalances({ goCoin: gcBalance, goCoinPremium: gcpBalance });
     } catch {
-      setBalances({ gregoCoin: null, gregoCoinPremium: null });
+      setBalances({ goCoin: null, goCoinPremium: null });
     } finally {
       setIsLoadingBalances(false);
     }
@@ -97,7 +97,7 @@ export function SwapContainer() {
   // Clear balances when not onboarded or losing address
   useEffect(() => {
     if (!isOnboarded || !currentAddress) {
-      setBalances({ gregoCoin: null, gregoCoinPremium: null });
+      setBalances({ goCoin: null, goCoinPremium: null });
     }
   }, [isOnboarded, currentAddress]);
 
@@ -135,14 +135,14 @@ export function SwapContainer() {
   };
 
   const handleMaxFromClick = () => {
-    if (balances.gregoCoin !== null) {
-      setFromAmount(balances.gregoCoin.toString());
+    if (balances.goCoin !== null) {
+      setFromAmount(balances.goCoin.toString());
     }
   };
 
   const handleMaxToClick = () => {
-    if (balances.gregoCoinPremium !== null) {
-      setToAmount(balances.gregoCoinPremium.toString());
+    if (balances.goCoinPremium !== null) {
+      setToAmount(balances.goCoinPremium.toString());
     }
   };
 
@@ -160,9 +160,9 @@ export function SwapContainer() {
   // Calculate if FROM amount exceeds balance
   const fromHasError =
     showBalance &&
-    balances.gregoCoin !== null &&
+    balances.goCoin !== null &&
     fromAmount !== "" &&
-    parseFloat(fromAmount) > Number(balances.gregoCoin);
+    parseFloat(fromAmount) > Number(balances.goCoin);
 
   // Combined error handling
   const displayError = swapError || dripError;
@@ -188,12 +188,12 @@ export function SwapContainer() {
       {/* From Token */}
       <SwapBox
         label="From"
-        tokenName="GRG"
+        tokenName="GO"
         value={fromAmount}
         onChange={setFromAmount}
         disabled={disableFromBox}
         usdValue={fromAmountUSD}
-        balance={balances.gregoCoin}
+        balance={balances.goCoin}
         showBalance={showBalance}
         isLoadingBalance={isLoadingBalances}
         onMaxClick={handleMaxFromClick}
@@ -228,12 +228,12 @@ export function SwapContainer() {
       {/* To Token */}
       <SwapBox
         label="To"
-        tokenName="GRGP"
+        tokenName="GOP"
         value={toAmount}
         onChange={setToAmount}
         disabled={disableToBox}
         usdValue={toAmountUSD * 5}
-        balance={balances.gregoCoinPremium}
+        balance={balances.goCoinPremium}
         showBalance={showBalance}
         isLoadingBalance={isLoadingBalances}
         onMaxClick={handleMaxToClick}
@@ -258,7 +258,7 @@ export function SwapContainer() {
             "& .MuiIconButton-root": { color: "#D4FF28" },
           }}
         >
-          GregoCoin received — you're ready to swap!
+          GoCoin received — you're ready to swap!
         </Alert>
       </Collapse>
 

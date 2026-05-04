@@ -25,8 +25,8 @@ export type DripPhase = "idle" | "sending" | "mining" | "success" | "error";
 export interface OnboardingResult {
   exchangeRate: number;
   balances: {
-    gregoCoin: bigint;
-    gregoCoinPremium: bigint;
+    goCoin: bigint;
+    goCoinPremium: bigint;
   };
 }
 
@@ -292,7 +292,7 @@ export function getOnboardingStepsWithDrip(
   steps.push(
     { label: "Register Contracts", description: "Registering any missing contracts" },
     { label: "Register Faucet", description: "Registering the token faucet contract if needed" },
-    { label: "Claim Tokens", description: "Claiming your free GregoCoin tokens" },
+    { label: "Claim Tokens", description: "Claiming your free GoCoin tokens" },
   );
 
   return steps;

@@ -11,7 +11,7 @@
 import fs from "fs";
 import path from "path";
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { TokenContract, TokenContractArtifact } from "@gregojuice/aztec/artifacts/Token";
+import { TokenContract, TokenContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/Token";
 import { BatchCall } from "@aztec/aztec.js/contracts";
 import {
   parseNetwork,
@@ -20,7 +20,7 @@ import {
   setupWallet,
   loadOrCreateSecret,
   getAdmin,
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 
 const NETWORK = parseNetwork();
 const MINT_TO = parseAddressList("--to", "MINT_TO");
@@ -68,34 +68,34 @@ async function main() {
   }
 
   // Register token contracts
-  const gregoCoinAddress = AztecAddress.fromString(config.contracts.gregoCoin);
-  const gregoCoinPremiumAddress = AztecAddress.fromString(config.contracts.gregoCoinPremium);
+  const goCoinAddress = AztecAddress.fromString(config.contracts.goCoin);
+  const goCoinPremiumAddress = AztecAddress.fromString(config.contracts.goCoinPremium);
 
-  const [gregoCoinInstance, gregoCoinPremiumInstance] = await Promise.all([
-    wallet.getContractMetadata(gregoCoinAddress).then((m) => m.instance),
-    wallet.getContractMetadata(gregoCoinPremiumAddress).then((m) => m.instance),
+  const [goCoinInstance, goCoinPremiumInstance] = await Promise.all([
+    wallet.getContractMetadata(goCoinAddress).then((m) => m.instance),
+    wallet.getContractMetadata(goCoinPremiumAddress).then((m) => m.instance),
   ]);
 
   // Register if not already registered
-  if (!gregoCoinInstance) {
-    const instance = await node.getContract(gregoCoinAddress);
+  if (!goCoinInstance) {
+    const instance = await node.getContract(goCoinAddress);
     await wallet.registerContract(instance!, TokenContractArtifact);
   }
-  if (!gregoCoinPremiumInstance) {
-    const instance = await node.getContract(gregoCoinPremiumAddress);
+  if (!goCoinPremiumInstance) {
+    const instance = await node.getContract(goCoinPremiumAddress);
     await wallet.registerContract(instance!, TokenContractArtifact);
   }
 
-  const gregoCoin = TokenContract.at(gregoCoinAddress, wallet);
-  const gregoCoinPremium = TokenContract.at(gregoCoinPremiumAddress, wallet);
+  const goCoin = TokenContract.at(goCoinAddress, wallet);
+  const goCoinPremium = TokenContract.at(goCoinPremiumAddress, wallet);
 
   // Build mint calls
   const mintCalls = MINT_TO.flatMap((addr) => {
     const recipient = AztecAddress.fromString(addr);
-    console.log(`Will mint ${AMOUNT} GregoCoin + GregoCoinPremium to ${addr}`);
+    console.log(`Will mint ${AMOUNT} GoCoin + GoCoinPremium to ${addr}`);
     return [
-      gregoCoin.methods.mint_to_private(recipient, AMOUNT),
-      gregoCoinPremium.methods.mint_to_private(recipient, AMOUNT),
+      goCoin.methods.mint_to_private(recipient, AMOUNT),
+      goCoinPremium.methods.mint_to_private(recipient, AMOUNT),
     ];
   });
 

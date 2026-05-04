@@ -5,8 +5,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FunctionSelector } from "@aztec/stdlib/abi";
-import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
-import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
+import { ProofOfPasswordContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/ProofOfPassword";
+import { AMMContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/AMM";
 import {
   readState,
   writeState,
@@ -21,16 +21,16 @@ import {
  * Spec 04 — fpc-admin signs up two sponsored apps.
  *
  * Flow:
- *   1. Mint GregoCoin + GregoCoinPremium to fpc-admin (so calibration can
+ *   1. Mint GoCoin + GoCoinPremium to fpc-admin (so calibration can
  *      simulate swap / mint calls). Uses swap-admin as the signer via
  *      `apps/swap/scripts/mint.ts` in a subprocess.
  *   2. Restore the spec-01 backup into a fresh fpc-dashboard context so we
  *      have the same fpc-admin + FPC contract.
  *   3. In the "Sign Up App" tab, run the full 4-step wizard twice:
- *      - ProofOfPassword::check_password_and_mint — mints GregoCoin
+ *      - ProofOfPassword::check_password_and_mint — mints GoCoin
  *        for a user that presents the password.
- *      - AMM::swap_tokens_for_exact_tokens_from — swaps GregoCoin for
- *        GregoCoinPremium on behalf of a user.
+ *      - AMM::swap_tokens_for_exact_tokens_from — swaps GoCoin for
+ *        GoCoinPremium on behalf of a user.
  *   4. Compute function selectors from the artifacts and write the
  *      `subscriptionFPC` section into swap's `local.json`, plus update
  *      `e2e/.state/fpc.json` with the signed-up apps.
@@ -75,7 +75,7 @@ async function restoreBackup(page: Page) {
   // bounce us to testnet.
   await page.addInitScript(() => {
     try {
-      localStorage.setItem("gregojuice_network", "local");
+      localStorage.setItem("aztec_kit_network", "local");
     } catch {
       /* ignore */
     }
@@ -275,7 +275,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
     }
     const global = await readState<GlobalState>(STATE_FILES.global);
     const fpc = await readState<FpcState>(STATE_FILES.fpc);
-    console.log(`[e2e] minting GregoCoin + GregoCoinPremium to ${fpc.fpcAdminAddress}`);
+    console.log(`[e2e] minting GoCoin + GoCoinPremium to ${fpc.fpcAdminAddress}`);
     await runMint(
       {
         ...process.env,
@@ -299,7 +299,7 @@ test.describe.serial("fpc signs up sponsored apps", () => {
 
     // ── 2a. Sign up ProofOfPassword::check_password_and_mint ─────────
     // PoP mints fresh private tokens for the recipient, so calibration
-    // only needs GregoCoin registered — no prior-note discovery needed.
+    // only needs GoCoin registered — no prior-note discovery needed.
     console.log("[e2e] signing up PoP::check_password_and_mint");
     await signUpOneApp(page, {
       artifactPath: POP_ARTIFACT_PATH,
@@ -313,8 +313,8 @@ test.describe.serial("fpc signs up sponsored apps", () => {
       extras: [
         {
           artifactPath: resolve(ARTIFACTS_DIR, "token_contract-Token.json"),
-          address: swap.gregoCoin,
-          alias: "GregoCoin",
+          address: swap.goCoin,
+          alias: "GoCoin",
         },
       ],
       configIndex: 0,
@@ -329,8 +329,8 @@ test.describe.serial("fpc signs up sponsored apps", () => {
       functionName: "swap_tokens_for_exact_tokens_from",
       args: {
         from: fpc.fpcAdminAddress,
-        token_in: swap.gregoCoin,
-        token_out: swap.gregoCoinPremium,
+        token_in: swap.goCoin,
+        token_out: swap.goCoinPremium,
         amount_out: "100",
         amount_in_max: "1000000",
         authwit_nonce: "1",
@@ -338,8 +338,8 @@ test.describe.serial("fpc signs up sponsored apps", () => {
       extras: [
         {
           artifactPath: resolve(ARTIFACTS_DIR, "token_contract-Token.json"),
-          address: swap.gregoCoinPremium,
-          alias: "GregoCoinPremium",
+          address: swap.goCoinPremium,
+          alias: "GoCoinPremium",
         },
       ],
       senders: [{ address: swap.deployerAddress, alias: "swap-admin" }],

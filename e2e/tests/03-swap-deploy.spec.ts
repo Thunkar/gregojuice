@@ -91,8 +91,8 @@ test.describe.serial("swap deploy", () => {
       chainId: string;
       rollupVersion: string;
       contracts: {
-        gregoCoin: string;
-        gregoCoinPremium: string;
+        goCoin: string;
+        goCoinPremium: string;
         amm: string;
         liquidityToken: string;
         pop: string;
@@ -104,8 +104,8 @@ test.describe.serial("swap deploy", () => {
     expect(deployed.deployer.address.toLowerCase()).toBe(global.swapAdmin.address.toLowerCase());
 
     const state: SwapDeploymentState = {
-      gregoCoin: deployed.contracts.gregoCoin,
-      gregoCoinPremium: deployed.contracts.gregoCoinPremium,
+      goCoin: deployed.contracts.goCoin,
+      goCoinPremium: deployed.contracts.goCoinPremium,
       liquidityToken: deployed.contracts.liquidityToken,
       amm: deployed.contracts.amm,
       pop: deployed.contracts.pop,
