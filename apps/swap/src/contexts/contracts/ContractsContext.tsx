@@ -207,12 +207,7 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
 
   // Fetch balances
   const fetchBalances = useCallback(async (): Promise<[bigint, bigint]> => {
-    if (
-      !wallet ||
-      !currentAddress ||
-      !state.contracts.goCoin ||
-      !state.contracts.goCoinPremium
-    ) {
+    if (!wallet || !currentAddress || !state.contracts.goCoin || !state.contracts.goCoinPremium) {
       throw new Error("Contracts not initialized");
     }
 
@@ -313,16 +308,10 @@ export function ContractsProvider({ children }: ContractsProviderProps) {
         anchor_block_timestamp: bigint;
       },
     ) => {
-      if (
-        !wallet ||
-        !currentAddress ||
-        !state.contracts.goCoin ||
-        !state.contracts.goCoinPremium
-      ) {
+      if (!wallet || !currentAddress || !state.contracts.goCoin || !state.contracts.goCoinPremium) {
         throw new Error("Contracts not initialized");
       }
-      const token =
-        tokenKey === "goCoin" ? state.contracts.goCoin : state.contracts.goCoinPremium;
+      const token = tokenKey === "goCoin" ? state.contracts.goCoin : state.contracts.goCoinPremium;
       await token.methods.offchain_receive([message]).simulate({ from: currentAddress });
     },
     [wallet, currentAddress, state.contracts],

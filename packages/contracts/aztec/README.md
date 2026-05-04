@@ -6,9 +6,9 @@ Noir contracts for the aztec-kit ecosystem + generated TypeScript artifacts + a 
 
 | Contract                        | Purpose                                                                                                                                |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `Token`                         | Standard Aztec token with private + public balances. Used for GoCoin (GO), GoCoinPremium (GOP), GoLiquidity (GOLP).          |
-| `AMM`                           | Uniswap-v2-style constant-product AMM over two Token contracts. Mints GoLiquidity shares.                                           |
-| `ProofOfPassword`               | Faucet gated by a password hash. `check_password_and_mint` mints GO to the caller if the password hashes to the stored value.         |
+| `Token`                         | Standard Aztec token with private + public balances. Used for GoCoin (GO), GoCoinPremium (GOP), GoLiquidity (GOLP).                    |
+| `AMM`                           | Uniswap-v2-style constant-product AMM over two Token contracts. Mints GoLiquidity shares.                                              |
+| `ProofOfPassword`               | Faucet gated by a password hash. `check_password_and_mint` mints GO to the caller if the password hashes to the stored value.          |
 | `SubscriptionFPC`               | Fee Payment Contract. Admin pre-registers `(contract, function)` tuples with a `maxFee`; users "subscribe" and the FPC pays their gas. |
 | `SchnorrInitializerlessAccount` | Schnorr account with no `initialize` entrypoint. Signing key comes from a capsule on every call.                                       |
 | `EcdsaAccountDeployer`          | ECDSA-signer variant.                                                                                                                  |

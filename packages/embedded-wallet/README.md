@@ -4,8 +4,8 @@ Embeddable Aztec wallet backed by `SchnorrInitializerlessAccount`. Thin layer on
 
 ## Subpath exports
 
-| Import                           | Contents                                                                                                                            |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Import                          | Contents                                                                                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `@aztec-kit/embedded-wallet`    | Core wallet logic: `createSchnorrInitializerlessAccount`, `deployWithImmutables`, `computeContractSalt`, capsule helpers. No React. |
 | `@aztec-kit/embedded-wallet/ui` | React components + hooks: `EmbeddedWalletProvider`, `useEmbeddedWallet`, connect button, onboarding modal.                          |
 

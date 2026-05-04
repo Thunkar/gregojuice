@@ -64,7 +64,8 @@ export async function registerSwapContracts(
   // Import contract artifacts
   const { TokenContract, TokenContractArtifact } =
     await import("@aztec-kit/contracts-aztec/artifacts/Token");
-  const { AMMContract, AMMContractArtifact } = await import("@aztec-kit/contracts-aztec/artifacts/AMM");
+  const { AMMContract, AMMContractArtifact } =
+    await import("@aztec-kit/contracts-aztec/artifacts/AMM");
 
   // Determine subscription FPC for sponsored swaps
   const subFPC = network.subscriptionFPC;

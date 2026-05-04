@@ -4,8 +4,8 @@ Shared building blocks used by every app + every script in the monorepo. Organis
 
 ## Subpath exports
 
-| Import                        | Contents                                                                                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import                       | Contents                                                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@aztec-kit/common/ui`       | `shortAddress`, `NetworkSwitcher`, `createNetworkContext`. React + MUI. Used by all three app UIs.                                                    |
 | `@aztec-kit/common/bridging` | `bridge`, `bridgeAndClaim` — the L1→L2 fee-juice flows. Low-level primitives live in `./bridging/utils.ts` if you need them. Node-only.               |
 | `@aztec-kit/common/fees`     | `fetchFeeStats`, `computeMaxFeeFromP75` — calibrate `maxFee` from the clustec public fee API.                                                         |
