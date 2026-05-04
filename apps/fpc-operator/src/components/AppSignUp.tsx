@@ -23,7 +23,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import { AztecAddress } from "@aztec/aztec.js/addresses";
-import { shortAddress } from "@gregojuice/common/ui";
+import { shortAddress } from "@aztec-kit/common/ui";
 import { getContractInstanceFromInstantiationParams } from "@aztec/stdlib/contract";
 import { Fr } from "@aztec/aztec.js/fields";
 import { parseUnits } from "viem";
@@ -35,8 +35,8 @@ import {
 } from "@aztec/aztec.js/abi";
 import { getDefaultInitializer, getInitializer } from "@aztec/stdlib/abi";
 import type { ContractInstanceWithAddress } from "@aztec/stdlib/contract";
-import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
-import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
+import type { SubscriptionFPCContract } from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
+import { SubscriptionFPC } from "@aztec-kit/contracts-aztec/subscription-fpc";
 import { useWallet } from "../contexts/WalletContext";
 import { useAliases } from "../contexts/AliasContext";
 import { signUpApp } from "../services/fpcService";
@@ -48,7 +48,7 @@ import {
   FPC_SUBSCRIBE_OVERHEAD_DA_GAS_PRIVATE,
   FPC_TEARDOWN_L2_GAS,
   FPC_TEARDOWN_DA_GAS,
-} from "@gregojuice/aztec/fpc-gas-constants";
+} from "@aztec-kit/contracts-aztec/fpc-gas-constants";
 import { FunctionType } from "@aztec/aztec.js/abi";
 import { ArtifactUpload } from "./ArtifactUpload";
 import { FunctionSelector } from "./FunctionSelector";

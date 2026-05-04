@@ -31,7 +31,7 @@ export function BridgeFunding({
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       const data = event.data;
-      if (data?.type !== "gregojuice-bridge") return;
+      if (data?.type !== "gobridge") return;
       if (data.status === "complete") onComplete?.();
       else if (data.status === "error") onError?.(data.error ?? "Bridge failed");
     },

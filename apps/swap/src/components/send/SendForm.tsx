@@ -38,8 +38,8 @@ export function SendForm({ balance, onRequestFaucet, faucetBusy }: SendFormProps
           fullWidth
           disabled={isSending}
         >
-          <ToggleButton value="gc">GregoCoin</ToggleButton>
-          <ToggleButton value="gcp">GregoCoinPremium</ToggleButton>
+          <ToggleButton value="gc">GoCoin</ToggleButton>
+          <ToggleButton value="gcp">GoCoinPremium</ToggleButton>
         </ToggleButtonGroup>
       </Box>
       <TextField

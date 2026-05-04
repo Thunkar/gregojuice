@@ -107,7 +107,7 @@ runs:
     - name: Compile contracts
       if: steps.contracts-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: yarn workspace @gregojuice/aztec build
+      run: yarn workspace @aztec-kit/contracts-aztec build
 
     # Turbo's local cache + build outputs. Not suffixed with `cache-suffix`:
     # emitted artifacts are platform-independent, so any job can read what

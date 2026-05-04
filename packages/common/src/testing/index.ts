@@ -2,7 +2,7 @@
  * Shared CLI / deploy-script plumbing for the app scripts folders.
  *
  * Importers are Node-only — this module pulls in PXE + aztec.js + @aztec/accounts
- * which aren't browser-safe. The `@gregojuice/common/testing` subpath export
+ * which aren't browser-safe. The `@aztec-kit/common/testing` subpath export
  * keeps it out of the default browser bundle entry.
  */
 export {

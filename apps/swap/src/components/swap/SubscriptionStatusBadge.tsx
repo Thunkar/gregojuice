@@ -1,7 +1,7 @@
 import { Box, Chip, Link, Skeleton, Typography } from "@mui/material";
 import type { SubscriptionStatus } from "../../services/contractService";
 
-const BRIDGE_URL = "https://bridge.gregojuice.anothercoffeefor.me";
+const BRIDGE_URL = "https://bridge.aztec-kit.anothercoffeefor.me";
 
 interface SubscriptionStatusBadgeProps {
   status: SubscriptionStatus;

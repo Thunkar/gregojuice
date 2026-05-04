@@ -32,13 +32,13 @@ import { Fr } from "@aztec/foundation/curves/bn254";
 import {
   SubscriptionFPCContract,
   SubscriptionFPCContractArtifact,
-} from "@gregojuice/aztec/artifacts/SubscriptionFPC";
-import { ProofOfPasswordContractArtifact } from "@gregojuice/aztec/artifacts/ProofOfPassword";
-import { AMMContractArtifact } from "@gregojuice/aztec/artifacts/AMM";
+} from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
+import { ProofOfPasswordContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/ProofOfPassword";
+import { AMMContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/AMM";
 import { TokenContractArtifact } from "@aztec/noir-contracts.js/Token";
-import { SubscriptionFPC, fpcSubscribeOverhead } from "@gregojuice/aztec/subscription-fpc";
+import { SubscriptionFPC, fpcSubscribeOverhead } from "@aztec-kit/contracts-aztec/subscription-fpc";
 import { Gas } from "@aztec/stdlib/gas";
-import { fetchFeeStats, computeMaxFeeFromP75 } from "@gregojuice/common/fees";
+import { fetchFeeStats, computeMaxFeeFromP75 } from "@aztec-kit/common/fees";
 
 import {
   parseNetwork,
@@ -51,7 +51,7 @@ import {
   resolveFpcAdminBackupPath,
   type NetworkName,
   type SignedUpApp,
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 import type { AztecNode } from "@aztec/aztec.js/node";
 import type { EmbeddedWallet } from "@aztec/wallets/embedded";
 
@@ -103,8 +103,8 @@ const SIGNUPS: SignupSpec[] = [
     // Tokens need to be already minted to admin.
     sampleArgs: ({ admin, contracts }) => [
       admin.toString(),
-      contracts.gregoCoin.toString(),
-      contracts.gregoCoinPremium.toString(),
+      contracts.goCoin.toString(),
+      contracts.goCoinPremium.toString(),
       10n,
       20n,
       1n,
@@ -113,7 +113,7 @@ const SIGNUPS: SignupSpec[] = [
   {
     artifact: TokenContractArtifact,
     functionName: "transfer_in_private_with_offchain_delivery",
-    contractAlias: ["gregoCoin", "gregoCoinPremium"],
+    contractAlias: ["goCoin", "goCoinPremium"],
     sampleArgs: ({ admin }) => [admin.toString(), admin.toString(), 10n, 0n],
   },
 ];
@@ -140,7 +140,7 @@ async function main() {
   const contracts = await registerSwapContracts(wallet, node, config.contracts);
 
   // Register the swap admin (the token's minter) as a sender on the FPC
-  // admin's wallet so note-tag discovery finds the GregoCoin notes that
+  // admin's wallet so note-tag discovery finds the GoCoin notes that
   // were minted to the FPC admin during the `mint:<network>` step of the
   // setup orchestration. Without this, the AMM swap calibration can't see
   // its own balances and fails "Balance too low".
@@ -278,8 +278,8 @@ async function registerSwapContracts(
 ): Promise<Record<string, AztecAddress>> {
   // Map alias → artifact so we can register everything the sample calls touch.
   const ARTIFACT_BY_ALIAS: Record<string, ContractArtifact> = {
-    gregoCoin: TokenContractArtifact,
-    gregoCoinPremium: TokenContractArtifact,
+    goCoin: TokenContractArtifact,
+    goCoinPremium: TokenContractArtifact,
     liquidityToken: TokenContractArtifact,
     amm: AMMContractArtifact,
     pop: ProofOfPasswordContractArtifact,

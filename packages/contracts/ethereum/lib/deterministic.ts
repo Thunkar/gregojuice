@@ -19,17 +19,17 @@ import {
  * on most chains, including Anvil. Calling it with `salt ++ initcode` deploys
  * via CREATE2, producing a fully-deterministic contract address.
  *
- * This is the single deployment path for GregoJuiceBridge across every
+ * This is the single deployment path for GoBridge across every
  * environment (local, testnet, mainnet). Because the address is a pure
  * function of the bytecode + salt, apps never need to plumb an address
  * through config — just call `getBridgeAddress()`.
  */
 export const CREATE2_PROXY: Hex = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
 
-/** Salt used for every GregoJuiceBridge deployment. */
+/** Salt used for every GoBridge deployment. */
 export const BRIDGE_SALT: Hex = ("0x" + "00".repeat(32)) as Hex;
 
-/** The deterministic address of GregoJuiceBridge on every chain. */
+/** The deterministic address of GoBridge on every chain. */
 export function getBridgeAddress(): Hex {
   return getContractAddress({
     opcode: "CREATE2",
@@ -45,7 +45,7 @@ export function buildDeployCalldata(): Hex {
 }
 
 /**
- * Deploys GregoJuiceBridge via the CREATE2 proxy. Idempotent: if the bytecode
+ * Deploys GoBridge via the CREATE2 proxy. Idempotent: if the bytecode
  * already lives at the deterministic address, this is a no-op and the existing
  * address is returned.
  */

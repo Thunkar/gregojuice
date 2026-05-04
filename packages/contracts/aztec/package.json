@@ -1,5 +1,5 @@
 {
-  "name": "@gregojuice/aztec",
+  "name": "@aztec-kit/contracts-aztec",
   "version": "0.0.18",
   "type": "module",
   "main": "dist/lib/subscription-fpc.js",
@@ -40,10 +40,10 @@
     "@aztec/wallets": "v4.3.0-nightly.20260428"
   },
   "devDependencies": {
+    "@aztec-kit/common": "workspace:*",
     "@aztec/accounts": "v4.3.0-nightly.20260428",
     "@aztec/constants": "v4.3.0-nightly.20260428",
     "@aztec/noir-contracts.js": "v4.3.0-nightly.20260428",
-    "@gregojuice/common": "workspace:*",
     "typescript": "~5.7.3",
     "vitest": "^3"
   }

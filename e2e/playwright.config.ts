@@ -107,8 +107,8 @@ export default defineConfig({
     },
   ],
   webServer: [
-    appServer("@gregojuice/swap", 5175),
-    appServer("@gregojuice/bridge", 5173),
-    appServer("@gregojuice/fpc-operator", 5174),
+    appServer("@aztec-kit/swap", 5175),
+    appServer("@aztec-kit/bridge", 5173),
+    appServer("@aztec-kit/fpc-operator", 5174),
   ],
 });

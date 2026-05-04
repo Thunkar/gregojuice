@@ -43,8 +43,8 @@ export interface NetworkConfig {
   chainId: string;
   rollupVersion: string;
   contracts: {
-    gregoCoin: string;
-    gregoCoinPremium: string;
+    goCoin: string;
+    goCoinPremium: string;
     amm: string;
     liquidityToken: string;
     pop: string;

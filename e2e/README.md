@@ -1,4 +1,4 @@
-# @gregojuice/e2e
+# @aztec-kit/e2e
 
 Playwright suite driving all three apps through a realistic user flow against a real local Aztec network.
 
@@ -23,7 +23,7 @@ Each project depends on the previous via Playwright's `dependencies` mechanism. 
 ```bash
 # From repo root
 yarn build                                # packages must be built for artifact imports
-yarn workspace @gregojuice/e2e test       # full suite — spins up local-network in globalSetup
+yarn workspace @aztec-kit/e2e test       # full suite — spins up local-network in globalSetup
 ```
 
 Environment toggles:

@@ -10,17 +10,17 @@ import {
   Tooltip,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { shortAddress } from "@gregojuice/common/ui";
+import { shortAddress } from "@aztec-kit/common/ui";
 import { theme } from "./theme";
 import { useWallet } from "./contexts/WalletContext";
 import { getStoredFPC, loadExistingFPC } from "./services/fpcService";
 import { SetupWizard } from "./components/SetupWizard";
 import { Dashboard } from "./components/Dashboard";
-import { TxNotificationCenter } from "@gregojuice/embedded-wallet/ui";
-import { GregoJuiceLogo } from "./components/GregoJuiceLogo";
-import { NetworkSwitcher } from "@gregojuice/common/ui";
+import { TxNotificationCenter } from "@aztec-kit/embedded-wallet/ui";
+import { GoFPCLogo } from "./components/GoFPCLogo";
+import { NetworkSwitcher } from "@aztec-kit/common/ui";
 import { useNetwork } from "./contexts/NetworkContext";
-import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+import type { SubscriptionFPCContract } from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
 
 export function App() {
   const { wallet, address, node } = useWallet();
@@ -85,7 +85,7 @@ export function App() {
           {/* Header */}
           <Box sx={{ textAlign: "center", mb: 4, mt: 4 }}>
             <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
-              <GregoJuiceLogo height={56} />
+              <GoFPCLogo height={56} />
             </Box>
             <Typography variant="body1" color="text.secondary">
               FPC Operator Dashboard

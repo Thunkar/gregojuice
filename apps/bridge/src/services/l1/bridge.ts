@@ -1,5 +1,5 @@
 import { createPublicClient, custom, type Hex } from "viem";
-import { BRIDGE_CONTRACT_ABI, getBridgeAddress } from "@gregojuice/ethereum";
+import { BRIDGE_CONTRACT_ABI, getBridgeAddress } from "@aztec-kit/contracts-ethereum";
 import type { L1Addresses, BridgeStep, PendingBridge, ClaimCredentials } from "../types";
 import {
   getL1Clients,

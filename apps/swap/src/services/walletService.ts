@@ -14,7 +14,7 @@ import {
   type DiscoverySession,
 } from "@aztec/wallet-sdk/manager";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
-import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
+import { EmbeddedWallet } from "@aztec-kit/embedded-wallet";
 import type { NetworkConfig } from "../config/networks";
 
 /**
@@ -23,7 +23,7 @@ import type { NetworkConfig } from "../config/networks";
  */
 const WEB_WALLET_URLS: string[] = [import.meta.env.VITE_WEB_WALLET_URL ?? "http://localhost:3001"];
 
-const APP_ID = "gregoswap";
+const APP_ID = "goswap";
 
 /**
  * Creates an Aztec node client for the given node URL

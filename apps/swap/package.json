@@ -1,5 +1,5 @@
 {
-  "name": "@gregojuice/swap",
+  "name": "@aztec-kit/swap",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -20,6 +20,9 @@
     "mint:testnet": "node --experimental-transform-types scripts/mint.ts --network testnet"
   },
   "dependencies": {
+    "@aztec-kit/common": "workspace:*",
+    "@aztec-kit/contracts-aztec": "workspace:*",
+    "@aztec-kit/embedded-wallet": "workspace:*",
     "@aztec/accounts": "v4.3.0-nightly.20260428",
     "@aztec/aztec.js": "v4.3.0-nightly.20260428",
     "@aztec/constants": "v4.3.0-nightly.20260428",
@@ -34,9 +37,6 @@
     "@aztec/wallets": "v4.3.0-nightly.20260428",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
-    "@gregojuice/aztec": "workspace:*",
-    "@gregojuice/common": "workspace:*",
-    "@gregojuice/embedded-wallet": "workspace:*",
     "@mui/icons-material": "^6.3.1",
     "@mui/material": "^6.3.1",
     "@mui/styles": "^6.3.1",

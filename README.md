@@ -1,4 +1,4 @@
-# gregojuice
+# aztec-kit
 
 Three Aztec apps and the libraries that glue them together, in one yarn-workspace monorepo.
 
@@ -6,19 +6,19 @@ Three Aztec apps and the libraries that glue them together, in one yarn-workspac
 
 | App                                   | What it does                                                                        |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| [**swap**](apps/swap)                 | Private token AMM (GRG ↔ GRGP) with a proof-of-password faucet. End-user app.       |
+| [**swap**](apps/swap)                 | Private token AMM (GO ↔ GOP) with a proof-of-password faucet. End-user app.         |
 | [**bridge**](apps/bridge)             | Wizard for bridging fee juice from L1 → L2 so an Aztec address can pay its own gas. |
 | [**fpc-operator**](apps/fpc-operator) | Operator dashboard for deploying + administering a SubscriptionFPC.                 |
 
 ## Packages
 
-| Package                                                   | What it does                                                                                                                                          |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@gregojuice/common`](packages/common)                   | Shared building blocks: bridging helpers, fee-stats helpers, UI widgets, deploy-script plumbing, and the in-process `setupLocalNetwork` test fixture. |
-| [`@gregojuice/embedded-wallet`](packages/embedded-wallet) | Embeddable Aztec wallet with initializerless schnorr account + React bindings.                                                                        |
-| [`@gregojuice/aztec`](packages/contracts/aztec)           | Noir contracts (AMM, Token, ProofOfPassword, SubscriptionFPC, …) + TypeScript artifacts.                                                              |
-| [`@gregojuice/ethereum`](packages/contracts/ethereum)     | L1 bridge Solidity contract + deterministic CREATE2 deploy.                                                                                           |
-| [`@gregojuice/e2e`](e2e)                                  | Playwright suite driving all three apps through a full onboarding flow.                                                                               |
+| Package                                                        | What it does                                                                                                                                          |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@aztec-kit/common`](packages/common)                         | Shared building blocks: bridging helpers, fee-stats helpers, UI widgets, deploy-script plumbing, and the in-process `setupLocalNetwork` test fixture. |
+| [`@aztec-kit/embedded-wallet`](packages/embedded-wallet)       | Embeddable Aztec wallet with initializerless schnorr account + React bindings.                                                                        |
+| [`@aztec-kit/contracts-aztec`](packages/contracts/aztec)       | Noir contracts (AMM, Token, ProofOfPassword, SubscriptionFPC, …) + TypeScript artifacts.                                                              |
+| [`@aztec-kit/contracts-ethereum`](packages/contracts/ethereum) | L1 bridge Solidity contract + deterministic CREATE2 deploy.                                                                                           |
+| [`@aztec-kit/e2e`](e2e)                                        | Playwright suite driving all three apps through a full onboarding flow.                                                                               |
 
 ## Prerequisites
 
@@ -46,14 +46,14 @@ Omit `SWAP_ADMIN_SECRET` / `FPC_ADMIN_SECRET` to generate fresh ones; the export
 ```bash
 yarn build           # turbo — builds all packages + apps
 yarn typecheck       # turbo — tsc across everything
-yarn test            # turbo — integration tests (@gregojuice/aztec + @gregojuice/embedded-wallet)
+yarn test            # turbo — integration tests (@aztec-kit/contracts-aztec + @aztec-kit/embedded-wallet)
 yarn lint            # turbo — eslint across everything
 yarn format          # prettier check; `yarn format:fix` to write
 
 yarn setup:local     # full local deploy chain (see above)
 yarn setup:testnet   # same chain against testnet (needs L1_FUNDER_KEY or uses the faucet)
 
-yarn workspace @gregojuice/e2e test   # run the Playwright suite
+yarn workspace @aztec-kit/e2e test   # run the Playwright suite
 ```
 
 ## Updating Aztec

@@ -1,5 +1,5 @@
-const CONTRACTS_KEY_PREFIX = "gregojuice_aliased_contracts";
-const SENDERS_KEY_PREFIX = "gregojuice_aliased_senders";
+const CONTRACTS_KEY_PREFIX = "gofpc_aliased_contracts";
+const SENDERS_KEY_PREFIX = "gofpc_aliased_senders";
 
 export interface StoredAliased {
   address: string;

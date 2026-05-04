@@ -44,25 +44,25 @@ run_and_capture() {
 }
 
 run_and_capture "Deploy swap admin (${NETWORK})" \
-  yarn workspace @gregojuice/swap "deploy-admin:${NETWORK}"
+  yarn workspace @aztec-kit/swap "deploy-admin:${NETWORK}"
 
 run_and_capture "Deploy swap contracts (${NETWORK})" \
-  yarn workspace @gregojuice/swap "deploy:${NETWORK}"
+  yarn workspace @aztec-kit/swap "deploy:${NETWORK}"
 
 run_and_capture "Deploy FPC admin (${NETWORK})" \
-  yarn workspace @gregojuice/fpc-operator "deploy-admin:${NETWORK}"
+  yarn workspace @aztec-kit/fpc-operator "deploy-admin:${NETWORK}"
 
 run_and_capture "Deploy FPC + fund FPC (${NETWORK})" \
-  yarn workspace @gregojuice/fpc-operator "deploy-fpc:${NETWORK}"
+  yarn workspace @aztec-kit/fpc-operator "deploy-fpc:${NETWORK}"
 
 # Calibration of the AMM/Token signups simulates a swap from the FPC admin,
-# so it needs a GregoCoin + GregoCoinPremium balance. Mint from swap-admin
+# so it needs a GoCoin + GoCoinPremium balance. Mint from swap-admin
 # (the Token's owner) to the FPC admin before calibrating.
 run_and_capture "Mint swap tokens to FPC admin (${NETWORK})" \
-  yarn workspace @gregojuice/swap "mint:${NETWORK}" --to "${FPC_ADMIN_ADDRESS}"
+  yarn workspace @aztec-kit/swap "mint:${NETWORK}" --to "${FPC_ADMIN_ADDRESS}"
 
 run_and_capture "Register swap FPC signups (${NETWORK})" \
-  yarn workspace @gregojuice/swap "register-fpc-signups:${NETWORK}"
+  yarn workspace @aztec-kit/swap "register-fpc-signups:${NETWORK}"
 
 echo_stage "Done"
 echo "Swap admin: ${SWAP_ADMIN_ADDRESS:-?}"

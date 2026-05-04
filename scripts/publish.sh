@@ -45,15 +45,15 @@ done
 
 # Build
 echo ""
-echo "Building @gregojuice/aztec..."
+echo "Building @aztec-kit/contracts-aztec..."
 cd "$ROOT_DIR/packages/contracts/aztec"
 yarn build
 
-echo "Building @gregojuice/ethereum..."
+echo "Building @aztec-kit/contracts-ethereum..."
 cd "$ROOT_DIR/packages/contracts/ethereum"
 yarn build
 
-echo "Building @gregojuice/embedded-wallet..."
+echo "Building @aztec-kit/embedded-wallet..."
 cd "$ROOT_DIR/packages/embedded-wallet"
 yarn build
 
@@ -61,15 +61,15 @@ yarn build
 export YARN_NPM_AUTH_TOKEN="$NPM_TOKEN"
 
 echo ""
-echo "Publishing @gregojuice/aztec..."
+echo "Publishing @aztec-kit/contracts-aztec..."
 cd "$ROOT_DIR/packages/contracts/aztec"
 yarn npm publish --access public
 
-echo "Publishing @gregojuice/ethereum..."
+echo "Publishing @aztec-kit/contracts-ethereum..."
 cd "$ROOT_DIR/packages/contracts/ethereum"
 yarn npm publish --access public
 
-echo "Publishing @gregojuice/embedded-wallet..."
+echo "Publishing @aztec-kit/embedded-wallet..."
 cd "$ROOT_DIR/packages/embedded-wallet"
 yarn npm publish --access public
 

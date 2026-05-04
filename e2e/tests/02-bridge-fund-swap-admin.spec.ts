@@ -23,7 +23,7 @@ import { getPublicFeeJuiceBalance } from "../fixtures/fee-juice-balance.ts";
  * swap-admin holds a non-zero public fee-juice balance.
  */
 
-const BRIDGE_SESSION_KEY = "gregojuice_bridge_session";
+const BRIDGE_SESSION_KEY = "gobridge_session";
 
 async function getBridgeSessionPhase(
   frame: Frame,
@@ -62,7 +62,7 @@ test.describe.serial("bridge funds swap-admin", () => {
     // runs. Bridge app otherwise defaults to testnet.
     await page.addInitScript(() => {
       try {
-        localStorage.setItem("gregojuice_network", "local");
+        localStorage.setItem("aztec_kit_network", "local");
       } catch {
         /* ignore */
       }

@@ -1,16 +1,16 @@
-# @gregojuice/common
+# @aztec-kit/common
 
 Shared building blocks used by every app + every script in the monorepo. Organised by domain — no cross-domain barrel.
 
 ## Subpath exports
 
-| Import                        | Contents                                                                                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@gregojuice/common/ui`       | `shortAddress`, `NetworkSwitcher`, `createNetworkContext`. React + MUI. Used by all three app UIs.                                                    |
-| `@gregojuice/common/bridging` | `bridge`, `bridgeAndClaim` — the L1→L2 fee-juice flows. Low-level primitives live in `./bridging/utils.ts` if you need them. Node-only.               |
-| `@gregojuice/common/fees`     | `fetchFeeStats`, `computeMaxFeeFromP75` — calibrate `maxFee` from the clustec public fee API.                                                         |
-| `@gregojuice/common/testing`  | Deploy-script plumbing: network config, CLI arg parsing, wallet setup, admin account helpers, `setupLocalNetwork` in-process test fixture. Node-only. |
-| `@gregojuice/common/vite`     | `aztecVitePlugin` (drop-in, Vite-version-aware) + `chunkSizeValidator`. See `vite` section below.                                                     |
+| Import                       | Contents                                                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@aztec-kit/common/ui`       | `shortAddress`, `NetworkSwitcher`, `createNetworkContext`. React + MUI. Used by all three app UIs.                                                    |
+| `@aztec-kit/common/bridging` | `bridge`, `bridgeAndClaim` — the L1→L2 fee-juice flows. Low-level primitives live in `./bridging/utils.ts` if you need them. Node-only.               |
+| `@aztec-kit/common/fees`     | `fetchFeeStats`, `computeMaxFeeFromP75` — calibrate `maxFee` from the clustec public fee API.                                                         |
+| `@aztec-kit/common/testing`  | Deploy-script plumbing: network config, CLI arg parsing, wallet setup, admin account helpers, `setupLocalNetwork` in-process test fixture. Node-only. |
+| `@aztec-kit/common/vite`     | `aztecVitePlugin` (drop-in, Vite-version-aware) + `chunkSizeValidator`. See `vite` section below.                                                     |
 
 ## `testing` — highlights
 
@@ -21,7 +21,7 @@ import {
   loadOrCreateSecret, // env-var-backed Fr secret
   getAdmin, // strict — throws if admin not on-chain
   setupLocalNetwork, // full in-process anvil + Aztec node
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 ```
 
 `setupLocalNetwork({ fundedAddresses })` spawns a fresh anvil on a random port, deploys the L1 contracts, starts an `AztecNodeService`, and pre-funds the given addresses at genesis. Each caller gets its own sandbox — suites can run in parallel.
@@ -34,7 +34,7 @@ Used by:
 ## `vite`
 
 ```ts
-import { aztecVitePlugin } from "@gregojuice/common/vite";
+import { aztecVitePlugin } from "@aztec-kit/common/vite";
 
 export default defineConfig({
   plugins: [aztecVitePlugin() /* react(), etc. */],

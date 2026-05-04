@@ -10,7 +10,7 @@ import {
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
 import type { Wallet } from "@aztec/aztec.js/wallet";
 import { FeeJuiceContract } from "@aztec/aztec.js/protocol";
-import { EmbeddedWallet } from "@gregojuice/embedded-wallet";
+import { EmbeddedWallet } from "@aztec-kit/embedded-wallet";
 import { useNetwork } from "./NetworkContext";
 import {
   getAztecNode,

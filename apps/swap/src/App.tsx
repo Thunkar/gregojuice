@@ -10,7 +10,7 @@ import {
   Snackbar,
 } from "@mui/material";
 import { theme } from "./theme";
-import { GregoSwapLogo } from "./components/GregoSwapLogo";
+import { GoSwapLogo } from "./components/GoSwapLogo";
 import { WalletChip } from "./components/WalletChip";
 import { NetworkSwitcher } from "./components/NetworkSwitcher";
 import { FooterInfo } from "./components/FooterInfo";
@@ -21,7 +21,7 @@ import { isClaimRoute } from "./services/offchainLinkService";
 import { useWallet } from "./contexts/wallet";
 import { useOnboarding } from "./contexts/onboarding";
 import { OnboardingModal } from "./components/OnboardingModal";
-import { TxNotificationCenter } from "@gregojuice/embedded-wallet/ui";
+import { TxNotificationCenter } from "@aztec-kit/embedded-wallet/ui";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import { lazy, Suspense } from "react";
 
@@ -132,10 +132,10 @@ export function App() {
               {/* Header */}
               <Box sx={{ textAlign: "center", mb: 6, mt: 4 }}>
                 <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
-                  <GregoSwapLogo height={56} />
+                  <GoSwapLogo height={56} />
                 </Box>
                 <Typography variant="body1" color="text.secondary">
-                  Swap GregoCoin for GregoCoinPremium
+                  Swap GoCoin for GoCoinPremium
                 </Typography>
               </Box>
 

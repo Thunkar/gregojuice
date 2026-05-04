@@ -22,7 +22,7 @@ import { useNetwork } from "../contexts/network";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
 import type { Aliased } from "@aztec/aztec.js/wallet";
 import type { WalletProvider, PendingConnection } from "@aztec/wallet-sdk/manager";
-import { createGregoSwapCapabilities } from "../config/capabilities";
+import { createGoSwapCapabilities } from "../config/capabilities";
 import {
   OnboardingProgress,
   WalletDiscovery,
@@ -196,7 +196,7 @@ export function OnboardingModal({ open, onAccountSelect }: OnboardingModalProps)
       const wallet = await confirmConnection(selectedWallet, pendingConnection);
 
       // Request capabilities with full manifest (includes account selection)
-      const manifest = createGregoSwapCapabilities(activeNetwork);
+      const manifest = createGoSwapCapabilities(activeNetwork);
       const capabilitiesResponse = await wallet.requestCapabilities(manifest);
 
       // Check if simulation capabilities were granted (affects step labels)

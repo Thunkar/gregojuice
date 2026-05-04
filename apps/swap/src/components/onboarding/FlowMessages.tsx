@@ -19,7 +19,7 @@ export function FlowMessages({ status, useEmbeddedWallet }: FlowMessagesProps) {
       <Box sx={{ mt: 3 }}>
         <Alert severity="info" sx={{ "& .MuiAlert-message": { width: "100%" } }}>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
-            Uh oh! You have no GregoCoin balance!
+            Uh oh! You have no GoCoin balance!
           </Typography>
           {useEmbeddedWallet ? (
             <Typography variant="body2">

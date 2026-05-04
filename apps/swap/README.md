@@ -1,11 +1,11 @@
-# @gregojuice/swap
+# @aztec-kit/swap
 
-Private token AMM on Aztec. Users swap GregoCoin (GRG) ↔ GregoCoinPremium (GRGP) privately; a proof-of-password contract gates a faucet that mints GRG in exchange for the right password. A SubscriptionFPC sponsors every user-facing call, so end users never pay gas themselves.
+Private token AMM on Aztec. Users swap GoCoin (GO) ↔ GoCoinPremium (GOP) privately; a proof-of-password contract gates a faucet that mints GO in exchange for the right password. A SubscriptionFPC sponsors every user-facing call, so end users never pay gas themselves.
 
 ## Dev
 
 ```bash
-yarn workspace @gregojuice/swap dev
+yarn workspace @aztec-kit/swap dev
 ```
 
 Requires:
@@ -15,14 +15,14 @@ Requires:
 
 ## Scripts
 
-All run with `yarn workspace @gregojuice/swap <name>` (or `cd apps/swap && yarn <name>`). Each accepts `--network local|testnet`.
+All run with `yarn workspace @aztec-kit/swap <name>` (or `cd apps/swap && yarn <name>`). Each accepts `--network local|testnet`.
 
-| Script                           | Purpose                                                                                                                |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `deploy-admin:<network>`         | Deploy the swap-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx.        |
-| `deploy:<network>`               | Deploy GregoCoin, GregoCoinPremium, LiquidityToken, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`. |
-| `mint:<network>`                 | Mint GRG/GRGP to `--to <addr>` (repeatable) or `MINT_TO=<addr,addr>` env.                                              |
-| `register-fpc-signups:<network>` | Signs up the swap app's sponsored functions on the FPC. On testnet, calibrates `maxFee` from the clustec P75.          |
+| Script                           | Purpose                                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `deploy-admin:<network>`         | Deploy the swap-admin schnorr account. Local: SponsoredFPC pays. Testnet: bridges FJ + claims in the deploy tx. |
+| `deploy:<network>`               | Deploy GoCoin, GoCoinPremium, GoLiquidity, AMM, ProofOfPassword. Writes `src/config/networks/<network>.json`.   |
+| `mint:<network>`                 | Mint GO/GOP to `--to <addr>` (repeatable) or `MINT_TO=<addr,addr>` env.                                         |
+| `register-fpc-signups:<network>` | Signs up the swap app's sponsored functions on the FPC. On testnet, calibrates `maxFee` from the clustec P75.   |
 
 `yarn setup:local` / `yarn setup:testnet` at the repo root runs this full chain + the fpc-operator side in order.
 

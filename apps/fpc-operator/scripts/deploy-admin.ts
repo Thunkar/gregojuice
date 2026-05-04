@@ -3,7 +3,7 @@
  *
  * Deploy method is auto-detected: pre-funded FJ → use it; otherwise
  * SponsoredFPC on local, bridge + claim on testnet. See `deployAdmin` in
- * `@gregojuice/common/testing` for the full decision tree.
+ * `@aztec-kit/common/testing` for the full decision tree.
  */
 import {
   parseNetwork,
@@ -11,7 +11,7 @@ import {
   setupWallet,
   loadOrCreateSecret,
   deployAdmin,
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 
 async function main() {
   const network = parseNetwork();

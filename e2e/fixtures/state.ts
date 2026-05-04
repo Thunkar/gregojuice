@@ -41,7 +41,7 @@ export interface GlobalState {
   nodeUrl: string;
   l1RpcUrl: string;
   chainId: number;
-  /** Deployed GregoJuiceBridge contract address on L1. */
+  /** Deployed GoBridge contract address on L1. */
   l1BridgeAddress: string;
   /** Deterministic swap-admin secret + derived L2 address. */
   swapAdmin: { secret: string; address: string };
@@ -65,8 +65,8 @@ export interface FpcState {
 
 /** Shape written after spec 03 (swap deploy) finishes. */
 export interface SwapDeploymentState {
-  gregoCoin: string;
-  gregoCoinPremium: string;
+  goCoin: string;
+  goCoinPremium: string;
   liquidityToken: string;
   amm: string;
   pop: string;

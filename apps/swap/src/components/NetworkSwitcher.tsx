@@ -8,7 +8,7 @@ import {
   Button,
   Typography,
 } from "@mui/material";
-import { NetworkSwitcher as CommonNetworkSwitcher } from "@gregojuice/common/ui";
+import { NetworkSwitcher as CommonNetworkSwitcher } from "@aztec-kit/common/ui";
 import { useNetwork } from "../contexts/network";
 import { useWallet } from "../contexts/wallet";
 import { useOnboarding } from "../contexts/onboarding";

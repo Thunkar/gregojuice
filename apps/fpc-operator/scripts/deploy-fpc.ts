@@ -19,9 +19,9 @@
  *   secret key, salt, FPC secret key, salt, and address. Git-ignored.
  */
 import { AztecAddress } from "@aztec/stdlib/aztec-address";
-import { bridgeAndClaim } from "@gregojuice/common/bridging";
-import { SubscriptionFPC } from "@gregojuice/aztec/subscription-fpc";
-import { SubscriptionFPCContractArtifact } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+import { bridgeAndClaim } from "@aztec-kit/common/bridging";
+import { SubscriptionFPC } from "@aztec-kit/contracts-aztec/subscription-fpc";
+import { SubscriptionFPCContractArtifact } from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
 import {
   parseNetwork,
   NETWORK_URLS,
@@ -34,7 +34,7 @@ import {
   getSalt,
   writeFpcAdminBackup,
   resolveFpcAdminBackupPath,
-} from "@gregojuice/common/testing";
+} from "@aztec-kit/common/testing";
 
 const FUND_AMOUNT: bigint = BigInt("1000000000000000000000"); // 1000 FJ
 

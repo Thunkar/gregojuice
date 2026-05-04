@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, Tabs, Tab } from "@mui/material";
 import type { AztecAddress } from "@aztec/aztec.js/addresses";
-import type { SubscriptionFPCContract } from "@gregojuice/aztec/artifacts/SubscriptionFPC";
+import type { SubscriptionFPCContract } from "@aztec-kit/contracts-aztec/artifacts/SubscriptionFPC";
 import { AppSignUp } from "./AppSignUp";
 import { AppList } from "./AppList";
 import { BridgeFunding } from "./BridgeFunding";

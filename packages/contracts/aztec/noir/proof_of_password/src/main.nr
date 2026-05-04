@@ -16,25 +16,25 @@ pub contract ProofOfPassword {
 
     #[storage]
     struct Storage<Context> {
-        grego_coin_address: PublicImmutable<AztecAddress, Context>,
+        go_coin_address: PublicImmutable<AztecAddress, Context>,
         password_hash: PublicImmutable<Field, Context>,
     }
 
     #[initializer]
     #[external("private")]
-    fn constructor(grego_coin_address: AztecAddress, password: str<31>) {
+    fn constructor(go_coin_address: AztecAddress, password: str<31>) {
         let field_compressed_str = FieldCompressedString::from_string(password);
         let password_hash = poseidon2_hash(field_compressed_str.serialize());
         self.enqueue(ProofOfPassword::at(self.address)._init_storage(
-            grego_coin_address,
+            go_coin_address,
             password_hash,
         ));
     }
 
     #[external("public")]
     #[only_self]
-    fn _init_storage(grego_coin_address: AztecAddress, password_hash: Field) {
-        self.storage.grego_coin_address.initialize(grego_coin_address);
+    fn _init_storage(go_coin_address: AztecAddress, password_hash: Field) {
+        self.storage.go_coin_address.initialize(go_coin_address);
         self.storage.password_hash.initialize(password_hash);
     }
 
@@ -58,7 +58,7 @@ pub contract ProofOfPassword {
             set_sender_for_tags(to);
         }
 
-        let address = self.storage.grego_coin_address.read();
+        let address = self.storage.go_coin_address.read();
         self.call(Token::at(address).mint_to_private(to, 1000));
 
         // Derive nullifier from sender and password. This is a privacy leak, since

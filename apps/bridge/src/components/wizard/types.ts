@@ -1,5 +1,5 @@
 import type { ClaimCredentials, BridgeStep, PendingBridge, MessageStatus } from "../../services";
-import type { PhaseTiming } from "@gregojuice/embedded-wallet";
+import type { PhaseTiming } from "@aztec-kit/embedded-wallet";
 
 export interface Recipient {
   address: string;

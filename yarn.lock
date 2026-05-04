@@ -647,6 +647,231 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@aztec-kit/bridge@workspace:apps/bridge":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/bridge@workspace:apps/bridge"
+  dependencies:
+    "@aztec-kit/common": "workspace:*"
+    "@aztec-kit/contracts-ethereum": "workspace:*"
+    "@aztec-kit/embedded-wallet": "workspace:*"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
+    "@emotion/react": "npm:^11.14.0"
+    "@emotion/styled": "npm:^11.14.0"
+    "@mui/icons-material": "npm:^6.3.1"
+    "@mui/material": "npm:^6.3.1"
+    "@types/react": "npm:^19.0.6"
+    "@types/react-dom": "npm:^19.0.3"
+    "@vitejs/plugin-react": "npm:^6.0.1"
+    react: "npm:^18.3.1"
+    react-dom: "npm:^18.3.1"
+    typescript: "npm:~5.7.3"
+    viem: "npm:^2.23.0"
+    vite: "npm:^8.0.10"
+    vite-plugin-node-polyfills: "npm:^0.26.0"
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/common@workspace:*, @aztec-kit/common@workspace:packages/common":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/common@workspace:packages/common"
+  dependencies:
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
+    "@aztec/ethereum": "npm:v4.3.0-nightly.20260428"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
+    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/noir-protocol-circuits-types": "npm:v4.3.0-nightly.20260428"
+    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/pxe": "npm:v4.3.0-nightly.20260428"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
+    "@aztec/telemetry-client": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
+    "@aztec/world-state": "npm:v4.3.0-nightly.20260428"
+    "@mui/material": "npm:^6.3.1"
+    "@types/react": "npm:^19.0.6"
+    react: "npm:^18.3.1"
+    typescript: "npm:~5.7.3"
+    viem: "npm:^2.21.0"
+    vite: "npm:^8.0.10"
+    vite-plugin-node-polyfills: "npm:^0.26.0"
+  peerDependencies:
+    "@mui/material": ^6
+    react: ^18 || ^19
+  peerDependenciesMeta:
+    "@mui/material":
+      optional: true
+    react:
+      optional: true
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/contracts-aztec@workspace:*, @aztec-kit/contracts-aztec@workspace:packages/contracts/aztec":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/contracts-aztec@workspace:packages/contracts/aztec"
+  dependencies:
+    "@aztec-kit/common": "workspace:*"
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
+    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
+    typescript: "npm:~5.7.3"
+    vitest: "npm:^3"
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/contracts-ethereum@workspace:*, @aztec-kit/contracts-ethereum@workspace:packages/contracts/ethereum":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/contracts-ethereum@workspace:packages/contracts/ethereum"
+  dependencies:
+    typescript: "npm:~5.7.3"
+    viem: "npm:^2.23.0"
+  peerDependencies:
+    viem: ^2
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/e2e@workspace:e2e":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/e2e@workspace:e2e"
+  dependencies:
+    "@aztec-kit/contracts-aztec": "workspace:*"
+    "@aztec-kit/contracts-ethereum": "workspace:*"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@playwright/test": "npm:^1.49.0"
+    "@types/node": "npm:^22.15.17"
+    typescript: "npm:~5.7.3"
+    viem: "npm:^2.23.0"
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/embedded-wallet@workspace:*, @aztec-kit/embedded-wallet@workspace:packages/embedded-wallet":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/embedded-wallet@workspace:packages/embedded-wallet"
+  dependencies:
+    "@aztec-kit/common": "workspace:*"
+    "@aztec-kit/contracts-aztec": "workspace:*"
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
+    "@aztec/kv-store": "npm:v4.3.0-nightly.20260428"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
+    "@emotion/react": "npm:^11.14.0"
+    "@mui/icons-material": "npm:^6.3.1"
+    "@mui/material": "npm:^6.3.1"
+    "@types/react": "npm:^19.0.6"
+    react: "npm:^18.3.1"
+    typescript: "npm:~5.7.3"
+    vitest: "npm:^3"
+  peerDependencies:
+    "@emotion/react": ">=11"
+    "@mui/icons-material": ">=6"
+    "@mui/material": ">=6"
+    react: ">=18"
+  peerDependenciesMeta:
+    "@emotion/react":
+      optional: true
+    "@mui/icons-material":
+      optional: true
+    "@mui/material":
+      optional: true
+    react:
+      optional: true
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/fpc-operator@workspace:apps/fpc-operator":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/fpc-operator@workspace:apps/fpc-operator"
+  dependencies:
+    "@aztec-kit/common": "workspace:*"
+    "@aztec-kit/contracts-aztec": "workspace:*"
+    "@aztec-kit/embedded-wallet": "workspace:*"
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
+    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
+    "@aztec/l1-artifacts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/pxe": "npm:v4.3.0-nightly.20260428"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
+    "@emotion/react": "npm:^11.14.0"
+    "@emotion/styled": "npm:^11.14.0"
+    "@mui/icons-material": "npm:^6.3.1"
+    "@mui/material": "npm:^6.3.1"
+    "@types/react": "npm:^19.0.6"
+    "@types/react-dom": "npm:^19.0.3"
+    "@vitejs/plugin-react": "npm:^6.0.1"
+    react: "npm:^18.3.1"
+    react-dom: "npm:^18.3.1"
+    react-dropzone: "npm:^14.3.8"
+    typescript: "npm:~5.7.3"
+    viem: "npm:^2.23.0"
+    vite: "npm:^8.0.10"
+    vite-plugin-node-polyfills: "npm:^0.26.0"
+  languageName: unknown
+  linkType: soft
+
+"@aztec-kit/swap@workspace:apps/swap":
+  version: 0.0.0-use.local
+  resolution: "@aztec-kit/swap@workspace:apps/swap"
+  dependencies:
+    "@aztec-kit/common": "workspace:*"
+    "@aztec-kit/contracts-aztec": "workspace:*"
+    "@aztec-kit/embedded-wallet": "workspace:*"
+    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec": "npm:v4.3.0-nightly.20260428"
+    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
+    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
+    "@aztec/ethereum": "npm:v4.3.0-nightly.20260428"
+    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
+    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
+    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260428"
+    "@aztec/pxe": "npm:v4.3.0-nightly.20260428"
+    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
+    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
+    "@emotion/react": "npm:^11.14.0"
+    "@emotion/styled": "npm:^11.14.0"
+    "@mui/icons-material": "npm:^6.3.1"
+    "@mui/material": "npm:^6.3.1"
+    "@mui/styles": "npm:^6.3.1"
+    "@types/buffer-json": "npm:^2"
+    "@types/node": "npm:^22.15.17"
+    "@types/react": "npm:^19.0.6"
+    "@types/react-dom": "npm:^19.0.3"
+    "@vitejs/plugin-react": "npm:^6.0.1"
+    buffer-json: "npm:^2.0.0"
+    qrcode.react: "npm:^4.2.0"
+    react: "npm:^18.3.1"
+    react-dom: "npm:^18.3.1"
+    react-dropzone: "npm:^14.3.5"
+    typescript: "npm:~5.7.3"
+    vite: "npm:^8.0.10"
+    vite-plugin-node-polyfills: "npm:^0.26.0"
+    zod: "npm:^3.23.8"
+    zone.js: "npm:^0.16.1"
+  languageName: unknown
+  linkType: soft
+
 "@aztec/accounts@npm:4.3.0-nightly.20260428, @aztec/accounts@npm:v4.3.0-nightly.20260428":
   version: 4.3.0-nightly.20260428
   resolution: "@aztec/accounts@npm:4.3.0-nightly.20260428"
@@ -2744,231 +2969,6 @@ __metadata:
   checksum: 10c0/2951e4a0b3c2f90c28917a9b313a981722a9e5648ca2b6d04f384f816e9107e1637b00c32c5e71ed8d25c7e1840898b616f015b29c2cc1d8d8a22c8630778d8c
   languageName: node
   linkType: hard
-
-"@gregojuice/aztec@workspace:*, @gregojuice/aztec@workspace:packages/contracts/aztec":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/aztec@workspace:packages/contracts/aztec"
-  dependencies:
-    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
-    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
-    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
-    "@gregojuice/common": "workspace:*"
-    typescript: "npm:~5.7.3"
-    vitest: "npm:^3"
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/bridge@workspace:apps/bridge":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/bridge@workspace:apps/bridge"
-  dependencies:
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
-    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
-    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
-    "@emotion/react": "npm:^11.14.0"
-    "@emotion/styled": "npm:^11.14.0"
-    "@gregojuice/common": "workspace:*"
-    "@gregojuice/embedded-wallet": "workspace:*"
-    "@gregojuice/ethereum": "workspace:*"
-    "@mui/icons-material": "npm:^6.3.1"
-    "@mui/material": "npm:^6.3.1"
-    "@types/react": "npm:^19.0.6"
-    "@types/react-dom": "npm:^19.0.3"
-    "@vitejs/plugin-react": "npm:^6.0.1"
-    react: "npm:^18.3.1"
-    react-dom: "npm:^18.3.1"
-    typescript: "npm:~5.7.3"
-    viem: "npm:^2.23.0"
-    vite: "npm:^8.0.10"
-    vite-plugin-node-polyfills: "npm:^0.26.0"
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/common@workspace:*, @gregojuice/common@workspace:packages/common":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/common@workspace:packages/common"
-  dependencies:
-    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
-    "@aztec/ethereum": "npm:v4.3.0-nightly.20260428"
-    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
-    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/noir-protocol-circuits-types": "npm:v4.3.0-nightly.20260428"
-    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/pxe": "npm:v4.3.0-nightly.20260428"
-    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
-    "@aztec/telemetry-client": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
-    "@aztec/world-state": "npm:v4.3.0-nightly.20260428"
-    "@mui/material": "npm:^6.3.1"
-    "@types/react": "npm:^19.0.6"
-    react: "npm:^18.3.1"
-    typescript: "npm:~5.7.3"
-    viem: "npm:^2.21.0"
-    vite: "npm:^8.0.10"
-    vite-plugin-node-polyfills: "npm:^0.26.0"
-  peerDependencies:
-    "@mui/material": ^6
-    react: ^18 || ^19
-  peerDependenciesMeta:
-    "@mui/material":
-      optional: true
-    react:
-      optional: true
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/e2e@workspace:e2e":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/e2e@workspace:e2e"
-  dependencies:
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@gregojuice/aztec": "workspace:*"
-    "@gregojuice/ethereum": "workspace:*"
-    "@playwright/test": "npm:^1.49.0"
-    "@types/node": "npm:^22.15.17"
-    typescript: "npm:~5.7.3"
-    viem: "npm:^2.23.0"
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/embedded-wallet@workspace:*, @gregojuice/embedded-wallet@workspace:packages/embedded-wallet":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/embedded-wallet@workspace:packages/embedded-wallet"
-  dependencies:
-    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
-    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
-    "@aztec/kv-store": "npm:v4.3.0-nightly.20260428"
-    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
-    "@emotion/react": "npm:^11.14.0"
-    "@gregojuice/aztec": "workspace:*"
-    "@gregojuice/common": "workspace:*"
-    "@mui/icons-material": "npm:^6.3.1"
-    "@mui/material": "npm:^6.3.1"
-    "@types/react": "npm:^19.0.6"
-    react: "npm:^18.3.1"
-    typescript: "npm:~5.7.3"
-    vitest: "npm:^3"
-  peerDependencies:
-    "@emotion/react": ">=11"
-    "@mui/icons-material": ">=6"
-    "@mui/material": ">=6"
-    react: ">=18"
-  peerDependenciesMeta:
-    "@emotion/react":
-      optional: true
-    "@mui/icons-material":
-      optional: true
-    "@mui/material":
-      optional: true
-    react:
-      optional: true
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/ethereum@workspace:*, @gregojuice/ethereum@workspace:packages/contracts/ethereum":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/ethereum@workspace:packages/contracts/ethereum"
-  dependencies:
-    typescript: "npm:~5.7.3"
-    viem: "npm:^2.23.0"
-  peerDependencies:
-    viem: ^2
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/fpc-operator@workspace:apps/fpc-operator":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/fpc-operator@workspace:apps/fpc-operator"
-  dependencies:
-    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec-node": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
-    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
-    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
-    "@aztec/l1-artifacts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/pxe": "npm:v4.3.0-nightly.20260428"
-    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
-    "@emotion/react": "npm:^11.14.0"
-    "@emotion/styled": "npm:^11.14.0"
-    "@gregojuice/aztec": "workspace:*"
-    "@gregojuice/common": "workspace:*"
-    "@gregojuice/embedded-wallet": "workspace:*"
-    "@mui/icons-material": "npm:^6.3.1"
-    "@mui/material": "npm:^6.3.1"
-    "@types/react": "npm:^19.0.6"
-    "@types/react-dom": "npm:^19.0.3"
-    "@vitejs/plugin-react": "npm:^6.0.1"
-    react: "npm:^18.3.1"
-    react-dom: "npm:^18.3.1"
-    react-dropzone: "npm:^14.3.8"
-    typescript: "npm:~5.7.3"
-    viem: "npm:^2.23.0"
-    vite: "npm:^8.0.10"
-    vite-plugin-node-polyfills: "npm:^0.26.0"
-  languageName: unknown
-  linkType: soft
-
-"@gregojuice/swap@workspace:apps/swap":
-  version: 0.0.0-use.local
-  resolution: "@gregojuice/swap@workspace:apps/swap"
-  dependencies:
-    "@aztec/accounts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec": "npm:v4.3.0-nightly.20260428"
-    "@aztec/aztec.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/constants": "npm:v4.3.0-nightly.20260428"
-    "@aztec/entrypoints": "npm:v4.3.0-nightly.20260428"
-    "@aztec/ethereum": "npm:v4.3.0-nightly.20260428"
-    "@aztec/foundation": "npm:v4.3.0-nightly.20260428"
-    "@aztec/noir-contracts.js": "npm:v4.3.0-nightly.20260428"
-    "@aztec/protocol-contracts": "npm:v4.3.0-nightly.20260428"
-    "@aztec/pxe": "npm:v4.3.0-nightly.20260428"
-    "@aztec/stdlib": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallet-sdk": "npm:v4.3.0-nightly.20260428"
-    "@aztec/wallets": "npm:v4.3.0-nightly.20260428"
-    "@emotion/react": "npm:^11.14.0"
-    "@emotion/styled": "npm:^11.14.0"
-    "@gregojuice/aztec": "workspace:*"
-    "@gregojuice/common": "workspace:*"
-    "@gregojuice/embedded-wallet": "workspace:*"
-    "@mui/icons-material": "npm:^6.3.1"
-    "@mui/material": "npm:^6.3.1"
-    "@mui/styles": "npm:^6.3.1"
-    "@types/buffer-json": "npm:^2"
-    "@types/node": "npm:^22.15.17"
-    "@types/react": "npm:^19.0.6"
-    "@types/react-dom": "npm:^19.0.3"
-    "@vitejs/plugin-react": "npm:^6.0.1"
-    buffer-json: "npm:^2.0.0"
-    qrcode.react: "npm:^4.2.0"
-    react: "npm:^18.3.1"
-    react-dom: "npm:^18.3.1"
-    react-dropzone: "npm:^14.3.5"
-    typescript: "npm:~5.7.3"
-    vite: "npm:^8.0.10"
-    vite-plugin-node-polyfills: "npm:^0.26.0"
-    zod: "npm:^3.23.8"
-    zone.js: "npm:^0.16.1"
-  languageName: unknown
-  linkType: soft
 
 "@hapi/bourne@npm:^3.0.0":
   version: 3.0.0
@@ -6361,6 +6361,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"aztec-kit@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "aztec-kit@workspace:."
+  dependencies:
+    "@aztec-kit/contracts-ethereum": "workspace:*"
+    "@eslint/js": "npm:^9.18.0"
+    eslint: "npm:^9.26.0"
+    eslint-config-prettier: "npm:^10.1.8"
+    eslint-plugin-react-hooks: "npm:^5.1.0"
+    eslint-plugin-react-refresh: "npm:^0.4.18"
+    globals: "npm:^15.14.0"
+    prettier: "npm:^3.5.3"
+    turbo: "npm:^2"
+    typescript: "npm:~5.7.3"
+    typescript-eslint: "npm:^8.11.0"
+    viem: "npm:^2.23.0"
+  languageName: unknown
+  linkType: soft
+
 "babel-plugin-macros@npm:^3.1.0":
   version: 3.1.0
   resolution: "babel-plugin-macros@npm:3.1.0"
@@ -8355,25 +8374,6 @@ __metadata:
   checksum: 10c0/386d011a553e02bc594ac2ca0bd6d9e4c22d7fa8cfbfc448a6d148c59ea881b092db9dbe3547ae4b88e55f1b01f7c4a2ecc53b310c042793e63aa44cf6c257f2
   languageName: node
   linkType: hard
-
-"gregojuice@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "gregojuice@workspace:."
-  dependencies:
-    "@eslint/js": "npm:^9.18.0"
-    "@gregojuice/ethereum": "workspace:*"
-    eslint: "npm:^9.26.0"
-    eslint-config-prettier: "npm:^10.1.8"
-    eslint-plugin-react-hooks: "npm:^5.1.0"
-    eslint-plugin-react-refresh: "npm:^0.4.18"
-    globals: "npm:^15.14.0"
-    prettier: "npm:^3.5.3"
-    turbo: "npm:^2"
-    typescript: "npm:~5.7.3"
-    typescript-eslint: "npm:^8.11.0"
-    viem: "npm:^2.23.0"
-  languageName: unknown
-  linkType: soft
 
 "gtoken@npm:^7.0.0":
   version: 7.1.0
