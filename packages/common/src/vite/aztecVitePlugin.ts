@@ -104,10 +104,18 @@ export function aztecVitePlugin(options: AztecVitePluginOptions = {}): Plugin[] 
       }
 
       // Vite 8+: Rolldown pre-bundler handles worker/wasm assets correctly —
-      // no excludes or CJS includes needed.
+      // no excludes or CJS includes needed. `oxc.target` covers user source;
+      // `optimizeDeps.rolldownOptions.transform.target` is needed in addition
+      // to downlevel pre-bundled deps in `node_modules/.vite/deps/*` (without
+      // it, the deps ship native async/await even when es2016 is requested,
+      // which defeats zone.js because V8/SpiderMonkey's fast-await bypasses
+      // user-space Promise.prototype.then). Fixed in Vite 8.0.10 (#22273).
       return {
         ...base,
         oxc: { target },
+        optimizeDeps: {
+          rolldownOptions: { transform: { target } },
+        },
       };
     },
   };
