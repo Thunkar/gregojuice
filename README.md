@@ -1,3 +1,7 @@
+# ARCHIVED
+
+New home for this repo at: https://github.com/aztec-labs-eng/aztec-kit
+
 # aztec-kit
 
 Three Aztec apps and the libraries that glue them together, in one yarn-workspace monorepo.
