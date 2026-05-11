@@ -245,7 +245,7 @@ function parseArgs() {
 }
 
 async function main() {
-  log(COLORS.green, "=== Gojuice Nightly Update Script ===\n");
+  log(COLORS.green, "=== Aztec-Kit Nightly Update Script ===\n");
 
   let { version, skipAztecUp, skipCompile } = parseArgs();
 
