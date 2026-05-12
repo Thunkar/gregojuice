@@ -56,6 +56,13 @@ export type EmbeddedWalletExtraOptions = {
    * Not compatible with `ephemeral: true` — no sqlite-opfs store exists to inspect.
    */
   inspect?: boolean;
+  /**
+   * 32-byte key for page-level sqlite-opfs encryption (ChaCha20 via sqlite3mc).
+   * When provided, both the PXE store and the wallet-DB store are opened
+   * encrypted. Must be 32 bytes. Ignored if ephemeral storage is used
+   * (sqlite3mc does not support encryption on in-memory databases).
+   */
+  encryptionKey?: Uint8Array;
 };
 
 export class EmbeddedWallet extends EmbeddedWalletBase {
@@ -106,6 +113,9 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
       const rollup = rollupAddress.toString();
 
       // Only open defaults the caller didn't already fill in.
+      // Encryption is silently skipped for ephemeral stores (sqlite3mc does not support
+      // in-memory databases); rest.ephemeral is false here, but guard defensively.
+      const keyForStore = rest.ephemeral ? undefined : rest.encryptionKey;
       pxeStore =
         (pxeOptions.store as AztecSQLiteOPFSStore | undefined) ??
         (await AztecSQLiteOPFSStore.open(
@@ -113,6 +123,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
           `pxe_data_${rollup}`,
           false,
           `.aztec-kv-pxe-${rollup}`,
+          keyForStore,
         ));
       walletStore =
         (rest.walletDb?.store as AztecSQLiteOPFSStore | undefined) ??
@@ -121,6 +132,7 @@ export class EmbeddedWallet extends EmbeddedWalletBase {
           `wallet_data_${rollup}`,
           false,
           `.aztec-kv-wallet-${rollup}`,
+          keyForStore,
         ));
 
       finalOptions = {

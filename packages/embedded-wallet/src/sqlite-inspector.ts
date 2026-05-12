@@ -5,6 +5,11 @@
  */
 
 import type { AztecAsyncKVStore } from "@aztec/kv-store";
+import { AztecSQLiteOPFSStore } from "@aztec/kv-store/sqlite-opfs";
+
+// Plaintext SQLite files start with this ASCII magic + null terminator.
+// Hex form: 53 51 4c 69 74 65 20 66 6f 72 6d 61 74 20 33 00
+const SQLITE_MAGIC_HEX = "53514c69746520666f726d6174203300";
 
 interface InspectableStore extends AztecAsyncKVStore {
   allAsync(sql: string, bind?: unknown[]): Promise<unknown[][]>;
@@ -60,4 +65,35 @@ export function registerSqliteInspectors(stores: {
     }),
   };
   (window as unknown as { __aztecStores: SqliteInspectors }).__aztecStores = inspectors;
+}
+
+/**
+ * Debug helper: checks whether the underlying SQLite file looks encrypted.
+ *
+ * Detection heuristic: sqlite3mc page-level encryption (when enabled) encrypts
+ * the entire database file, including the SQLite magic header at offset 0.
+ * A plaintext file always starts with the ASCII bytes "SQLite format 3\0".
+ * If those 16 bytes are something else, the file is almost certainly encrypted.
+ *
+ * Returns `{ applicable: false }` for non-sqlite-opfs stores (e.g. IndexedDB,
+ * LMDB) where the concept doesn't apply.
+ */
+export async function peekEncryption(
+  store: AztecAsyncKVStore,
+): Promise<
+  | { applicable: false }
+  | { applicable: true; encrypted: boolean; firstBytesHex: string }
+> {
+  if (!(store instanceof AztecSQLiteOPFSStore)) {
+    return { applicable: false };
+  }
+  const bytes = await store.exportDb();
+  const first16 = Array.from(bytes.slice(0, 16), b =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+  return {
+    applicable: true,
+    encrypted: first16 !== SQLITE_MAGIC_HEX,
+    firstBytesHex: first16,
+  };
 }
